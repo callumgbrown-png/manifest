@@ -1,0 +1,49 @@
+{
+  "_comment": "Manifest economy rules. Shared by the bot simulator now and the game server later. Money is in game credits; distance is in map units; time is in hours.",
+  "season": {
+    "days": 56,
+    "hours_per_tick": 1
+  },
+  "map": {
+    "file": "config/map.json",
+    "width": 1000,
+    "height": 700
+  },
+  "commodities": {
+    "grain": { "floor": 10, "ceiling": 40 },
+    "fuel":  { "floor": 30, "ceiling": 90 }
+  },
+  "markets": {
+    "_comment": "Each port holds a stock of each commodity. Price slides from ceiling (empty) to floor (stock at twice the target). Producer ports add stock every hour; consumer ports remove it.",
+    "target_stock": 2000,
+    "max_stock_multiple": 3,
+    "production_per_hour": { "grain": 30, "fuel": 25 },
+    "consumption_per_hour": { "grain": 20, "fuel": 10 }
+  },
+  "information": {
+    "_comment": "If true, every port shows how much cargo is already sailing towards it, so players can avoid piling onto the same route.",
+    "inbound_cargo_visible": true
+  },
+  "fees": {
+    "port_fee_per_docking": 25,
+    "trade_tax_rate": 0.02
+  },
+  "company": {
+    "start_cash": 10000,
+    "start_ships": 1,
+    "max_ships": 5
+  },
+  "ship": {
+    "price": 8000,
+    "capacity": 100,
+    "speed_per_hour": 40,
+    "fuel_per_100_distance": 5,
+    "upkeep_per_day": 60
+  },
+  "health_checks": {
+    "_comment": "Thresholds the simulator reports against. Breaching one means the economy needs tuning.",
+    "max_money_supply_growth_per_day": 0.01,
+    "max_top1pct_networth_share": 0.15,
+    "max_bankrupt_share": 0.10
+  }
+}

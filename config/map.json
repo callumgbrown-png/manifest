@@ -1,0 +1,799 @@
+{
+  "seed": 7,
+  "ports": [
+    {
+      "id": 0,
+      "name": "Ardgate",
+      "x": 334.4,
+      "y": 126.5,
+      "produces": [],
+      "consumes": [
+        "fuel"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "Balford",
+      "x": 641.9,
+      "y": 76.4,
+      "produces": [],
+      "consumes": [
+        "fuel"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Balquay",
+      "x": 533.7,
+      "y": 264.0,
+      "produces": [
+        "grain"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 3,
+      "name": "Brysund",
+      "x": 84.5,
+      "y": 354.8,
+      "produces": [
+        "fuel"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 4,
+      "name": "Calbay",
+      "x": 95.7,
+      "y": 88.1,
+      "produces": [],
+      "consumes": [
+        "grain"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Calhaven",
+      "x": 429.0,
+      "y": 559.2,
+      "produces": [],
+      "consumes": [
+        "grain",
+        "fuel"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Calsund",
+      "x": 146.4,
+      "y": 172.9,
+      "produces": [
+        "grain"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 7,
+      "name": "Corquay",
+      "x": 619.8,
+      "y": 636.5,
+      "produces": [
+        "grain"
+      ],
+      "consumes": [
+        "fuel"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Dunness",
+      "x": 947.7,
+      "y": 59.8,
+      "produces": [],
+      "consumes": [
+        "grain"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Dunquay",
+      "x": 837.0,
+      "y": 215.3,
+      "produces": [],
+      "consumes": [
+        "grain",
+        "fuel"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Dunwick",
+      "x": 165.6,
+      "y": 105.4,
+      "produces": [
+        "fuel"
+      ],
+      "consumes": [
+        "grain"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Fengate",
+      "x": 320.0,
+      "y": 552.3,
+      "produces": [
+        "grain"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 12,
+      "name": "Fenholm",
+      "x": 199.9,
+      "y": 402.2,
+      "produces": [
+        "grain"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 13,
+      "name": "Fenwick",
+      "x": 630.6,
+      "y": 268.3,
+      "produces": [
+        "fuel"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 14,
+      "name": "Galhaven",
+      "x": 544.9,
+      "y": 70.2,
+      "produces": [],
+      "consumes": [
+        "grain"
+      ]
+    },
+    {
+      "id": 15,
+      "name": "Galholm",
+      "x": 325.3,
+      "y": 404.8,
+      "produces": [],
+      "consumes": [
+        "grain"
+      ]
+    },
+    {
+      "id": 16,
+      "name": "Galstrand",
+      "x": 456.0,
+      "y": 221.9,
+      "produces": [
+        "grain"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 17,
+      "name": "Havholm",
+      "x": 776.7,
+      "y": 477.4,
+      "produces": [
+        "fuel"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 18,
+      "name": "Havport",
+      "x": 523.7,
+      "y": 590.1,
+      "produces": [
+        "grain"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 19,
+      "name": "Kelbay",
+      "x": 715.7,
+      "y": 214.3,
+      "produces": [],
+      "consumes": [
+        "grain"
+      ]
+    },
+    {
+      "id": 20,
+      "name": "Kelford",
+      "x": 66.9,
+      "y": 457.7,
+      "produces": [
+        "fuel"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 21,
+      "name": "Kelquay",
+      "x": 748.7,
+      "y": 396.7,
+      "produces": [
+        "grain"
+      ],
+      "consumes": [
+        "fuel"
+      ]
+    },
+    {
+      "id": 22,
+      "name": "Kelwick",
+      "x": 575.1,
+      "y": 322.0,
+      "produces": [
+        "grain"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 23,
+      "name": "Margate",
+      "x": 819.6,
+      "y": 634.6,
+      "produces": [],
+      "consumes": [
+        "grain",
+        "fuel"
+      ]
+    },
+    {
+      "id": 24,
+      "name": "Ostmouth",
+      "x": 475.7,
+      "y": 455.1,
+      "produces": [],
+      "consumes": [
+        "fuel"
+      ]
+    },
+    {
+      "id": 25,
+      "name": "Ostwick",
+      "x": 392.6,
+      "y": 457.9,
+      "produces": [
+        "grain"
+      ],
+      "consumes": [
+        "fuel"
+      ]
+    },
+    {
+      "id": 26,
+      "name": "Pelbay",
+      "x": 291.7,
+      "y": 295.8,
+      "produces": [],
+      "consumes": [
+        "fuel"
+      ]
+    },
+    {
+      "id": 27,
+      "name": "Pelness",
+      "x": 583.8,
+      "y": 198.2,
+      "produces": [],
+      "consumes": [
+        "grain",
+        "fuel"
+      ]
+    },
+    {
+      "id": 28,
+      "name": "Pelport",
+      "x": 33.8,
+      "y": 298.1,
+      "produces": [],
+      "consumes": [
+        "grain",
+        "fuel"
+      ]
+    },
+    {
+      "id": 29,
+      "name": "Pelsund",
+      "x": 925.9,
+      "y": 471.9,
+      "produces": [
+        "grain"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 30,
+      "name": "Rosbay",
+      "x": 875.6,
+      "y": 529.2,
+      "produces": [],
+      "consumes": [
+        "fuel"
+      ]
+    },
+    {
+      "id": 31,
+      "name": "Rosquay",
+      "x": 398.8,
+      "y": 285.3,
+      "produces": [
+        "fuel"
+      ],
+      "consumes": [
+        "grain"
+      ]
+    },
+    {
+      "id": 32,
+      "name": "Salport",
+      "x": 30.2,
+      "y": 126.8,
+      "produces": [],
+      "consumes": [
+        "grain",
+        "fuel"
+      ]
+    },
+    {
+      "id": 33,
+      "name": "Torness",
+      "x": 125.4,
+      "y": 262.7,
+      "produces": [],
+      "consumes": [
+        "grain"
+      ]
+    },
+    {
+      "id": 34,
+      "name": "Torquay",
+      "x": 54.0,
+      "y": 589.6,
+      "produces": [],
+      "consumes": [
+        "fuel"
+      ]
+    },
+    {
+      "id": 35,
+      "name": "Velford",
+      "x": 468.0,
+      "y": 339.7,
+      "produces": [
+        "fuel"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 36,
+      "name": "Velness",
+      "x": 352.1,
+      "y": 199.4,
+      "produces": [],
+      "consumes": [
+        "grain"
+      ]
+    },
+    {
+      "id": 37,
+      "name": "Velstrand",
+      "x": 809.1,
+      "y": 133.3,
+      "produces": [],
+      "consumes": [
+        "grain",
+        "fuel"
+      ]
+    },
+    {
+      "id": 38,
+      "name": "Velwick",
+      "x": 187.0,
+      "y": 524.0,
+      "produces": [
+        "grain"
+      ],
+      "consumes": []
+    },
+    {
+      "id": 39,
+      "name": "Wexwick",
+      "x": 364.2,
+      "y": 48.5,
+      "produces": [
+        "fuel"
+      ],
+      "consumes": []
+    }
+  ],
+  "routes": [
+    {
+      "a": 0,
+      "b": 16,
+      "distance": 154.5
+    },
+    {
+      "a": 0,
+      "b": 36,
+      "distance": 75.0
+    },
+    {
+      "a": 0,
+      "b": 39,
+      "distance": 83.5
+    },
+    {
+      "a": 1,
+      "b": 14,
+      "distance": 97.2
+    },
+    {
+      "a": 1,
+      "b": 19,
+      "distance": 156.4
+    },
+    {
+      "a": 1,
+      "b": 27,
+      "distance": 134.9
+    },
+    {
+      "a": 2,
+      "b": 13,
+      "distance": 96.9
+    },
+    {
+      "a": 2,
+      "b": 16,
+      "distance": 88.4
+    },
+    {
+      "a": 2,
+      "b": 22,
+      "distance": 71.2
+    },
+    {
+      "a": 2,
+      "b": 27,
+      "distance": 82.7
+    },
+    {
+      "a": 2,
+      "b": 35,
+      "distance": 100.2
+    },
+    {
+      "a": 3,
+      "b": 12,
+      "distance": 124.7
+    },
+    {
+      "a": 3,
+      "b": 20,
+      "distance": 104.4
+    },
+    {
+      "a": 3,
+      "b": 28,
+      "distance": 76.0
+    },
+    {
+      "a": 3,
+      "b": 33,
+      "distance": 100.7
+    },
+    {
+      "a": 3,
+      "b": 34,
+      "distance": 236.8
+    },
+    {
+      "a": 4,
+      "b": 6,
+      "distance": 98.8
+    },
+    {
+      "a": 4,
+      "b": 10,
+      "distance": 72.1
+    },
+    {
+      "a": 4,
+      "b": 32,
+      "distance": 76.1
+    },
+    {
+      "a": 5,
+      "b": 7,
+      "distance": 205.8
+    },
+    {
+      "a": 5,
+      "b": 11,
+      "distance": 109.3
+    },
+    {
+      "a": 5,
+      "b": 18,
+      "distance": 99.6
+    },
+    {
+      "a": 5,
+      "b": 24,
+      "distance": 114.1
+    },
+    {
+      "a": 5,
+      "b": 25,
+      "distance": 107.6
+    },
+    {
+      "a": 6,
+      "b": 10,
+      "distance": 70.2
+    },
+    {
+      "a": 6,
+      "b": 32,
+      "distance": 125.0
+    },
+    {
+      "a": 6,
+      "b": 33,
+      "distance": 92.3
+    },
+    {
+      "a": 7,
+      "b": 18,
+      "distance": 106.7
+    },
+    {
+      "a": 7,
+      "b": 23,
+      "distance": 199.8
+    },
+    {
+      "a": 8,
+      "b": 9,
+      "distance": 190.9
+    },
+    {
+      "a": 8,
+      "b": 19,
+      "distance": 278.7
+    },
+    {
+      "a": 8,
+      "b": 37,
+      "distance": 156.8
+    },
+    {
+      "a": 9,
+      "b": 19,
+      "distance": 121.3
+    },
+    {
+      "a": 9,
+      "b": 37,
+      "distance": 86.6
+    },
+    {
+      "a": 10,
+      "b": 32,
+      "distance": 137.1
+    },
+    {
+      "a": 11,
+      "b": 25,
+      "distance": 119.1
+    },
+    {
+      "a": 11,
+      "b": 38,
+      "distance": 135.9
+    },
+    {
+      "a": 12,
+      "b": 15,
+      "distance": 125.4
+    },
+    {
+      "a": 12,
+      "b": 38,
+      "distance": 122.5
+    },
+    {
+      "a": 13,
+      "b": 19,
+      "distance": 100.8
+    },
+    {
+      "a": 13,
+      "b": 21,
+      "distance": 174.5
+    },
+    {
+      "a": 13,
+      "b": 22,
+      "distance": 77.2
+    },
+    {
+      "a": 13,
+      "b": 27,
+      "distance": 84.4
+    },
+    {
+      "a": 14,
+      "b": 16,
+      "distance": 175.8
+    },
+    {
+      "a": 14,
+      "b": 27,
+      "distance": 133.8
+    },
+    {
+      "a": 14,
+      "b": 39,
+      "distance": 181.9
+    },
+    {
+      "a": 15,
+      "b": 25,
+      "distance": 85.8
+    },
+    {
+      "a": 15,
+      "b": 26,
+      "distance": 114.0
+    },
+    {
+      "a": 16,
+      "b": 31,
+      "distance": 85.4
+    },
+    {
+      "a": 16,
+      "b": 36,
+      "distance": 106.3
+    },
+    {
+      "a": 17,
+      "b": 21,
+      "distance": 85.4
+    },
+    {
+      "a": 17,
+      "b": 23,
+      "distance": 163.0
+    },
+    {
+      "a": 17,
+      "b": 29,
+      "distance": 149.3
+    },
+    {
+      "a": 17,
+      "b": 30,
+      "distance": 111.6
+    },
+    {
+      "a": 18,
+      "b": 24,
+      "distance": 143.3
+    },
+    {
+      "a": 19,
+      "b": 37,
+      "distance": 123.6
+    },
+    {
+      "a": 20,
+      "b": 28,
+      "distance": 162.9
+    },
+    {
+      "a": 20,
+      "b": 34,
+      "distance": 132.5
+    },
+    {
+      "a": 20,
+      "b": 38,
+      "distance": 137.3
+    },
+    {
+      "a": 21,
+      "b": 29,
+      "distance": 192.5
+    },
+    {
+      "a": 21,
+      "b": 30,
+      "distance": 183.4
+    },
+    {
+      "a": 22,
+      "b": 27,
+      "distance": 124.1
+    },
+    {
+      "a": 22,
+      "b": 35,
+      "distance": 108.5
+    },
+    {
+      "a": 23,
+      "b": 29,
+      "distance": 194.4
+    },
+    {
+      "a": 23,
+      "b": 30,
+      "distance": 119.4
+    },
+    {
+      "a": 24,
+      "b": 25,
+      "distance": 83.1
+    },
+    {
+      "a": 24,
+      "b": 35,
+      "distance": 115.7
+    },
+    {
+      "a": 26,
+      "b": 31,
+      "distance": 107.6
+    },
+    {
+      "a": 26,
+      "b": 36,
+      "distance": 113.7
+    },
+    {
+      "a": 28,
+      "b": 33,
+      "distance": 98.1
+    },
+    {
+      "a": 29,
+      "b": 30,
+      "distance": 76.3
+    },
+    {
+      "a": 31,
+      "b": 35,
+      "distance": 88.0
+    },
+    {
+      "a": 31,
+      "b": 36,
+      "distance": 97.8
+    },
+    {
+      "a": 34,
+      "b": 38,
+      "distance": 148.3
+    },
+    {
+      "a": 36,
+      "b": 39,
+      "distance": 151.4
+    }
+  ]
+}
