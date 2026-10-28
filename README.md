@@ -1,17 +1,61 @@
 # Manifest
 
-A browser-based freight economy MMO where every price comes from players.
+A browser-based freight economy MMO. Run a shipping company; every price comes from supply, demand and other players.
 
-## Economy simulator (week 1)
+## Play it locally
+
+Needs Node.js 22.13 or newer.
 
 ```
-python tools/generate_map.py     # writes config/map.json
+cd server
+npm install
+TICK_MS=5000 ADMIN_TOKEN=a-long-random-admin-token npm run dev
+```
+
+Open http://localhost:8080 to play and http://localhost:8080/admin for the economy dashboard.
+`TICK_MS` is the length of one game hour in milliseconds: 5000 for testing, 3600000 (one real hour) for a live season.
+
+## What's in the MVP
+
+- 40-port region, two commodities (grain and fuel), voyages in real time
+- Port markets where price slides with stock; cargo already sailing to each port is public
+- Player buy orders with cash held in escrow
+- Up to 5 ships per company; first ship is upkeep-free, spare ships scrapped automatically if in debt
+- Leaderboard by net worth, admin dashboard with live tax, upkeep and port-fee controls
+- Every action stored in an append-only event log (SQLite); a restart replays it exactly
+
+## Repository layout
+
+| Path | What it is |
+| --- | --- |
+| `config/rules.json` | All economy rules, shared by server and simulator |
+| `config/map.json` | The region map (regenerate with `tools/generate_map.py --seed N`) |
+| `server/src/engine.ts` | Authoritative game rules, no I/O |
+| `server/src/main.ts` | HTTP, WebSockets, accounts, event log, clock |
+| `server/public/` | Browser client and admin page |
+| `server/test/` | Engine tests: `npm test` |
+| `sim/` | Python bot simulator and charts for tuning the economy |
+| `deploy/` | systemd unit and nightly backup script |
+
+## Economy simulator
+
+```
+python tools/generate_map.py
 python sim/simulate.py --seasons 10 --companies 300
+python sim/charts.py results
 ```
 
-- `config/rules.json` — all economy rules (prices, fees, ships), shared with the future server.
-- `sim/simulate.py` — bot trading companies play full seasons; results go to `results/`.
-- Override a rule for one run: `--set ship.fuel_per_100_distance=3`
-- Change the bot mix: `--mix greedy=0.5,casual=0.5`
+Current rules pass all health checks across 10 seasons: see `docs/economy-v1.png`.
 
-Status: work in progress. Early runs show too many ships chasing too little cargo; production rates are being tuned.
+## Deploying to a VPS
+
+1. Create a small Ubuntu VPS and point your domain at it.
+2. Install Node 22, `sqlite3`, and Caddy (for free HTTPS).
+3. `sudo useradd -r manifest`, clone this repo to `/opt/manifest`, then `cd server && npm ci && npm run build`.
+4. Copy `deploy/manifest.service` to `/etc/systemd/system/`, set a long random `ADMIN_TOKEN`, run `sudo systemctl enable --now manifest`.
+5. Caddyfile: `yourdomain.com { reverse_proxy localhost:8080 }` (WebSockets work through it automatically).
+6. Add `deploy/backup.sh` to cron, and copy the backups off the server.
+
+## Not built yet
+
+Player corporations, more regions and commodities, warehouses and sell orders, email verification, anti-multi-account checks beyond one company per account, payments.

@@ -1,0 +1,18 @@
+# systemd unit for the Manifest server. Copy to /etc/systemd/system/manifest.service,
+# set ADMIN_TOKEN, then: sudo systemctl enable --now manifest
+[Unit]
+Description=Manifest game server
+After=network.target
+
+[Service]
+User=manifest
+WorkingDirectory=/opt/manifest/server
+Environment=PORT=8080
+Environment=TICK_MS=3600000
+Environment=ADMIN_TOKEN=change-me-to-a-long-random-string
+Environment=DB_PATH=/opt/manifest/data/manifest.db
+ExecStart=/usr/bin/node dist/main.js
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

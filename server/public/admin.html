@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manifest admin</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body { padding: 24px; max-width: 900px; margin: 0 auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 16px 0; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  .tile span { color: var(--quiet); font-size: 12px; display: block; }
+  .tile b { font: 600 20px var(--mono); }
+  .warn b { color: var(--bad); }
+</style>
+</head>
+<body>
+<h2>Manifest admin</h2>
+<div class="quiet">Live economy health. Refreshes every 10 seconds.</div>
+<div class="row"><input id="token" type="password" placeholder="Admin token" style="max-width:320px"><button id="save">Use token</button></div>
+<p id="err" class="error"></p>
+<div class="grid" id="tiles"></div>
+<h3>Live controls</h3>
+<div class="quiet">Changes apply immediately and are recorded in the event log.</div>
+<div class="row">
+  <label style="margin:0">Trade tax (0–0.3)<input id="tax" type="number" step="0.005"></label>
+  <label style="margin:0">Upkeep per extra ship per day<input id="upkeep" type="number" step="10"></label>
+  <label style="margin:0">Port fee per docking<input id="portFee" type="number" step="5"></label>
+</div>
+<div class="row"><button id="apply">Apply changes</button></div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let token = ""; try { token = sessionStorage.getItem("adminToken") || ""; } catch {}
+$("token").value = token;
+$("save").onclick = () => { token = $("token").value; try { sessionStorage.setItem("adminToken", token); } catch {} load(); };
+let first = true;
+async function load() {
+  if (!token) return;
+  const r = await fetch("/api/admin/metrics", { headers: { "x-admin-token": token } });
+  const m = await r.json();
+  if (!r.ok) { $("err").textContent = m.error; return; }
+  $("err").textContent = "";
+  const tiles = [
+    ["Season day", m.day], ["Companies", m.companies], ["Ships", m.ships],
+    ["Money supply", m.moneySupply.toLocaleString()], ["Cash in open orders", m.escrow.toLocaleString()],
+    ["Top 1% share of worth", (m.top1pctShare * 100).toFixed(1) + "%", m.top1pctShare > 0.15],
+    ["Companies in debt", m.inDebt, m.companies && m.inDebt / m.companies > 0.1],
+  ];
+  $("tiles").innerHTML = tiles.map(([k, v, warn]) => `<div class="tile ${warn ? "warn" : ""}"><span>${k}</span><b>${v}</b></div>`).join("");
+  if (first) { $("tax").value = m.tax; $("upkeep").value = m.upkeep; $("portFee").value = m.portFee; first = false; }
+}
+$("apply").onclick = async () => {
+  const body = { tax: Number($("tax").value), upkeep: Number($("upkeep").value), portFee: Number($("portFee").value) };
+  const r = await fetch("/api/admin/set", { method: "POST", headers: { "x-admin-token": token, "content-type": "application/json" }, body: JSON.stringify(body) });
+  const res = await r.json();
+  $("err").textContent = res.ok ? "Saved." : res.error;
+  load();
+};
+load(); setInterval(load, 10000);
+</script>
+</body>
+</html>

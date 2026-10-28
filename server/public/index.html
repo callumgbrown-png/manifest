@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manifest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="auth" class="auth hidden">
+  <form id="authForm" class="card">
+    <h1>MANIFEST</h1>
+    <p class="quiet">Run a shipping company. Every price is set by other players.</p>
+    <label>Company name<input id="authName" autocomplete="username" required minlength="3" maxlength="24"></label>
+    <label>Password<input id="authPass" type="password" autocomplete="current-password" required minlength="8"></label>
+    <div class="row">
+      <button type="submit" data-mode="login">Log in</button>
+      <button type="submit" data-mode="register" class="secondary">Found a company</button>
+    </div>
+    <p id="authError" class="error"></p>
+  </form>
+</div>
+
+<header>
+  <div class="brand">MANIFEST</div>
+  <div class="stat"><span>Company</span><b id="hName">–</b></div>
+  <div class="stat"><span>Cash</span><b id="hCash">–</b></div>
+  <div class="stat"><span>Net worth</span><b id="hWorth">–</b></div>
+  <div class="stat"><span>Season clock</span><b id="hClock">–</b></div>
+  <div class="spacer"></div>
+  <span id="conn" class="pill">connecting</span>
+  <button id="logout" class="link">Log out</button>
+</header>
+
+<main>
+  <section class="mapWrap">
+    <canvas id="map"></canvas>
+    <div class="legend">
+      <span><i class="dot grain"></i>grain producer</span>
+      <span><i class="dot fuel"></i>fuel producer</span>
+      <span><i class="dot other"></i>other port</span>
+      <span><i class="dot mine"></i>your ships</span>
+    </div>
+  </section>
+  <aside>
+    <nav id="tabs">
+      <button data-tab="port" class="on">Port</button>
+      <button data-tab="fleet">Fleet</button>
+      <button data-tab="orders">Orders</button>
+      <button data-tab="board">Leaderboard</button>
+    </nav>
+    <div id="panel"></div>
+  </aside>
+</main>
+<div id="toast" class="toast hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>
