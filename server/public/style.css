@@ -62,3 +62,4 @@ td.num, th.num { text-align: right; }
   aside { border-left: 0; border-top: 1px solid var(--line); }
   header { gap: 14px; }
 }
+.banner { padding: 10px 16px; background: rgba(95,211,168,.12); border-bottom: 1px solid var(--mine); }

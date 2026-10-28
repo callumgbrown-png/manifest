@@ -14,6 +14,8 @@ export interface Rules {
     max_stock_multiple: number;
     production_per_hour: Record<Good, number>;
     consumption_per_hour: Record<Good, number>;
+    reference_companies?: number;
+    min_scale?: number;
   };
   fees: { port_fee_per_docking: number; trade_tax_rate: number };
   company: { start_cash: number; start_ships: number; max_ships: number };
@@ -100,7 +102,11 @@ export class Engine {
 
   // ------------------------------------------------------------ commands
 
+  get seasonHours(): number { return this.rules.season.days * 24; }
+  get seasonOver(): boolean { return this.tick >= this.seasonHours; }
+
   apply(cmd: Command): Result {
+    if (this.seasonOver && cmd.type !== "adminSet") return fail("the season has ended");
     switch (cmd.type) {
       case "register": return this.register(cmd.name, cmd.startPort);
       case "sail": return this.sail(cmd);
@@ -274,11 +280,13 @@ export class Engine {
   // ------------------------------------------------------------ time
 
   advance(): void {
+    if (this.seasonOver) return;
     this.tick++;
     const cap = this.rules.markets.target_stock * this.rules.markets.max_stock_multiple;
+    const k = this.marketScale();
     for (let p = 0; p < this.n; p++)
       for (let g = 0; g < 2; g++)
-        this.stock[p][g] = Math.max(0, Math.min(cap, this.stock[p][g] + this.prod[p][g]) - this.cons[p][g]);
+        this.stock[p][g] = Math.max(0, Math.min(cap, this.stock[p][g] + this.prod[p][g] * k) - this.cons[p][g] * k);
 
     for (const s of this.ships.values()) {
       if (s.dest !== null && s.arriveTick <= this.tick) {
@@ -297,6 +305,13 @@ export class Engine {
         }
       }
     }
+  }
+
+  /** Port production and consumption scale with the number of companies. */
+  marketScale(): number {
+    const m = this.rules.markets;
+    if (!m.reference_companies) return 1;
+    return Math.max(m.min_scale ?? 0, this.companies.size / m.reference_companies);
   }
 
   // ------------------------------------------------------------ views

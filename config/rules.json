@@ -20,7 +20,7 @@
     }
   },
   "markets": {
-    "_comment": "Each port holds a stock of each commodity. Price slides from ceiling (empty) to floor (stock at twice the target). Producer ports add stock every hour; consumer ports remove it.",
+    "_comment": "Each port holds a stock of each commodity. Price slides from ceiling (empty) to floor (stock at twice the target). Producer ports add stock every hour; consumer ports remove it. Production and consumption scale with the number of companies (companies / reference_companies, at least min_scale), so each company sees a similar share of trade whatever the player count.",
     "target_stock": 5000,
     "max_stock_multiple": 3,
     "production_per_hour": {
@@ -30,7 +30,9 @@
     "consumption_per_hour": {
       "grain": 56,
       "fuel": 28
-    }
+    },
+    "reference_companies": 300,
+    "min_scale": 0.05
   },
   "information": {
     "_comment": "If true, every port shows how much cargo is already sailing towards it, so players can avoid piling onto the same route.",

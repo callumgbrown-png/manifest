@@ -11,6 +11,7 @@ const store = {
   set(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
 };
 
+let dist = null;
 let ws, world = null, me = null, tab = "port", selectedPort = null, tickAt = Date.now(), reqId = 0;
 const pendingReq = new Map();
 
@@ -31,6 +32,7 @@ function connect() {
   };
   ws.onmessage = ev => {
     const msg = JSON.parse(ev.data);
+    if (msg.type === "static") { dist = msg.dist; return; }
     if (msg.type === "state") {
       if (!world || msg.world.tick !== world.tick) tickAt = Date.now();
       const firstLogin = !me && msg.me;
@@ -84,7 +86,8 @@ function shipPos(s) {
   return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
 }
 function distance(a, b) {
-  // Straight-line estimate for display; the server uses real sea routes.
+  // Real sea-route distance from the server; straight line only until it arrives.
+  if (dist) return dist[a][b];
   const p = world.ports[a], q = world.ports[b];
   return Math.hypot(p.x - q.x, p.y - q.y);
 }
@@ -152,7 +155,14 @@ function render() {
   $("hName").textContent = me?.name ?? "–";
   $("hCash").textContent = me ? fmt(me.cash) : "–";
   $("hWorth").textContent = me ? fmt(me.worth) : "–";
-  $("hClock").textContent = `Day ${Math.floor(world.tick / 24) + 1}, ${String(world.tick % 24).padStart(2, "0")}:00`;
+  const days = world.seasonHours / 24;
+  $("hClock").textContent = world.seasonOver ? "Season over"
+    : `Day ${Math.floor(world.tick / 24) + 1} of ${days}, ${String(world.tick % 24).padStart(2, "0")}:00`;
+  $("seasonBanner").classList.toggle("hidden", !world.seasonOver);
+  if (world.seasonOver) {
+    const top = world.leaderboard[0];
+    $("seasonBanner").innerHTML = `<b>The season has ended.</b> ${top ? `${esc(top.name)} finished first with ${fmt(top.worth)}.` : ""} Trading is closed until the next season starts.`;
+  }
   // Don't wipe a form the player is filling in; refresh it once they leave the field.
   const focused = document.activeElement;
   if (focused && $("panel").contains(focused) && /INPUT|SELECT/.test(focused.tagName)) {
@@ -251,10 +261,10 @@ function ordersPanel() {
 }
 
 function boardPanel() {
-  return `<h2>Leaderboard</h2><div class="quiet">Ranked by net worth: cash, half the value of ships, cargo and open orders.</div>
+  return `<h2>Leaderboard</h2><div class="quiet">Ranked by net worth: cash, half the value of ships, cargo and open orders. Companies marked bot are computer traders that keep the markets moving.</div>
     <h3>Top companies</h3>
     <table><tr><th>#</th><th>Company</th><th class="num">Ships</th><th class="num">Net worth</th></tr>
-    ${world.leaderboard.map((c, i) => `<tr${me && c.id === me.id ? ' style="color:var(--mine)"' : ""}><td>${i + 1}</td><td>${esc(c.name)}</td><td class="num">${c.ships}</td><td class="num">${fmt(c.worth)}</td></tr>`).join("")}</table>`;
+    ${world.leaderboard.map((c, i) => `<tr${me && c.id === me.id ? ' style="color:var(--mine)"' : ""}><td>${i + 1}</td><td>${esc(c.name)}${c.bot ? ' <span class="tag">bot</span>' : ""}</td><td class="num">${c.ships}</td><td class="num">${fmt(c.worth)}</td></tr>`).join("")}</table>`;
 }
 
 function bindPanel() {

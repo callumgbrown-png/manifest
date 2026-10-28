@@ -113,6 +113,9 @@ def run_season(seed, n_companies, rules, world, dist, prod, cons, return_compani
                profiles=PROFILES):
     rng = random.Random(seed)
     n = len(world["ports"])
+    m_ = rules["markets"]
+    scale = max(m_.get("min_scale", 0), n_companies / m_["reference_companies"]) if "reference_companies" in m_ else 1.0
+    prod, cons = prod * scale, cons * scale
     mk = Market(rules, n)
     fee = rules["fees"]["port_fee_per_docking"]
     tax = rules["fees"]["trade_tax_rate"]
