@@ -1,0 +1,92 @@
+[
+  {
+    "money_growth_per_day": 0.0032,
+    "top1pct_share_end": 0.0559,
+    "bankrupt_share_end": 0.0,
+    "money_ok": true,
+    "concentration_ok": true,
+    "bankruptcy_ok": true,
+    "season": 1
+  },
+  {
+    "money_growth_per_day": 0.0026,
+    "top1pct_share_end": 0.0517,
+    "bankrupt_share_end": 0.0,
+    "money_ok": true,
+    "concentration_ok": true,
+    "bankruptcy_ok": true,
+    "season": 2
+  },
+  {
+    "money_growth_per_day": -0.0001,
+    "top1pct_share_end": 0.051,
+    "bankrupt_share_end": 0.0,
+    "money_ok": true,
+    "concentration_ok": true,
+    "bankruptcy_ok": true,
+    "season": 3
+  },
+  {
+    "money_growth_per_day": 0.0037,
+    "top1pct_share_end": 0.0565,
+    "bankrupt_share_end": 0.0,
+    "money_ok": true,
+    "concentration_ok": true,
+    "bankruptcy_ok": true,
+    "season": 4
+  },
+  {
+    "money_growth_per_day": 0.0016,
+    "top1pct_share_end": 0.0544,
+    "bankrupt_share_end": 0.0,
+    "money_ok": true,
+    "concentration_ok": true,
+    "bankruptcy_ok": true,
+    "season": 5
+  },
+  {
+    "money_growth_per_day": -0.0003,
+    "top1pct_share_end": 0.0576,
+    "bankrupt_share_end": 0.0,
+    "money_ok": true,
+    "concentration_ok": true,
+    "bankruptcy_ok": true,
+    "season": 6
+  },
+  {
+    "money_growth_per_day": -0.0003,
+    "top1pct_share_end": 0.0461,
+    "bankrupt_share_end": 0.0,
+    "money_ok": true,
+    "concentration_ok": true,
+    "bankruptcy_ok": true,
+    "season": 7
+  },
+  {
+    "money_growth_per_day": 0.0019,
+    "top1pct_share_end": 0.0543,
+    "bankrupt_share_end": 0.0,
+    "money_ok": true,
+    "concentration_ok": true,
+    "bankruptcy_ok": true,
+    "season": 8
+  },
+  {
+    "money_growth_per_day": 0.0001,
+    "top1pct_share_end": 0.0555,
+    "bankrupt_share_end": 0.0,
+    "money_ok": true,
+    "concentration_ok": true,
+    "bankruptcy_ok": true,
+    "season": 9
+  },
+  {
+    "money_growth_per_day": 0.0001,
+    "top1pct_share_end": 0.0513,
+    "bankrupt_share_end": 0.0,
+    "money_ok": true,
+    "concentration_ok": true,
+    "bankruptcy_ok": true,
+    "season": 10
+  }
+]

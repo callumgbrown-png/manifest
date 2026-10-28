@@ -159,9 +159,20 @@ def run_season(seed, n_companies, rules, world, dist, prod, cons, return_compani
         # 2. Daily upkeep.
         if hour % 24 == 0 and hour > 0:
             for c in companies:
-                cost = sh["upkeep_per_day"] * len(c.ships)
+                # The first ship is upkeep-free, so a broke company is never
+                # stuck paying for a fleet it cannot use.
+                cost = sh["upkeep_per_day"] * max(0, len(c.ships) - 1)
                 c.cash -= cost
                 flows["upkeep"] += cost
+                # Recovery rule: in debt with spare ships, scrap an idle one
+                # for half its price.
+                if c.cash < 0 and len(c.ships) > 1:
+                    idle = [x for x in c.ships if x.dest is None and x.qty == 0]
+                    if idle:
+                        c.ships.remove(idle[0])
+                        ships.remove(idle[0])
+                        c.cash += sh["price"] * 0.5
+                        flows["ships"] -= sh["price"] * 0.5
 
         # 3. Arrivals: dock, pay the fee, sell cargo.
         for s in ships:
