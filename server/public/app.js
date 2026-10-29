@@ -53,7 +53,7 @@ function connect() {
 
 function command(cmd, onOk) {
   const id = ++reqId;
-  if (onOk) pendingReq.set(id, onOk);
+  pendingReq.set(id, () => { if (cmd.ship !== undefined) clearForm(cmd.ship); onOk?.(); render(); });
   ws.send(JSON.stringify({ type: "cmd", reqId: id, cmd }));
 }
 
@@ -163,16 +163,40 @@ function render() {
     const top = world.leaderboard[0];
     $("seasonBanner").innerHTML = `<b>The season has ended.</b> ${top ? `${esc(top.name)} finished first with ${fmt(top.worth)}.` : ""} Trading is closed until the next season starts.`;
   }
-  // Don't wipe a form the player is filling in; refresh it once they leave the field.
+  // Don't rebuild the panel while the player is typing in it or pressing one of its buttons:
+  // rebuilding mid-click swapped the button out from under the mouse and the click was lost.
   const focused = document.activeElement;
-  if (focused && $("panel").contains(focused) && /INPUT|SELECT/.test(focused.tagName)) {
-    focused.addEventListener("blur", () => setTimeout(render, 0), { once: true });
+  const editing = focused && $("panel").contains(focused) && /INPUT|SELECT/.test(focused.tagName);
+  if (editing || pointerInPanel) {
+    if (editing && !renderPending) focused.addEventListener("blur", () => setTimeout(render, 0), { once: true });
+    renderPending = true;
     return;
   }
+  renderPending = false;
   const html = { port: portPanel, fleet: fleetPanel, orders: ordersPanel, board: boardPanel }[tab]();
   $("panel").innerHTML = html;
+  restoreForm();
   bindPanel();
 }
+
+// What the player has typed or picked survives the panel being rebuilt by live updates.
+let renderPending = false, pointerInPanel = false;
+const formState = new Map();
+const formKey = el => `${el.closest("[data-ship]")?.dataset.ship ?? ""}:${el.dataset.field ?? el.id}`;
+$("panel").addEventListener("pointerdown", () => { pointerInPanel = true; });
+// Clicks fire right after pointerup, so wait a moment before allowing a rebuild.
+window.addEventListener("pointerup", () => setTimeout(() => { pointerInPanel = false; if (renderPending) render(); }, 0), true);
+$("panel").addEventListener("input", e => { if (e.target.matches("input, select")) formState.set(formKey(e.target), e.target.value); });
+function restoreForm() {
+  $("panel").querySelectorAll("input, select").forEach(el => {
+    const v = formState.get(formKey(el));
+    if (v === undefined) return;
+    if (el.tagName === "SELECT" && ![...el.options].some(o => o.value === v)) return;
+    el.value = v;
+  });
+}
+/** Forget the form for a ship once its command succeeds, so it shows fresh defaults. */
+function clearForm(ship) { for (const k of formState.keys()) if (k.startsWith(`${ship}:`)) formState.delete(k); }
 
 function portPanel() {
   const p = world.ports[selectedPort];

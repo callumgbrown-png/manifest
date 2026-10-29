@@ -1,10 +1,10 @@
 // Manifest game server: HTTP for the client files and admin API, WebSockets for play,
 // SQLite (built into Node) for accounts and the append-only event log.
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, statSync, mkdirSync } from "node:fs";
 import { randomBytes, scryptSync, timingSafeEqual, randomInt } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { join, dirname, extname, normalize } from "node:path";
+import { join, dirname, extname, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Engine, GOODS, type Command } from "./engine.js";
@@ -162,7 +162,16 @@ function json(res: ServerResponse, code: number, body: unknown) {
 }
 
 const server = createServer((req, res) => {
-  const url = new URL(req.url ?? "/", "http://x");
+  // One bad request must never take the game down.
+  try { handle(req, res); } catch (e) {
+    console.error("request failed:", req.url, e);
+    if (!res.headersSent) json(res, 500, { error: "server error" }); else res.end();
+  }
+});
+
+function handle(req: IncomingMessage, res: ServerResponse) {
+  let url: URL;
+  try { url = new URL(req.url ?? "/", "http://x"); } catch { return json(res, 400, { error: "bad url" }); }
   if (url.pathname === "/api/health") return json(res, 200, { ok: true, tick: engine.tick });
   if (url.pathname === "/api/seasons") {
     const rows = db.prepare("SELECT id, ended, results FROM seasons ORDER BY id DESC").all() as { id: number; ended: string; results: string }[];
@@ -178,7 +187,9 @@ const server = createServer((req, res) => {
     req.on("data", d => { body += d; if (body.length > 10_000) req.destroy(); });
     req.on("end", () => {
       try {
-        const { tax, upkeep, portFee } = JSON.parse(body || "{}");
+        const parsed = JSON.parse(body || "{}");
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return json(res, 400, { error: "send a JSON object" });
+        const { tax, upkeep, portFee } = parsed;
         const r = commit({ type: "adminSet", tax, upkeep, portFee });
         broadcastSoon();
         json(res, r.ok ? 200 : 400, r);
@@ -194,10 +205,13 @@ const server = createServer((req, res) => {
   let path = url.pathname === "/" ? "/index.html" : url.pathname === "/admin" ? "/admin.html" : url.pathname === "/seasons" ? "/seasons.html" : url.pathname;
   path = normalize(path).replace(/^(\.\.[/\\])+/, "");
   const file = join(PUBLIC, path);
-  if (!file.startsWith(PUBLIC) || !existsSync(file)) { res.writeHead(404); return res.end("not found"); }
+  // Only plain files inside public/ (a directory like "//" used to crash the server).
+  if (!file.startsWith(PUBLIC + sep) || !statSync(file, { throwIfNoEntry: false })?.isFile()) {
+    res.writeHead(404); return res.end("not found");
+  }
   res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream" });
   res.end(readFileSync(file));
-});
+}
 
 // ------------------------------------------------------------ websockets
 
@@ -211,6 +225,8 @@ wss.on("connection", ws => {
   send(client, { type: "static", dist: engine.dist.map(r => r.map(d => Math.round(d))) });
   send(client, { type: "state", world: publicView(), me: null });
   ws.on("close", () => clients.delete(client));
+  // Without this, an oversized or broken frame throws and kills the whole server.
+  ws.on("error", () => ws.terminate());
   ws.on("message", raw => {
     const now = Date.now();
     client.recent = client.recent.filter(t => now - t < 1000);
@@ -218,31 +234,38 @@ wss.on("connection", ws => {
     client.recent.push(now);
     let msg: any;
     try { msg = JSON.parse(String(raw)); } catch { return; }
-
-    if (msg.type === "register" || msg.type === "login") {
-      const r = msg.type === "register" ? register(msg.name, msg.password) : login(msg.name, msg.password);
-      if ("error" in r) return send(client, { type: "authError", error: r.error });
-      client.company = companyForToken(r.token);
-      send(client, { type: "auth", token: r.token });
-      if (msg.type === "register") broadcastSoon(); else sendState(client);
-      return;
-    }
-    if (msg.type === "resume") {
-      client.company = companyForToken(msg.token);
-      if (!client.company) return send(client, { type: "authError", error: "Session expired, please log in" });
-      return sendState(client);
-    }
-    if (msg.type === "cmd") {
-      if (!client.company) return send(client, { type: "result", reqId: msg.reqId, ok: false, error: "Log in first" });
-      const allowed = ["sail", "sell", "buyShip", "scrapShip", "placeOrder", "placeSell", "buyFromOrder", "cancelOrder"];
-      if (!msg.cmd || !allowed.includes(msg.cmd.type)) return send(client, { type: "result", reqId: msg.reqId, ok: false, error: "Unknown command" });
-      const cmd = { ...msg.cmd, company: client.company } as Command;  // never trust a company id from the client
-      const r = commit(cmd);
-      send(client, { type: "result", reqId: msg.reqId, ...r });
-      if (r.ok) broadcastSoon();
+    if (!msg || typeof msg !== "object") return;
+    try { onMessage(client, msg); } catch (e) {
+      console.error("message failed:", e);
+      send(client, { type: "error", error: "Something went wrong" });
     }
   });
 });
+
+function onMessage(client: Client, msg: any) {
+  if (msg.type === "register" || msg.type === "login") {
+    const r = msg.type === "register" ? register(msg.name, msg.password) : login(msg.name, msg.password);
+    if ("error" in r) return send(client, { type: "authError", error: r.error });
+    client.company = companyForToken(r.token);
+    send(client, { type: "auth", token: r.token });
+    if (msg.type === "register") broadcastSoon(); else sendState(client);
+    return;
+  }
+  if (msg.type === "resume") {
+    client.company = companyForToken(msg.token);
+    if (!client.company) return send(client, { type: "authError", error: "Session expired, please log in" });
+    return sendState(client);
+  }
+  if (msg.type === "cmd") {
+    if (!client.company) return send(client, { type: "result", reqId: msg.reqId, ok: false, error: "Log in first" });
+    const allowed = ["sail", "sell", "buyShip", "scrapShip", "placeOrder", "placeSell", "buyFromOrder", "cancelOrder"];
+    if (!msg.cmd || !allowed.includes(msg.cmd.type)) return send(client, { type: "result", reqId: msg.reqId, ok: false, error: "Unknown command" });
+    const cmd = { ...msg.cmd, company: client.company } as Command;  // never trust a company id from the client
+    const r = commit(cmd);
+    send(client, { type: "result", reqId: msg.reqId, ...r });
+    if (r.ok) broadcastSoon();
+  }
+}
 
 function send(c: Client, msg: unknown) {
   if (c.ws.readyState === c.ws.OPEN) c.ws.send(JSON.stringify(msg));
@@ -305,4 +328,7 @@ setInterval(() => {
   broadcastSoon();
 }, TICK_MS);
 
-server.listen(PORT, () => console.log(`Manifest running on http://localhost:${PORT} (tick every ${TICK_MS} ms)`));
+server.listen(PORT, () => {
+  const port = (server.address() as { port: number }).port;   // PORT=0 picks a free port (used by tests)
+  console.log(`Manifest running on http://localhost:${port} (tick every ${TICK_MS} ms)`);
+});

@@ -140,7 +140,7 @@ export class Engine {
   }
 
   private register(name: string, startPort: number): Result {
-    if (!(startPort >= 0 && startPort < this.n)) return fail("bad start port");
+    if (!this.isPort(startPort)) return fail("bad start port");
     const id = this.nextId++;
     const c: Company = { id, name, cash: this.rules.company.start_cash, ships: [] };
     this.companies.set(id, c);
@@ -155,6 +155,9 @@ export class Engine {
     return s;
   }
 
+  /** Port numbers must be real integers: a string like "5" would sneak through comparisons. */
+  private isPort(p: unknown): p is number { return Number.isInteger(p) && (p as number) >= 0 && (p as number) < this.n; }
+
   private ownShip(company: number, shipId: number): { c: Company; s: Ship } | string {
     const c = this.companies.get(company);
     const s = this.ships.get(shipId);
@@ -167,7 +170,7 @@ export class Engine {
     if (typeof own === "string") return fail(own);
     const { c, s } = own;
     if (s.dest !== null) return fail("ship is at sea");
-    if (!(cmd.dest >= 0 && cmd.dest < this.n) || cmd.dest === s.port) return fail("bad destination");
+    if (!this.isPort(cmd.dest) || cmd.dest === s.port) return fail("bad destination");
     if (!Number.isFinite(this.dist[s.port][cmd.dest])) return fail("no route");
     const tax = this.rules.fees.trade_tax_rate;
 
@@ -233,6 +236,7 @@ export class Engine {
   private buyShip(company: number, port: number): Result {
     const c = this.companies.get(company);
     if (!c) return fail("no company");
+    if (!this.isPort(port)) return fail("bad port");
     if (c.ships.length >= this.rules.company.max_ships) return fail("fleet is at its maximum");
     if (c.cash < this.rules.ship.price) return fail("not enough cash");
     const docked = c.ships.some(id => { const s = this.ships.get(id)!; return s.dest === null && s.port === port; });
@@ -261,7 +265,7 @@ export class Engine {
     const c = this.companies.get(cmd.company);
     const g = GOODS.indexOf(cmd.good);
     if (!c || g < 0) return fail("bad order");
-    if (!(cmd.port >= 0 && cmd.port < this.n)) return fail("bad port");
+    if (!this.isPort(cmd.port)) return fail("bad port");
     const qty = Math.floor(cmd.qty), price = Math.round(cmd.price * 100) / 100;
     const band = this.rules.commodities[cmd.good];
     if (!(qty > 0 && qty <= 1000)) return fail("quantity must be 1 to 1000");
@@ -378,18 +382,14 @@ export class Engine {
   }
 
   private adminSet(cmd: Extract<Command, { type: "adminSet" }>): Result {
-    if (cmd.tax !== undefined) {
-      if (!(cmd.tax >= 0 && cmd.tax <= 0.3)) return fail("tax must be 0 to 0.3");
-      this.rules.fees.trade_tax_rate = cmd.tax;
-    }
-    if (cmd.upkeep !== undefined) {
-      if (!(cmd.upkeep >= 0)) return fail("bad upkeep");
-      this.rules.ship.upkeep_per_day = cmd.upkeep;
-    }
-    if (cmd.portFee !== undefined) {
-      if (!(cmd.portFee >= 0)) return fail("bad port fee");
-      this.rules.fees.port_fee_per_docking = cmd.portFee;
-    }
+    // Check everything first so a bad value changes nothing.
+    const num = (x: unknown) => typeof x === "number" && Number.isFinite(x);
+    if (cmd.tax !== undefined && !(num(cmd.tax) && cmd.tax >= 0 && cmd.tax <= 0.3)) return fail("tax must be 0 to 0.3");
+    if (cmd.upkeep !== undefined && !(num(cmd.upkeep) && cmd.upkeep >= 0)) return fail("bad upkeep");
+    if (cmd.portFee !== undefined && !(num(cmd.portFee) && cmd.portFee >= 0)) return fail("bad port fee");
+    if (cmd.tax !== undefined) this.rules.fees.trade_tax_rate = cmd.tax;
+    if (cmd.upkeep !== undefined) this.rules.ship.upkeep_per_day = cmd.upkeep;
+    if (cmd.portFee !== undefined) this.rules.fees.port_fee_per_docking = cmd.portFee;
     return { ok: true };
   }
 

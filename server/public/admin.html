@@ -51,11 +51,15 @@ async function load() {
   if (first) { $("tax").value = m.tax; $("upkeep").value = m.upkeep; $("portFee").value = m.portFee; first = false; }
 }
 $("apply").onclick = async () => {
-  const body = { tax: Number($("tax").value), upkeep: Number($("upkeep").value), portFee: Number($("portFee").value) };
+  // Send only filled-in fields: a blank box used to send 0 and wipe out tax, upkeep or fees.
+  const body = {};
+  for (const k of ["tax", "upkeep", "portFee"]) if ($(k).value.trim() !== "") body[k] = Number($(k).value);
+  if (!token) { $("err").textContent = "Enter the admin token first."; return; }
+  if (!Object.keys(body).length) { $("err").textContent = "Nothing to change."; return; }
   const r = await fetch("/api/admin/set", { method: "POST", headers: { "x-admin-token": token, "content-type": "application/json" }, body: JSON.stringify(body) });
   const res = await r.json();
+  await load();   // refresh first: load() clears the message line
   $("err").textContent = res.ok ? "Saved." : res.error;
-  load();
 };
 load(); setInterval(load, 10000);
 </script>

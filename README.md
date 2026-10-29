@@ -35,9 +35,21 @@ On Windows, double-click `server/start.bat`.
 | `server/src/engine.ts` | Authoritative game rules, no I/O |
 | `server/src/main.ts` | HTTP, WebSockets, accounts, event log, clock |
 | `server/public/` | Browser client and admin page |
-| `server/test/` | Engine tests: `npm test` |
+| `server/test/` | Tests: `npm test` (engine rules, bots, and the real server over HTTP and WebSockets) |
+| `server/test/browser/` | Browser test of the client, admin and seasons pages: `npm run test:browser` |
 | `sim/` | Python bot simulator and charts for tuning the economy |
 | `deploy/` | systemd unit and nightly backup script |
+
+## Tests
+
+```
+cd server
+npm test                # ~20 s: every engine rule, bots, and a real server on a throwaway database
+npm run test:browser    # two players click through every feature in Chromium
+```
+
+`npm test` starts real servers on free ports with temporary databases, so it never touches `data/`.
+The browser test needs Playwright (`npm i -D playwright && npx playwright install chromium`) and is skipped without it.
 
 ## Economy simulator
 
