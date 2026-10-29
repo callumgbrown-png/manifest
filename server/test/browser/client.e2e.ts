@@ -54,6 +54,12 @@ async function selectPort(page: any, id: number) {
   if (await page.textContent("#panel h2") !== name) await tapPort(page, id);
   await page.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, name);
 }
+/** Close the first-time guide a new company sees. */
+async function closeGuide(page: any) {
+  await page.waitForSelector("#guide:not(.hidden)");
+  await page.keyboard.press("Escape");
+  await page.waitForSelector("#guide.hidden", { state: "attached" });
+}
 async function sailTo(page: any, port: number, load?: string) {
   await page.click('#tabs button[data-tab="fleet"]');
   const card = page.locator(".shipCard[data-ship]").first();
@@ -75,6 +81,23 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await a.click('button[data-mode="register"]');
   await a.waitForSelector("#auth.hidden", { state: "attached" });
   await a.waitForFunction(() => document.getElementById("hName")!.textContent === "Alpha Lines");
+  // ---- a new company sees a short guide once
+  await a.waitForSelector("#guide:not(.hidden)");
+  assert.equal(await a.textContent("#guideStep"), "Step 1 of 4");
+  assert.match((await a.textContent("#guideText"))!, /one ship, docked at [A-Z]/);
+  assert.ok(await a.locator("#guideBack:disabled").count(), "no Back on the first step");
+  await a.click("#guideNext");
+  assert.equal(await a.textContent("#guideTitle"), "Buy where it's cheap");
+  await a.click("#guideBack");
+  assert.equal(await a.textContent("#guideTitle"), "Your ship");
+  for (const title of ["Buy where it's cheap", "Sail where it's needed", "Sell, and grow"]) {
+    await a.click("#guideNext");
+    assert.equal(await a.textContent("#guideTitle"), title);
+  }
+  assert.equal(await a.textContent("#guideNext"), "Start trading");
+  await a.click("#guideNext");
+  await a.waitForSelector("#guide.hidden", { state: "attached" });
+  assert.equal(await a.evaluate(() => localStorage.getItem("guideSeen")), "1");
   assert.equal(await a.textContent("#hCash"), "10,000");
   assert.equal(await a.textContent("#conn"), "live");
   assert.match((await a.textContent("#hClock"))!, /^Day 1 of 56, \d\d:00$/);
@@ -86,6 +109,9 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await b.fill("#authName", "Beta Shipping");
   await b.click('button[data-mode="register"]');
   await b.waitForFunction(() => document.getElementById("hName")!.textContent === "Beta Shipping");
+  await b.waitForSelector("#guide:not(.hidden)");
+  await b.click("#guideSkip");
+  await b.waitForSelector("#guide.hidden", { state: "attached" });
 
   // ---- the port panel shows the market for the port your ship is in
   const A0 = await me(a);
@@ -237,12 +263,21 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await a.waitForFunction(() => document.getElementById("hName")!.textContent === "Alpha Lines");
   await a.click("#logout");
   await a.waitForSelector("#auth:not(.hidden)");
+  // "How to play" on the sign-in card opens the guide over it
+  await a.click("#howToPlay");
+  await a.waitForSelector("#guide:not(.hidden)");
+  assert.match((await a.textContent("#guideText"))!, /You start with one ship/);
+  await a.keyboard.press("Escape");
+  await a.waitForSelector("#guide.hidden", { state: "attached" });
+  assert.ok(await a.locator("#auth:not(.hidden)").count(), "sign-in card still there");
   await a.fill("#authName", "alpha lines"); await a.fill("#authPass", "wrong-password");
   await a.click('button[data-mode="login"]');
   await a.waitForFunction(() => document.getElementById("authError")!.textContent === "Wrong name or password");
   await a.fill("#authPass", "password123");
   await a.click('button[data-mode="login"]');
   await a.waitForFunction(() => document.getElementById("hName")!.textContent === "Alpha Lines");
+  await a.waitForTimeout(300);
+  assert.ok(await a.locator("#guide.hidden").count(), "logging in doesn't show the guide again");
 
   // ---- phone-sized screen: no sideways scrolling
   await a.setViewportSize({ width: 390, height: 800 });
@@ -309,6 +344,7 @@ test("season end closes trading in the client; admin starts the next season", { 
     await page.fill("#authName", "Last Season"); await page.fill("#authPass", "password123");
     await page.click('button[data-mode="register"]');
     await page.waitForFunction(() => document.getElementById("hName")!.textContent === "Last Season");
+    await closeGuide(page);
     await page.waitForFunction(() => document.getElementById("hClock")!.textContent === "Season over", null, { timeout: 60000 });
     assert.match((await page.textContent("#seasonBanner"))!, /The season has ended\. Last Season finished first/);
     await page.click('#tabs button[data-tab="fleet"]');
@@ -350,6 +386,7 @@ test("trip estimates match what really happens, and 'best trips' plans a trip", 
     await page.fill("#authName", "Honest Co"); await page.fill("#authPass", "password123");
     await page.click('button[data-mode="register"]');
     await page.waitForFunction(() => document.getElementById("hName")!.textContent === "Honest Co");
+    await closeGuide(page);
     await page.click('#tabs button[data-tab="fleet"]');
     await page.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("Best trips from here"));
     const card = page.locator(".shipCard[data-ship]").first();

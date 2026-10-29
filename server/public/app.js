@@ -42,8 +42,10 @@ function connect() {
       if ((selectedPort === null || firstLogin) && me?.ships?.length) selectedPort = me.ships[0].dest ?? me.ships[0].port;
       if (selectedPort === null) selectedPort = 0;
       render();
+      if (guidePending && me) { guidePending = false; openGuide(); }
     } else if (msg.type === "auth") {
       store.set("token", msg.token); showAuth(false);
+      if (authMode === "register" && !store.get("guideSeen")) guidePending = true;
     } else if (msg.type === "authError") {
       store.set("token", null); showAuth(true); $("authError").textContent = msg.error;
     } else if (msg.type === "result") {
@@ -81,6 +83,41 @@ $("logout").addEventListener("click", () => {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "logout" }));
   setTimeout(() => location.reload(), 300);
 });
+
+// ------------------------------------------------------------ first-time guide
+
+// Shown once to a new company (remembered in this browser), and any time from "How to play".
+let guidePending = false, guideAt = 0;
+function guideSteps() {
+  const ship = me?.ships?.[0], here = ship && ship.dest === null ? world?.ports[ship.port] : null;
+  return [
+    ["Your ship", here
+      ? `This is your company: one ship, docked at ${esc(here.name)}. It's the green ring on the map, and its card is on the Port and Fleet tabs. Your first ship costs nothing to keep.`
+      : "You start with one ship, shown with a green ring on the map. Its card, on the Port and Fleet tabs, is where you trade and sail. Your first ship costs nothing to keep."],
+    ["Buy where it's cheap", "Each port makes some goods and needs others. Where a good is made, stock is high and the price is low. On your ship's card, pick grain or fuel to load and how much."],
+    ["Sail where it's needed", "Tap a port on the map, or pick one from the list, to set the destination. The estimate counts fuel, the port fee and how prices move as you trade. \"Best trips from here\" fills in the most profitable ones for you."],
+    ["Sell, and grow", "When your ship docks, sell to the market or fill another player's order. Use the profit to buy more ships. The company with the highest net worth when the season ends wins."],
+  ];
+}
+function openGuide() { guideAt = 0; showGuideStep(); $("guide").classList.remove("hidden"); $("guideNext").focus(); }
+function closeGuide() { $("guide").classList.add("hidden"); store.set("guideSeen", "1"); }
+function showGuideStep() {
+  const steps = guideSteps(), [title, text] = steps[guideAt];
+  $("guideStep").textContent = `Step ${guideAt + 1} of ${steps.length}`;
+  $("guideTitle").textContent = title;
+  $("guideText").innerHTML = text;
+  document.querySelector(".guideDots").innerHTML = steps.map((_, i) => `<i class="${i === guideAt ? "on" : ""}"></i>`).join("");
+  $("guideBack").disabled = guideAt === 0;
+  $("guideNext").textContent = guideAt === steps.length - 1 ? "Start trading" : "Next";
+}
+$("guideNext").addEventListener("click", () => {
+  if (guideAt === guideSteps().length - 1) return closeGuide();
+  guideAt++; showGuideStep();
+});
+$("guideBack").addEventListener("click", () => { if (guideAt > 0) { guideAt--; showGuideStep(); } });
+$("guideSkip").addEventListener("click", closeGuide);
+$("howToPlay").addEventListener("click", openGuide);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("guide").classList.contains("hidden")) closeGuide(); });
 
 // ------------------------------------------------------------ routes and voyages (display only; the server decides)
 
