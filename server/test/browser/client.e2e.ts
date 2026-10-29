@@ -390,11 +390,13 @@ test("trip estimates match what really happens, and 'best trips' plans a trip", 
     await page.click('#tabs button[data-tab="fleet"]');
     await page.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("Best trips from here"));
     const card = page.locator(".shipCard[data-ship]").first();
-    // Best trips are profitable by the honest estimate and sorted by profit per hour.
+    // Best trips are profitable by the honest estimate, and ranked by profit per hour counting the
+    // next step from where they end (score), so a dead-end trip ranks below a slightly poorer one.
     const trips = await page.evaluate(() => { const w = window as any; return w.eval("bestTrips")(w.eval("me").ships[0], 10); });
     for (let i = 0; i < trips.length; i++) {
       assert.ok(trips[i].profit > 0);
-      if (i) assert.ok(trips[i - 1].profit / trips[i - 1].hours >= trips[i].profit / trips[i].hours);
+      assert.ok(trips[i].score >= trips[i].profit / (trips[i].hours + 6) - 1e-9, "score counts the trip itself");
+      if (i) assert.ok(trips[i - 1].score >= trips[i].score);
     }
     assert.equal(await card.locator('button[data-act="plan"]:not(.move)').count(), Math.min(3, trips.length));
     const plan = card.locator('button[data-act="plan"]:not(.move)').first();

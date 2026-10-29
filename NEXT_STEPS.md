@@ -8,6 +8,9 @@ Queued UI work is under "Next: UI" at the bottom. Items under "Ideas" need Dave'
 - **Dock alerts when the game tab is closed (Web Push)?** This is the only other unticked item, and it's blocked on you. It needs a service worker, a VAPID key pair kept as a server secret, the free `web-push` package, and storing a push subscription per player (a browser endpoint, which counts as personal data and would belong in the privacy notice from the email question). Alerts already work while the tab is open in the background. Options: (a) skip it for the closed test, (b) build it as opt-in with a "turn off alerts" button that deletes the stored subscription, (c) build it together with option (b) of the email question (privacy notice plus delete-account). Recommendation: (a) for now; revisit with the privacy notice. (Added by the scheduled run, 29 Oct.)
 - **Small worlds drift down about 1% a day.** With market scaling, 20–100 companies now lose ~1%/day of money (it was +8%/day inflation before). Options: (a) accept it and lower tax from the admin page during the closed test if players feel poor, (b) scale tax and port fee down for small worlds too. Recommendation: (a), decide after real players try it.
 
+- **Fuel credit has no limit.** A company's last ship can always sail with fuel on credit, so a player who keeps sailing empty can go deep into debt: in the season playtest, pressing "Set sail" on the old default every 4 hours ended at about -71,000. The game no longer suggests empty trips that don't pay (29 Oct), but nothing stops it by hand. Options: (a) cap credit, e.g. no new fuel credit below -2,000 cash, (b) leave it. Recommendation: (a).
+- **Easy may now be too easy.** With the new trip ranking, playtest players on Easy who follow the advice finish around 50,000 (bots about 20,000). Options: (a) leave it, Easy is meant to be generous, (b) raise Easy's tax or fees a little. Recommendation: (a) for the closed test, then see.
+
 Work top to bottom. Tick items off here and commit with each finished step.
 
 ## In progress on branch `wip-bots-seasons`
@@ -64,3 +67,8 @@ Work top to bottom. Tick items off here and commit with each finished step.
 
 ## Ideas (ask Dave before building; they change the economy or cost money)
 - More goods beyond grain and fuel; delivery contracts with a bonus; season goals or achievements; events (storm closes a lane, shortage spikes a price); chat or Discord link, later player corporations; how the game makes money (cosmetics or a supporter pack, nothing that buys an edge).
+- [x] Season playtest and better advice (Dave: "keep improving and testing", 29 Oct). New `sim/playtest.ts` plays a season against 30 live bots with players who check in every few hours and follow the game's advice (run from `server/`: `npx tsx ../sim/playtest.ts`). Findings and fixes:
+  - Players who only take "best trips" stall after one trip: it usually ends at a port where nothing pays. The "best move" hint fixes that (median ~17,000 vs ~16,000).
+  - Best trips now count where they leave you: each of the top 12 is scored on its profit plus the next step from its destination (6 hours' worth), and the button says "then +120 from there". Playtest medians, today's ranking vs new: normal/4 h 16,564 vs 18,766 (20 players); normal/8 h 16,361 vs 19,845; easy/4 h 31,403 vs 50,168.
+  - A player who just presses the green button when nothing pays sailed empty to the nearest port every time and sank to about -50,000 on fuel credit. Now, when nothing pays and there's no worthwhile move, no destination is preselected, "Set sail" is disabled until one is picked, and the card says waiting is free.
+  - 99 unit + 6 browser tests pass (browser trip test now checks the new ranking).
