@@ -308,6 +308,23 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   board.lb.forEach((c: any, i: number) => assert.equal(board.shown[i], 1 + board.lb.findIndex((x: any) => x.worth === c.worth)));
   if (board.mine) assert.equal(board.mine, board.rank);
   assert.match(board.card!, board.tied ? /^joint \d+(st|nd|rd|th)$/ : /^\d+(st|nd|rd|th)$/);
+  // A company not in the top 20 (often one tied with many bots on 16,000) still gets its own row,
+  // with the same place as the "You" card, instead of a note that contradicts the card.
+  const offList = await a.evaluate(() => (window as any).eval(`(() => {
+    const saved = world.leaderboard, tied = me.tied, out = {};
+    world.leaderboard = saved.filter(c => c.id !== me.id);
+    me.tied = 3; out.tied = boardPanel();
+    me.tied = 0; out.alone = boardPanel();
+    world.leaderboard = saved; me.tied = tied;
+    return out;
+  })()`));
+  for (const html of [offList.tied, offList.alone]) {
+    assert.match(html, new RegExp(`<tr class="me notListed"><td><span class="rank">${board.rank}</span>`));
+    assert.match(html, /Alpha Lines <span class="tag mine">you/);
+    assert.doesNotMatch(html, /outside the top \d+ with/);
+  }
+  assert.match(offList.tied, /You share \d+(st|nd|rd|th) place with 3 other companies/);
+  assert.match(offList.alone, /You're outside the top \d+, so you're shown at the end/);
 
   // ---- the session survives a reload; log out shows the sign-in screen; log back in
   await a.reload();
@@ -330,10 +347,21 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await a.waitForTimeout(300);
   assert.ok(await a.locator("#guide.hidden").count(), "logging in doesn't show the guide again");
 
-  // ---- phone-sized screen: no sideways scrolling
-  await a.setViewportSize({ width: 390, height: 800 });
-  await a.waitForTimeout(200);
-  assert.ok(await a.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "fits a phone screen");
+  // ---- phone-sized screens: nothing is wider than the screen on any tab. Checks each element's
+  // edge, not just scrollWidth, so content clipped by overflow:hidden is caught too.
+  for (const width of [390, 320]) {
+    await a.setViewportSize({ width, height: 800 });
+    for (const t of ["port", "fleet", "orders", "board"]) {
+      await a.click(`#tabs button[data-tab="${t}"]`);
+      await a.waitForTimeout(150);
+      const wide = await a.evaluate(() => [...document.querySelectorAll("body *")].filter(e => {
+        const r = e.getBoundingClientRect();
+        return r.width > 0 && r.right > window.innerWidth + 1 && getComputedStyle(e).position !== "fixed";
+      }).map(e => `${e.tagName}.${e.className}`).slice(0, 5));
+      assert.deepEqual(wide, [], `${t} tab fits a ${width} px screen`);
+      assert.ok(await a.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "no sideways scrolling");
+    }
+  }
 
   assert.deepEqual(errors, []);
 });

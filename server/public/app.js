@@ -971,8 +971,12 @@ function boardPanel() {
     <table><tr><th>#</th><th>Company</th><th class="num">Ships</th><th class="num">Net worth</th></tr>
     ${world.leaderboard.map((c, i) => [c, rankOf(i)]).map(([c, r]) => `<tr${me && c.id === me.id ? ' class="me"' : ""}><td><span class="rank${r <= 3 ? " r" + r : ""}">${r}</span></td>
       <td>${esc(c.name)}${c.bot ? ' <span class="tag">bot</span>' : ""}${me && c.id === me.id ? ' <span class="tag mine">you</span>' : ""}<div class="bar${me && c.id === me.id ? " mine" : ""}"><i style="width:${barW(c.worth)}%"></i></div></td>
-      <td class="num">${c.ships}</td><td class="num">${fmt(c.worth)}</td></tr>`).join("")}</table>
-    ${me && !listed ? `<div class="est big">You're outside the top ${world.leaderboard.length} with ${fmt(me.worth)}. The leader has ${fmt(top)}.</div>` : ""}`;
+      <td class="num">${c.ships}</td><td class="num">${fmt(c.worth)}</td></tr>`).join("")}
+    ${me && !listed && me.rank ? `<tr class="me notListed"><td><span class="rank">${me.rank}</span></td><td>${esc(me.name)} <span class="tag mine">you</span></td>
+      <td class="num">${me.ships.length}</td><td class="num">${fmt(me.worth)}</td></tr>` : ""}</table>
+    ${me && !listed && me.rank ? `<div class="est">${me.tied
+      ? `You share ${ordinal(me.rank)} place with ${me.tied} other ${me.tied === 1 ? "company" : "companies"}; only the top ${world.leaderboard.length} rows are listed, so you're shown at the end.`
+      : `You're outside the top ${world.leaderboard.length}, so you're shown at the end.`}</div>` : ""}`;
 }
 
 function bindPanel() {

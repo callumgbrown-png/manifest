@@ -163,7 +163,7 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
 .banner { padding: 10px 16px; background: linear-gradient(90deg, rgba(229,184,75,.14), rgba(95,211,168,.08)); border-bottom: 1px solid rgba(229,184,75,.5); }
 
 @media (max-width: 860px) {
-  main { grid-template-columns: 1fr; grid-template-rows: auto auto; height: auto; }
+  main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; height: auto; }
   .mapWrap { min-height: 0; }
   canvas { height: auto; aspect-ratio: 1000 / 720; }
   .legend { position: static; margin: 0 10px 10px; justify-content: center; }
@@ -199,5 +199,8 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
   .stats { grid-template-columns: 1fr 1fr; }
   nav button { padding-left: 4px; padding-right: 4px; font-size: 12px; }
   header .pill.diff { display: none; }
-  html, body { overflow-x: hidden; }
+  .market .sparkCell { padding-left: 4px; }
+  .spark { width: 52px; }
+  .bar { min-width: 36px; }
 }
+tr.notListed td { border-top: 2px dashed var(--line-strong); }
