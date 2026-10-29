@@ -14,8 +14,13 @@ export function botName(i: number) {
 
 export function isBot(name: string) { return name.includes(BOT_MARK); }
 
+export interface BotStyle {
+  /** A bot only takes a trip that clears this much profit, leaving smaller margins for players. */
+  minProfit: number;
+}
+
 /** One decision pass: every idle bot ship sells cargo or picks its best trade. */
-export function runBots(engine: Engine, botIds: number[], commit: (c: Command) => Result) {
+export function runBots(engine: Engine, botIds: number[], commit: (c: Command) => Result, style: BotStyle = { minProfit: 0 }) {
   const tax = engine.rules.fees.trade_tax_rate, fee = engine.rules.fees.port_fee_per_docking;
   const cap = engine.rules.ship.capacity;
   const { cargo, emptyShips } = engine.inbound();
@@ -54,17 +59,21 @@ export function runBots(engine: Engine, botIds: number[], commit: (c: Command) =
           const expected = engine.stock[d][g] + cargo[d][g] + qty / 2;
           const sell = qty * engine.price(d, g, expected) * (1 - tax);
           const fuel = engine.fuelNeeded(s.port, d) * engine.price(s.port, 1);
-          const score = (sell - buy - fuel - fee) / (hours + 1);
+          const profit = sell - buy - fuel - fee;
+          if (profit < style.minProfit) continue;
+          const score = profit / (hours + 1);
           if (score > best.score) best = { score, dest: d, good: g, qty };
         }
       }
       if (best.dest < 0) {
         // Nothing pays from here: sail empty to the most promising port,
         // sharing its opportunity with empty ships already heading there.
+        // Never on credit: a broke bot waits for prices to move instead.
+        if (c.cash < 1500) continue;
         let move = { score: 0, dest: -1 };
         for (let d = 0; d < engine.n; d++) {
           if (d === s.port || !Number.isFinite(engine.dist[s.port][d])) continue;
-          const value = bestFrom[d] / (1 + emptyShips[d]) - engine.fuelNeeded(s.port, d) * engine.price(s.port, 1) - fee;
+          const value = bestFrom[d] / (1 + emptyShips[d]) - style.minProfit - engine.fuelNeeded(s.port, d) * engine.price(s.port, 1) - fee;
           const score = value / (engine.voyageHours(s.port, d) + 6);
           if (score > move.score) move = { score, dest: d };
         }

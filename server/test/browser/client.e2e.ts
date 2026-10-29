@@ -93,7 +93,7 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   const card = a.locator(".shipCard[data-ship]").first();
   assert.match((await card.locator("[data-field=estimate]").textContent())!, /^Fuel ≈ [\d,]+, port fee 25\.$/);
   await card.locator("select[data-field=good]").selectOption("grain");
-  assert.match((await card.locator("[data-field=estimate]").textContent())!, /this trip (makes|loses) [\d,]+/);
+  assert.match((await card.locator("[data-field=estimate]").textContent())!, /This trip (makes|loses) about [\d,]+ \([\d,]+ an hour\)/);
 
   // ---- server refusals show as a red toast
   await card.locator("input[data-field=qty]").fill("500");
@@ -235,6 +235,7 @@ test("admin page shows health and changes live rules", { skip: SKIP, timeout: 60
   await page.waitForFunction(() => document.querySelectorAll(".tile").length === 7);
   assert.ok((await page.textContent("#tiles"))!.includes("Companies"));
   assert.equal(await page.inputValue("#tax"), "0.07");
+  assert.equal(await page.textContent("#diffNow"), "normal");
   assert.match((await page.textContent("#seasonInfo"))!, /^Day \d+ of 56\.$/);
   // A blank box is left alone instead of being set to zero.
   await page.fill("#upkeep", "");
@@ -303,5 +304,80 @@ test("season end closes trading in the client; admin starts the next season", { 
     // (With 2 ms hours the new season can already be over again, so the banner isn't checked here.)
     await ctx.close();
     assert.deepEqual(errors, []);
+  } finally { await t.stop(); cleanup(t); }
+});
+
+
+test("trip estimates match what really happens, and 'best trips' plans a trip", { skip: SKIP, timeout: 120000 }, async () => {
+  const t = await startServer({ TICK_MS: "120" });
+  try {
+    const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    page.on("pageerror", (e: Error) => errors.push(`estimate: ${e.message}`));
+    await page.goto(t.url);
+    await page.fill("#authName", "Honest Co"); await page.fill("#authPass", "password123");
+    await page.click('button[data-mode="register"]');
+    await page.waitForFunction(() => document.getElementById("hName")!.textContent === "Honest Co");
+    await page.click('#tabs button[data-tab="fleet"]');
+    await page.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("Best trips from here"));
+    const card = page.locator(".shipCard[data-ship]").first();
+    // Best trips are profitable by the honest estimate and sorted by profit per hour.
+    const trips = await page.evaluate(() => { const w = window as any; return w.eval("bestTrips")(w.eval("me").ships[0], 10); });
+    for (let i = 0; i < trips.length; i++) {
+      assert.ok(trips[i].profit > 0);
+      if (i) assert.ok(trips[i - 1].profit / trips[i - 1].hours >= trips[i].profit / trips[i].hours);
+    }
+    assert.equal(await card.locator('button[data-act="plan"]').count(), Math.min(3, trips.length));
+    const plan = card.locator('button[data-act="plan"]').first();
+    let dest: number;
+    if (await plan.count()) {
+      dest = Number(await plan.getAttribute("data-dest"));
+      await plan.click();
+      assert.equal(await card.locator("select[data-field=dest]").inputValue(), String(dest), "plan fills the destination");
+      assert.notEqual(await card.locator("select[data-field=good]").inputValue(), "", "and the cargo");
+      assert.match((await card.locator("[data-field=estimate]").textContent())!, /This trip makes about/);
+    } else {
+      const home = (await me(page)).ships[0].port;
+      const nb = map.routes.find((r: any) => r.a === home || r.b === home);
+      dest = nb.a === home ? nb.b : nb.a;
+      await card.locator("select[data-field=dest]").selectOption(String(dest));
+      await card.locator("select[data-field=good]").selectOption("grain");
+      await card.locator("input[data-field=qty]").fill("100");
+    }
+    // What the client predicts, using exactly the form's values.
+    const predicted = await page.evaluate(() => {
+      const w = window as any, card = document.querySelector(".shipCard[data-ship]")!;
+      const s = w.eval("me").ships[0];
+      const g = w.eval("GOOD_NAMES").indexOf((card.querySelector("[data-field=good]") as HTMLSelectElement).value);
+      const qty = Number((card.querySelector("[data-field=qty]") as HTMLInputElement).value);
+      return w.eval("tripProfit")(s, Number((card.querySelector("[data-field=dest]") as HTMLSelectElement).value), g, qty).profit;
+    });
+    const before = (await me(page)).cash;
+    await card.locator("button[data-act=sail]").click();
+    await page.waitForFunction((d: number) => { const m = (window as any).eval("me"); return m.ships[0].dest === null && m.ships[0].port === d; }, dest, { timeout: 60000 });
+    await page.locator('.shipCard button[data-act="sell"]').click();
+    await page.waitForFunction(() => (window as any).eval("me").ships[0].qty === 0);
+    const real = (await me(page)).cash - before;
+    // Markets drift a little during the voyage, so allow a small gap.
+    assert.ok(Math.abs(real - predicted) < Math.max(60, Math.abs(predicted) * 0.15), `predicted ${predicted.toFixed(0)}, really ${real.toFixed(0)}`);
+    assert.deepEqual(errors, []);
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("admin can switch the world to easy and players see it", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer();
+  try {
+    const ctx = await browser.newContext();
+    const adminPage = await ctx.newPage();
+    await adminPage.goto(t.url + "/admin");
+    await adminPage.fill("#token", ADMIN); await adminPage.click("#save");
+    await adminPage.waitForFunction(() => document.getElementById("diffNow")!.textContent === "normal");
+    await adminPage.selectOption("#difficulty", "easy");
+    await adminPage.click("#applyDifficulty");
+    await adminPage.waitForFunction(() => document.getElementById("err")!.textContent === "Difficulty set to easy.");
+    assert.equal(await adminPage.inputValue("#tax"), "0.05", "live controls show the preset");
+    const game = await ctx.newPage();
+    await game.goto(t.url);
+    await game.waitForFunction(() => document.getElementById("diff")!.textContent === "Easy world");
+    await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });

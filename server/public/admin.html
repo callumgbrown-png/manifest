@@ -29,6 +29,10 @@
   <label style="margin:0">Port fee per docking<input id="portFee" type="number" step="5"></label>
 </div>
 <div class="row"><button id="apply">Apply changes</button></div>
+<h3>Difficulty</h3>
+<div class="quiet">Sets tax, port fee and upkeep for everyone at once. Easy makes trading pay more (with a little inflation); Hard squeezes margins. Current: <b id="diffNow">–</b></div>
+<div class="row"><select id="difficulty" style="max-width:200px"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select>
+  <button id="applyDifficulty" class="secondary">Set difficulty</button></div>
 <h3>Season</h3>
 <div class="quiet" id="seasonInfo">–</div>
 <div class="quiet">Starting a new season saves the final standings to the past-seasons page, then gives every account a fresh company. Live controls go back to the values in <code>config/rules.json</code>.</div>
@@ -55,7 +59,8 @@ async function load() {
   $("tiles").innerHTML = tiles.map(([k, v, warn]) => `<div class="tile ${warn ? "warn" : ""}"><span>${k}</span><b>${v}</b></div>`).join("");
   $("seasonInfo").textContent = m.seasonOver ? `Season over after ${m.seasonDays} days. Trading is closed until you start a new season.`
     : `Day ${m.day} of ${m.seasonDays}.`;
-  if (first) { $("tax").value = m.tax; $("upkeep").value = m.upkeep; $("portFee").value = m.portFee; first = false; }
+  $("diffNow").textContent = m.difficulty;
+  if (first) { if (m.difficulty !== "custom") $("difficulty").value = m.difficulty; $("tax").value = m.tax; $("upkeep").value = m.upkeep; $("portFee").value = m.portFee; first = false; }
 }
 $("apply").onclick = async () => {
   // Send only filled-in fields: a blank box used to send 0 and wipe out tax, upkeep or fees.
@@ -67,6 +72,14 @@ $("apply").onclick = async () => {
   const res = await r.json();
   await load();   // refresh first: load() clears the message line
   $("err").textContent = res.ok ? "Saved." : res.error;
+};
+$("applyDifficulty").onclick = async () => {
+  if (!token) { $("err").textContent = "Enter the admin token first."; return; }
+  const r = await fetch("/api/admin/difficulty", { method: "POST", headers: { "x-admin-token": token, "content-type": "application/json" }, body: JSON.stringify({ level: $("difficulty").value }) });
+  const res = await r.json();
+  first = true;   // refresh the live controls to the preset's values
+  await load();
+  $("err").textContent = res.ok ? `Difficulty set to ${$("difficulty").value}.` : res.error;
 };
 $("newSeason").onclick = async () => {
   if (!token) { $("err").textContent = "Enter the admin token first."; return; }

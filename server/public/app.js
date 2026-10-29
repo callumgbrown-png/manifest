@@ -457,6 +457,9 @@ function render() {
   $("hName").textContent = me?.name ?? "–";
   $("hCash").textContent = me ? fmt(me.cash) : "–";
   showDelta();
+  const level = world.rules.difficulty;
+  $("diff").className = `pill diff ${level ?? "hidden"}`;
+  $("diff").textContent = level ? `${level[0].toUpperCase()}${level.slice(1)} world` : "";
   $("seasonFill").style.width = `${Math.min(100, world.tick / world.seasonHours * 100)}%`;
   const counts = { fleet: me?.ships.length, orders: me ? world.orders.filter(o => o.owner === me.id).length : 0 };
   document.querySelectorAll("#tabs button").forEach(b => {
@@ -579,6 +582,7 @@ function shipCard(s) {
       <div class="est">Listing leaves the goods at this port for other players to buy, and frees your ship.</div>` : ""}
     ${forSale.length ? `<h3>For sale here</h3>${forSale.map(o => `<div class="row"><span>${o.qty} ${GOOD_NAMES[o.good]} from ${esc(o.ownerName)} at ${o.price.toFixed(2)}</span>
       <button class="secondary" data-act="buyOrder" data-ship="${s.id}" data-order="${o.id}" data-qty="${Math.min(o.qty, world.rules.capacity - s.qty)}">Buy ${Math.min(o.qty, world.rules.capacity - s.qty)}</button></div>`).join("")}` : ""}
+    ${tripsHtml(s)}
     <label>Destination<select data-field="dest">${dests.map(p => `<option value="${p.id}">${esc(p.name)} (≈${Math.ceil(distance(s.port, p.id) / world.rules.speed)} h)</option>`).join("")}</select></label>
     ${s.qty === 0 ? `<div class="row" style="margin-top:4px">
       <select data-field="good" style="width:auto"><option value="">Sail empty</option>${GOOD_NAMES.map((g, i) => `<option value="${g}">Load ${g} at ${port.prices[i].toFixed(2)}</option>`).join("")}</select>
@@ -589,21 +593,73 @@ function shipCard(s) {
   </div>`;
 }
 
+// ---- trade maths, mirroring the server's sliding prices (engine.ts) so estimates are honest
+function priceAt(g, stock) {
+  const b = world.rules.bands[GOOD_NAMES[g]], T = world.rules.target;
+  return b.floor + (b.ceiling - b.floor) * clamp(1 - stock / (2 * T), 0, 1);
+}
+/** Cost of buying qty at a port: each unit costs more as the stock runs down. */
+function buyCost(port, g, qty, stock = world.ports[port].stock[g]) {
+  const have = Math.min(qty, Math.max(0, stock));
+  return have * priceAt(g, stock - have / 2) + (qty - have) * world.rules.bands[GOOD_NAMES[g]].ceiling;
+}
+/** What qty fetches at a port once the cargo already sailing there has landed. */
+function sellValue(port, g, qty, withInbound = true) {
+  const p = world.ports[port], stock = p.stock[g] + (withInbound ? p.inbound[g] : 0);
+  return qty * priceAt(g, stock + qty / 2);
+}
+function fuelCost(from, to, g = -1, qty = 0) {
+  const need = distance(from, to) * world.rules.fuelPer100 / 100;
+  const stock = world.ports[from].stock[1] - (g === 1 ? qty : 0);
+  return buyCost(from, 1, need, stock);
+}
+/** Profit of a trip after tax, fuel and the port fee. A loaded ship is compared with selling here now. */
+function tripProfit(s, dest, g, qty) {
+  const tax = world.rules.tax, fuel = fuelCost(s.port, dest, s.qty > 0 ? -1 : g, s.qty > 0 ? 0 : qty);
+  const sell = g >= 0 && qty > 0 ? sellValue(dest, g, qty) * (1 - tax) : 0;
+  const cost = s.qty > 0 ? sellValue(s.port, g, qty, false) * (1 - tax) : g >= 0 && qty > 0 ? buyCost(s.port, g, qty) * (1 + tax) : 0;
+  return { profit: sell - cost - fuel - world.rules.portFee, fuel, hours: Math.max(1, Math.ceil(distance(s.port, dest) / world.rules.speed)) };
+}
+/** The best few trips from where a docked ship is now, by profit per hour. */
+function bestTrips(s, n = 3) {
+  const cap = world.rules.capacity, here = world.ports[s.port], out = [];
+  const goods = s.qty > 0 ? [s.good] : [0, 1];
+  for (const g of goods) {
+    const qty = s.qty > 0 ? s.qty : Math.floor(Math.min(cap, here.stock[g], Math.max(0, me.cash - 300) / (here.prices[g] * (1 + world.rules.tax) * 1.1)));
+    if (qty < 10) continue;
+    for (const p of world.ports) {
+      if (p.id === s.port) continue;
+      const t = tripProfit(s, p.id, g, qty);
+      if (t.profit > 0) out.push({ dest: p.id, g, qty, ...t });
+    }
+  }
+  return out.sort((a, b) => b.profit / b.hours - a.profit / a.hours).slice(0, n);
+}
+
+function tripsHtml(s) {
+  const trips = bestTrips(s);
+  if (!trips.length) return `<h3>Best trips from here</h3><div class="est">${s.qty > 0 ? "Nowhere pays more than selling here right now." : "No trip pays right now at these prices. Try another port, or wait for prices to move."}</div>`;
+  return `<h3>Best trips from here</h3><div class="trips">${trips.map(t => `<button class="trip secondary" data-act="plan" data-ship="${s.id}" data-dest="${t.dest}" data-good="${s.qty > 0 ? "" : GOOD_NAMES[t.g]}" data-qty="${t.qty}">
+      <span>${s.qty > 0 ? "Sell" : `Load ${t.qty}`} <span class="tag ${GOOD_NAMES[t.g]}">${GOOD_NAMES[t.g]}</span> → ${esc(world.ports[t.dest].name)}</span>
+      <span class="num"><b class="pos">+${fmt(t.profit)}</b> · ${t.hours} h</span></button>`).join("")}</div>`;
+}
+
 function estimate(card) {
   const s = me.ships.find(x => x.id === Number(card.dataset.ship));
   const dest = Number(card.querySelector("[data-field=dest]").value);
   const goodSel = card.querySelector("[data-field=good]");
   const g = s.qty > 0 ? s.good : (goodSel?.value ? GOOD_NAMES.indexOf(goodSel.value) : -1);
   const qty = s.qty > 0 ? s.qty : Number(card.querySelector("[data-field=qty]")?.value || 0);
-  const here = world.ports[s.port], there = world.ports[dest];
-  const fuel = distance(s.port, dest) * world.rules.fuelPer100 / 100 * here.prices[1];
-  let text = `Fuel ≈ ${fmt(fuel)}, port fee ${world.rules.portFee}.`;
-  if (me.ships.length === 1 && fuel > me.cash) text += " You can't cover the fuel, so it goes on credit (your cash goes below zero).";
+  const there = world.ports[dest];
+  const t = tripProfit(s, dest, g, qty);
+  let text = `Fuel ≈ ${fmt(t.fuel)}, port fee ${world.rules.portFee}.`;
+  if (me.ships.length === 1 && t.fuel > me.cash) text += " You can't cover the fuel, so it goes on credit (your cash goes below zero).";
   if (g >= 0 && qty > 0) {
-    const buy = s.qty > 0 ? 0 : qty * here.prices[g] * (1 + world.rules.tax);
-    const sell = qty * there.prices[g] * (1 - world.rules.tax);
-    const profit = sell - buy - fuel - world.rules.portFee;
-    text += ` At today's prices this trip ${profit >= 0 ? "makes" : "loses"} <b class="${profit >= 0 ? "pos" : "neg"}">${fmt(Math.abs(profit))}</b>. ${fmt(there.inbound[g])} ${GOOD_NAMES[g]} is already heading there.`;
+    const verb = t.profit >= 0 ? "makes" : "loses";
+    text += s.qty > 0
+      ? ` Compared with selling here now, sailing there ${verb} <b class="${t.profit >= 0 ? "pos" : "neg"}">${fmt(Math.abs(t.profit))}</b>.`
+      : ` This trip ${verb} about <b class="${t.profit >= 0 ? "pos" : "neg"}">${fmt(Math.abs(t.profit))}</b> (${fmt(Math.abs(t.profit) / t.hours)} an hour).`;
+    text += ` Counts the price moving as you buy and sell, and the ${fmt(there.inbound[g])} ${GOOD_NAMES[g]} already heading there.`;
   }
   card.querySelector("[data-field=estimate]").innerHTML = text;
 }
@@ -678,6 +734,18 @@ function bindPanel() {
     if (act === "buyOrder") command({ type: "buyFromOrder", ship, order: Number(btn.dataset.order), qty: Number(btn.dataset.qty) }, () => toast("Bought"));
     if (act === "placeOrder") command({ type: "placeOrder", port: Number($("oPort").value), good: $("oGood").value,
       qty: Number($("oQty").value), price: Number($("oPrice").value) }, () => toast("Order posted"));
+    if (act === "plan") {
+      // Fill the sail form with this trip; the player still presses Set sail.
+      const card = btn.closest(".shipCard"), set = (field, v) => {
+        const el = card.querySelector(`[data-field=${field}]`);
+        if (!el) return;
+        el.value = v; formState.set(formKey(el), v);
+      };
+      set("dest", btn.dataset.dest);
+      if (btn.dataset.good) { set("good", btn.dataset.good); set("qty", btn.dataset.qty); }
+      estimate(card);
+      card.querySelector("[data-act=sail]").focus();
+    }
     if (act === "sail") {
       const card = btn.closest(".shipCard");
       const dest = Number(card.querySelector("[data-field=dest]").value);

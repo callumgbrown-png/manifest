@@ -64,6 +64,10 @@ header { position: relative; display: flex; align-items: center; gap: 18px; padd
 .pill.live { color: var(--mine); border-color: rgba(95,211,168,.5); }
 .pill.live::before { background: var(--mine); box-shadow: 0 0 0 0 rgba(95,211,168,.6); animation: beat 2s infinite; }
 @keyframes beat { 0% { box-shadow: 0 0 0 0 rgba(95,211,168,.6); } 70% { box-shadow: 0 0 0 7px rgba(95,211,168,0); } 100% { box-shadow: 0 0 0 0 rgba(95,211,168,0); } }
+.pill.diff { padding-left: 10px; }
+.pill.diff::before { display: none; }
+.pill.diff.easy { color: var(--mine); border-color: rgba(95,211,168,.4); }
+.pill.diff.hard { color: var(--fuel); border-color: rgba(232,115,90,.5); }
 .seasonBar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent; }
 .seasonBar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--mine), var(--grain)); transition: width 1s; }
 
@@ -128,6 +132,9 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
 .tiles span { display: block; font-size: 11px; color: var(--quiet); }
 .tiles b { font: 600 15px var(--mono); }
 @media (max-width: 420px) { .tiles { grid-template-columns: 1fr 1fr; } }
+.trips { display: grid; gap: 6px; }
+.trip { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; font-weight: 500; padding: 9px 11px; }
+.trip .tag { margin: 0 2px; }
 .empty { padding: 14px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--quiet); text-align: center; }
 
 .rank { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font: 600 11px var(--mono); color: var(--quiet); background: var(--sea-deep); }

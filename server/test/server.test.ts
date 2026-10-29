@@ -118,6 +118,34 @@ describe("admin API", () => {
     assert.ok(alive(s));
   });
 
+  test("difficulty can be set from the admin API and players see it", async () => {
+    assert.equal((await admin(s, "/api/admin/difficulty", { level: "easy" }, "nope")).status, 403);
+    assert.equal((await admin(s, "/api/admin/difficulty", { level: "silly" })).status, 400);
+    assert.equal((await admin(s, "/api/admin/difficulty", "not json")).status, 400);
+    assert.equal((await admin(s, "/api/admin/difficulty", { level: "easy" })).status, 200);
+    const m = JSON.parse((await admin(s, "/api/admin/metrics")).body);
+    assert.equal(m.difficulty, "easy"); assert.equal(m.tax, 0.05);
+    const c = new Client(s);
+    const st = await c.next(m => m.type === "state" && m.world.rules.difficulty === "easy");
+    assert.equal(st.world.rules.tax, 0.05);
+    assert.ok(st.world.rules.target > 0, "clients get the target stock for honest estimates");
+    c.close();
+    // Put the earlier test's values back for the tests that follow.
+    await admin(s, "/api/admin/set", { tax: 0.05, upkeep: 300, portFee: 20 });
+  });
+
+  test("DIFFICULTY sets a new world's difficulty, and survives a restart", async () => {
+    const t = await startServer({ DIFFICULTY: "hard" });
+    try {
+      const m = JSON.parse((await admin(t, "/api/admin/metrics")).body);
+      assert.equal(m.difficulty, "hard"); assert.equal(m.tax, 0.09);
+      await t.stop();
+      const u = await startServer({ DIFFICULTY: "easy" }, t.db);   // existing world: the log wins
+      assert.equal(JSON.parse((await admin(u, "/api/admin/metrics")).body).difficulty, "hard");
+      await u.stop();
+    } finally { await t.stop(); cleanup(t); }
+  });
+
   test("admin is disabled when ADMIN_TOKEN is short", async () => {
     const t = await startServer({ ADMIN_TOKEN: "short" });
     try {
@@ -184,8 +212,9 @@ describe("sessions and abuse limits", () => {
       const a = new Client(s);
       const { token } = await a.auth("register", "Leaver Co");
       a.send({ type: "logout" });
-      await a.next(m => m.type === "loggedOut");
-      assert.equal((await a.next(m => m.type === "state")).me, null);
+      const out = await a.next(m => m.type === "loggedOut");
+      const after = a.msgs.slice(a.msgs.indexOf(out) + 1).find(m => m.type === "state") ?? await a.next(m => m.type === "state");
+      assert.equal(after.me, null);
       assert.equal((await a.cmd({ type: "sell", ship: 2 })).error, "Log in first");
       const b = new Client(s); await b.ready;
       b.send({ type: "resume", token });

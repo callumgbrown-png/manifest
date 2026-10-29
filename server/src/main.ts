@@ -18,6 +18,8 @@ const TICK_MS = Number(process.env.TICK_MS ?? 3_600_000);   // 1 game hour = 1 r
 const BOTS = Number(process.env.BOTS ?? 30);   // bot companies kept in the world
 // Market size for the season, set from how many companies you expect (players + bots).
 const EXPECTED = Number(process.env.EXPECTED_COMPANIES ?? 60);
+// Difficulty for new seasons (easy, normal or hard); the admin page can change it at any time.
+const DIFFICULTY = process.env.DIFFICULTY;
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 const SESSION_DAYS = Number(process.env.SESSION_DAYS ?? 30);   // log in again after this
 const LOGIN_FAILS = Number(process.env.LOGIN_FAILS ?? 10);     // failed logins per address per 15 minutes
@@ -63,6 +65,14 @@ for (const row of db.prepare("SELECT kind, payload FROM events ORDER BY id").all
   replayed++;
 }
 console.log(`Replayed ${replayed} events; game is at day ${engine.metrics().day}, hour ${engine.tick % 24}; market scale ${engine.scale.toFixed(2)} for ${EXPECTED} expected companies`);
+
+// A brand-new world starts at the chosen difficulty (recorded in the log like any admin change).
+if (replayed === 0 && DIFFICULTY) startDifficulty();
+function startDifficulty() {
+  if (!DIFFICULTY) return;
+  const r = commit({ type: "setDifficulty", level: DIFFICULTY });
+  if (!r.ok) console.error(`DIFFICULTY=${DIFFICULTY} ignored: ${r.error}`);
+}
 
 let botIds: number[] = [];
 function ensureBots() {
@@ -154,6 +164,7 @@ function publicView() {
       fuelPer100: engine.rules.ship.fuel_per_100_distance, upkeep: engine.rules.ship.upkeep_per_day,
       tax: engine.rules.fees.trade_tax_rate, portFee: engine.rules.fees.port_fee_per_docking,
       maxShips: engine.rules.company.max_ships, bands: engine.rules.commodities,
+      target: engine.target, difficulty: engine.difficulty,
     },
     ports: map.ports.map((p: any, i: number) => ({
       id: p.id, name: p.name, x: p.x, y: p.y, produces: p.produces, consumes: p.consumes,
@@ -231,6 +242,19 @@ function handle(req: IncomingMessage, res: ServerResponse) {
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return json(res, 400, { error: "send a JSON object" });
         const { tax, upkeep, portFee } = parsed;
         const r = commit({ type: "adminSet", tax, upkeep, portFee });
+        broadcastSoon();
+        json(res, r.ok ? 200 : 400, r);
+      } catch { json(res, 400, { error: "bad json" }); }
+    });
+    return;
+  }
+  if (url.pathname === "/api/admin/difficulty" && req.method === "POST") {
+    if (!isAdmin(req)) return json(res, 403, { error: "admin token required" });
+    let body = "";
+    req.on("data", d => { body += d; if (body.length > 1000) req.destroy(); });
+    req.on("end", () => {
+      try {
+        const r = commit({ type: "setDifficulty", level: JSON.parse(body || "{}")?.level });
         broadcastSoon();
         json(res, r.ok ? 200 : 400, r);
       } catch { json(res, 400, { error: "bad json" }); }
@@ -357,6 +381,7 @@ function newSeason() {
     db.prepare("INSERT INTO archived_events SELECT ?, id, at, kind, payload FROM events").run(seasonId);
     db.exec("DELETE FROM events; DELETE FROM sessions;");
     engine = new Engine(rules, map, EXPECTED);
+    startDifficulty();
     history = [];
     recordPrices();
     const accounts = db.prepare("SELECT name FROM accounts ORDER BY rowid").all() as { name: string }[];
@@ -385,7 +410,7 @@ setInterval(() => {
     engine.advance();
     insertEvent.run(new Date().toISOString(), "tick", "{}");
     recordPrices();
-    runBots(engine, botIds, commit);
+    runBots(engine, botIds, commit, { minProfit: engine.botMinProfit });
   }
   if (engine.seasonOver && !lastSeasonOver) console.log("Season over. Final standings:", finalStandings().slice(0, 5));
   lastSeasonOver = engine.seasonOver;

@@ -20,6 +20,7 @@ export interface Rules {
     start_spread?: number;
   };
   fees: { port_fee_per_docking: number; trade_tax_rate: number };
+  difficulty?: { default: string; presets: Record<string, { tax: number; portFee: number; upkeep: number; botMinProfit?: number }> };
   company: { start_cash: number; start_ships: number; max_ships: number };
   ship: { price: number; capacity: number; speed_per_hour: number; fuel_per_100_distance: number; upkeep_per_day: number };
 }
@@ -54,7 +55,8 @@ export type Command =
   | { type: "placeSell"; company: number; ship: number; qty: number; price: number }
   | { type: "buyFromOrder"; company: number; ship: number; order: number; qty: number }
   | { type: "cancelOrder"; company: number; order: number; ship?: number }
-  | { type: "adminSet"; tax?: number; upkeep?: number; portFee?: number };
+  | { type: "adminSet"; tax?: number; upkeep?: number; portFee?: number }
+  | { type: "setDifficulty"; level: string };
 
 export type Result = { ok: true; id?: number } | { ok: false; error: string };
 
@@ -69,9 +71,14 @@ export class Engine {
   ships = new Map<number, Ship>();
   orders = new Map<number, Order>();
   private nextId = 1;
+  /** The difficulty preset in force, or "custom" once an admin changes a value by hand. */
+  difficulty: string;
+  /** Smallest profit a bot trip must clear under the current difficulty. */
+  botMinProfit = 0;
   /** Market size multiplier, fixed for the season. */
   readonly scale: number;
-  private target: number;
+  /** Stock at which a port's price sits mid-band (sent to clients for honest estimates). */
+  readonly target: number;
   private prod: number[][];
   private cons: number[][];
 
@@ -90,6 +97,8 @@ export class Engine {
     this.cons = map.ports.map(p => GOODS.map(g => (p.consumes.includes(g) ? m.consumption_per_hour[g] * k : 0)));
     // Seasons open with producers stocked up and consumers short, so trade pays from the first hour.
     const spread = m.start_spread ?? 0;
+    this.difficulty = rules.difficulty?.default ?? "normal";
+    if (rules.difficulty) this.setDifficulty(this.difficulty);
     this.stock = map.ports.map(p => GOODS.map(g => {
       const makes = p.produces.includes(g), needs = p.consumes.includes(g);
       return this.target * (1 + (makes && !needs ? spread : 0) - (needs && !makes ? spread : 0));
@@ -130,7 +139,7 @@ export class Engine {
   get seasonOver(): boolean { return this.tick >= this.seasonHours; }
 
   apply(cmd: Command): Result {
-    if (this.seasonOver && cmd.type !== "adminSet") return fail("the season has ended");
+    if (this.seasonOver && cmd.type !== "adminSet" && cmd.type !== "setDifficulty") return fail("the season has ended");
     switch (cmd.type) {
       case "register": return this.register(cmd.name, cmd.startPort);
       case "sail": return this.sail(cmd);
@@ -142,6 +151,7 @@ export class Engine {
       case "buyFromOrder": return this.buyFromOrder(cmd);
       case "cancelOrder": return this.cancelOrder(cmd.company, cmd.order, cmd.ship);
       case "adminSet": return this.adminSet(cmd);
+      case "setDifficulty": return this.setDifficulty(cmd.level);
     }
   }
 
@@ -400,7 +410,27 @@ export class Engine {
     if (cmd.tax !== undefined) this.rules.fees.trade_tax_rate = cmd.tax;
     if (cmd.upkeep !== undefined) this.rules.ship.upkeep_per_day = cmd.upkeep;
     if (cmd.portFee !== undefined) this.rules.fees.port_fee_per_docking = cmd.portFee;
+    if (cmd.tax !== undefined || cmd.upkeep !== undefined || cmd.portFee !== undefined) this.difficulty = this.matchPreset();
     return { ok: true };
+  }
+
+  private setDifficulty(level: string): Result {
+    const p = this.rules.difficulty?.presets;
+    if (!p || typeof level !== "string" || !Object.hasOwn(p, level)) return fail("unknown difficulty");
+    this.rules.fees.trade_tax_rate = p[level].tax;
+    this.rules.fees.port_fee_per_docking = p[level].portFee;
+    this.rules.ship.upkeep_per_day = p[level].upkeep;
+    this.botMinProfit = p[level].botMinProfit ?? 0;
+    this.difficulty = level;
+    return { ok: true };
+  }
+
+  /** Name of the preset the current values match, if any. */
+  private matchPreset(): string {
+    const f = this.rules.fees, up = this.rules.ship.upkeep_per_day;
+    for (const [name, v] of Object.entries(this.rules.difficulty?.presets ?? {}))
+      if (v.tax === f.trade_tax_rate && v.portFee === f.port_fee_per_docking && v.upkeep === up) return name;
+    return "custom";
   }
 
   // ------------------------------------------------------------ time
@@ -478,6 +508,7 @@ export class Engine {
       escrow: Math.round([...this.orders.values()].filter(o => o.side === "buy").reduce((a, o) => a + o.qty * o.price, 0)),
       top1pctShare: total > 0 ? worth.slice(0, k).reduce((a, b) => a + Math.max(0, b), 0) / total : 0,
       inDebt: comps.filter(c => c.cash < 0).length,
+      difficulty: this.difficulty,
       tax: this.rules.fees.trade_tax_rate,
       upkeep: this.rules.ship.upkeep_per_day,
       portFee: this.rules.fees.port_fee_per_docking,
