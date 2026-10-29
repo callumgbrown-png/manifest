@@ -8,12 +8,16 @@ import { join, dirname, extname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Engine, GOODS, type Command } from "./engine.js";
+import { runBots, botName, isBot } from "./bots.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..");
 const PUBLIC = join(HERE, "..", "public");
 const PORT = Number(process.env.PORT ?? 8080);
 const TICK_MS = Number(process.env.TICK_MS ?? 3_600_000);   // 1 game hour = 1 real hour by default
+const BOTS = Number(process.env.BOTS ?? 30);   // bot companies kept in the world
+// Market size for the season, set from how many companies you expect (players + bots).
+const EXPECTED = Number(process.env.EXPECTED_COMPANIES ?? 60);
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 const DB_PATH = process.env.DB_PATH ?? join(ROOT, "data", "manifest.db");
 
@@ -28,18 +32,30 @@ db.exec(`
   PRAGMA journal_mode = WAL;
   CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS accounts (name TEXT PRIMARY KEY COLLATE NOCASE, salt TEXT NOT NULL, hash TEXT NOT NULL, company INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS seasons (id INTEGER PRIMARY KEY, ended TEXT NOT NULL, results TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS archived_events (season INTEGER NOT NULL, id INTEGER NOT NULL, at TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, company INTEGER NOT NULL, created TEXT NOT NULL);
 `);
 const insertEvent = db.prepare("INSERT INTO events (at, kind, payload) VALUES (?, ?, ?)");
 
-const engine = new Engine(rules, map);
+let engine = new Engine(rules, map, EXPECTED);
 let replayed = 0;
 for (const row of db.prepare("SELECT kind, payload FROM events ORDER BY id").all() as { kind: string; payload: string }[]) {
   if (row.kind === "tick") engine.advance();
   else engine.apply(JSON.parse(row.payload) as Command);
   replayed++;
 }
-console.log(`Replayed ${replayed} events; game is at day ${engine.metrics().day}, hour ${engine.tick % 24}`);
+console.log(`Replayed ${replayed} events; game is at day ${engine.metrics().day}, hour ${engine.tick % 24}; market scale ${engine.scale.toFixed(2)} for ${EXPECTED} expected companies`);
+
+let botIds: number[] = [];
+function ensureBots() {
+  botIds = [...engine.companies.values()].filter(c => isBot(c.name)).map(c => c.id);
+  for (let i = botIds.length; i < BOTS && !engine.seasonOver; i++) {
+    const r = commit({ type: "register", name: botName(i), startPort: randomInt(engine.n) });
+    if (r.ok) botIds.push(r.id!);
+  }
+}
+ensureBots();
 
 function commit(cmd: Command) {
   const res = engine.apply(cmd);
@@ -112,8 +128,10 @@ function publicView() {
       good: s.good, qty: Math.round(s.qty),
     })),
     orders: [...engine.orders.values()].map(o => ({ ...o, ownerName: engine.companies.get(o.owner)?.name })),
+    seasonHours: engine.seasonHours,
+    seasonOver: engine.seasonOver,
     leaderboard: [...engine.companies.values()]
-      .map(c => ({ id: c.id, name: c.name, worth: Math.round(engine.netWorth(c)), ships: c.ships.length }))
+      .map(c => ({ id: c.id, name: c.name, bot: isBot(c.name), worth: Math.round(engine.netWorth(c)), ships: c.ships.length }))
       .sort((a, b) => b.worth - a.worth).slice(0, 20),
   };
 }
@@ -164,6 +182,10 @@ const server = createServer((req, res) => {
     });
     return;
   }
+  if (url.pathname === "/api/admin/new-season" && req.method === "POST") {
+    if (!isAdmin(req)) return json(res, 403, { error: "admin token required" });
+    return json(res, 200, newSeason());
+  }
   // Static files
   let path = url.pathname === "/" ? "/index.html" : url.pathname === "/admin" ? "/admin.html" : url.pathname;
   path = normalize(path).replace(/^(\.\.[/\\])+/, "");
@@ -182,6 +204,7 @@ const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 16 * 1024 });
 wss.on("connection", ws => {
   const client: Client = { ws, recent: [] };
   clients.add(client);
+  send(client, { type: "static", dist: engine.dist.map(r => r.map(d => Math.round(d))) });
   send(client, { type: "state", world: publicView(), me: null });
   ws.on("close", () => clients.delete(client));
   ws.on("message", raw => {
@@ -233,11 +256,48 @@ function broadcastSoon() {
   }, 150);
 }
 
+// ------------------------------------------------------------ seasons
+
+function finalStandings() {
+  return [...engine.companies.values()]
+    .map(c => ({ name: c.name, bot: isBot(c.name), worth: Math.round(engine.netWorth(c)) }))
+    .sort((a, b) => b.worth - a.worth);
+}
+
+/** Archive this season, then start a fresh world. Accounts carry over with new companies. */
+function newSeason() {
+  const seasonId = Number((db.prepare("SELECT COALESCE(MAX(id), 0) + 1 AS n FROM seasons").get() as { n: number }).n);
+  db.exec("BEGIN");
+  try {
+    db.prepare("INSERT INTO seasons (id, ended, results) VALUES (?, ?, ?)").run(seasonId, new Date().toISOString(), JSON.stringify(finalStandings()));
+    db.prepare("INSERT INTO archived_events SELECT ?, id, at, kind, payload FROM events").run(seasonId);
+    db.exec("DELETE FROM events; DELETE FROM sessions;");
+    engine = new Engine(rules, map, EXPECTED);
+    const accounts = db.prepare("SELECT name FROM accounts ORDER BY rowid").all() as { name: string }[];
+    const update = db.prepare("UPDATE accounts SET company = ? WHERE name = ?");
+    for (const a of accounts) {
+      const r = commit({ type: "register", name: a.name, startPort: randomInt(engine.n) });
+      if (r.ok) update.run(r.id!, a.name);
+    }
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  ensureBots();
+  for (const c of clients) { c.company = undefined; send(c, { type: "authError", error: "A new season has started. Log in again." }); }
+  broadcastSoon();
+  return { ok: true, season: seasonId + 1 };
+}
+
 // ------------------------------------------------------------ clock
 
+let lastSeasonOver = engine.seasonOver;
 setInterval(() => {
-  engine.advance();
-  insertEvent.run(new Date().toISOString(), "tick", "{}");
+  if (!engine.seasonOver) {
+    engine.advance();
+    insertEvent.run(new Date().toISOString(), "tick", "{}");
+    runBots(engine, botIds, commit);
+  }
+  if (engine.seasonOver && !lastSeasonOver) console.log("Season over. Final standings:", finalStandings().slice(0, 5));
+  lastSeasonOver = engine.seasonOver;
   broadcastSoon();
 }, TICK_MS);
 
