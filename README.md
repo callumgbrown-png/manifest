@@ -23,7 +23,7 @@ On Windows, double-click `server/start.bat`.
 - 40-port region, two commodities (grain and fuel), voyages in real time
 - Port markets where price slides with stock; cargo already sailing to each port is public
 - Player buy orders with cash held in escrow
-- Up to 5 ships per company; first ship is upkeep-free, spare ships scrapped automatically if in debt
+- Up to 5 ships per company; first ship is upkeep-free, spare ships scrapped automatically if in debt; a last ship can always sail, with fuel on credit if needed
 - Leaderboard by net worth, admin dashboard with live tax, upkeep and port-fee controls
 - Every action stored in an append-only event log (SQLite); a restart replays it exactly
 

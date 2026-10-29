@@ -196,7 +196,11 @@ export class Engine {
     const fuelHave = Math.min(fuelQty, Math.max(0, stockAfter));
     const fuelCost = fuelHave * this.price(s.port, FUEL, stockAfter - fuelHave / 2)
       + (fuelQty - fuelHave) * this.rules.commodities.fuel.ceiling;
-    if (cargoCost + fuelCost > c.cash) return fail("not enough cash");
+    // A company's last ship can always sail: if the cash doesn't cover the fuel, the fuel goes on
+    // credit (cash goes negative). The cargo itself must still be paid for. Without this, a company
+    // with one empty ship and too little cash for fuel was stuck for the rest of the season.
+    const lastShip = c.ships.length === 1;
+    if (lastShip ? cargoCost > Math.max(0, c.cash) : cargoCost + fuelCost > c.cash) return fail("not enough cash");
 
     if (cmd.buy) {
       this.stock[s.port][g] -= qty;

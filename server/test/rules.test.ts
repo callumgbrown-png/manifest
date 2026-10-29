@@ -77,6 +77,28 @@ describe("sailing", () => {
     assert.equal(e.voyageHours(0, 0), 1);
   });
 
+  test("a company's last ship can always sail: fuel it can't afford goes on credit", () => {
+    const { e, cs, ship } = world(1);
+    const c = cs[0], s = ship(c), d = neighbour(0);
+    c.cash = 50;
+    const fuel = e.fuelNeeded(0, d) * e.price(0, 1, e.stock[0][1] - e.fuelNeeded(0, d) / 2);
+    assert.ok(fuel > 50);
+    assert.ok(e.apply({ type: "sail", company: c.id, ship: s.id, dest: d }).ok);
+    assert.ok(near(c.cash, 50 - fuel));
+    // Loaded trips work too, as long as the cargo itself is paid for.
+    hours(e, e.voyageHours(0, d));
+    c.cash = 200;
+    const unit = e.price(d, 0) * (1 + tax);
+    const qty = Math.floor(150 / unit);
+    assert.ok(e.apply({ type: "sail", company: c.id, ship: s.id, dest: 0, buy: { good: "grain", qty } }).ok);
+    assert.ok(c.cash < 200 - qty * unit + 1);
+    // With a spare ship there's no credit: the company can scrap or sell to raise cash.
+    const two = world(1);
+    two.cs[0].cash = rules.ship.price; two.e.apply({ type: "buyShip", company: two.cs[0].id, port: 0 });
+    two.cs[0].cash = 50;
+    assert.equal(err(two.e.apply({ type: "sail", company: two.cs[0].id, ship: two.ship(two.cs[0]).id, dest: d })), "not enough cash");
+  });
+
   test("docking charges the port fee", () => {
     const { e, cs, ship } = world(1);
     const d = neighbour(0);
@@ -98,7 +120,7 @@ describe("sailing", () => {
     e.stock[0][0] = 10;
     assert.equal(sail({ buy: { good: "grain", qty: 11 } }), "not enough stock at this port");
     c.cash = 5;
-    assert.equal(sail({}), "not enough cash");
+    assert.equal(sail({ buy: { good: "grain", qty: 1 } }), "not enough cash", "cargo is never on credit");
     c.cash = 10000; s.good = 0; s.qty = 5;
     assert.equal(sail({ buy: { good: "grain", qty: 5 } }), "ship already loaded; sell first");
     assert.equal(c.cash, 10000);

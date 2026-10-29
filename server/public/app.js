@@ -267,6 +267,7 @@ function estimate(card) {
   const here = world.ports[s.port], there = world.ports[dest];
   const fuel = distance(s.port, dest) * world.rules.fuelPer100 / 100 * here.prices[1];
   let text = `Fuel ≈ ${fmt(fuel)}, port fee ${world.rules.portFee}.`;
+  if (me.ships.length === 1 && fuel > me.cash) text += " You can't cover the fuel, so it goes on credit (your cash goes below zero).";
   if (g >= 0 && qty > 0) {
     const buy = s.qty > 0 ? 0 : qty * here.prices[g] * (1 + world.rules.tax);
     const sell = qty * there.prices[g] * (1 - world.rules.tax);
