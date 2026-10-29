@@ -20,12 +20,14 @@
 <script>
 "use strict";
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// Companies with the same net worth share a place (1, 2, 2, 4), as on the in-game leaderboard.
+const placeOf = (top, c) => 1 + top.findIndex(o => Math.round(o.worth) === Math.round(c.worth));
 fetch("/api/seasons").then(r => r.json()).then(seasons => {
   const list = document.getElementById("list");
   if (!seasons.length) { list.innerHTML = '<p class="quiet">No season has finished yet.</p>'; return; }
   list.innerHTML = seasons.map(s => `<div class="season"><h3 style="margin-top:0">Season ${s.id} · ended ${new Date(s.ended).toLocaleDateString("en-IE", { day: "numeric", month: "long", year: "numeric" })}</h3>
     <table><tr><th>#</th><th>Company</th><th class="num">Net worth</th></tr>
-    ${s.top.map((c, i) => `<tr class="${i === 0 ? "first" : ""}"><td>${i + 1}</td><td>${esc(c.name)}${c.bot ? ' <span class="tag">bot</span>' : ""}</td><td class="num">${Math.round(c.worth).toLocaleString("en-IE")}</td></tr>`).join("")}
+    ${s.top.map(c => [c, placeOf(s.top, c)]).map(([c, r]) => `<tr class="${r === 1 ? "first" : ""}"><td>${r}</td><td>${esc(c.name)}${c.bot ? ' <span class="tag">bot</span>' : ""}</td><td class="num">${Math.round(c.worth).toLocaleString("en-IE")}</td></tr>`).join("")}
     </table></div>`).join("");
 }).catch(() => { document.getElementById("list").innerHTML = '<p class="error">Could not load seasons.</p>'; });
 </script>

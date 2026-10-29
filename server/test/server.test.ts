@@ -125,6 +125,7 @@ describe("admin API", () => {
     assert.equal((await admin(s, "/api/admin/difficulty", { level: "easy" })).status, 200);
     const m = JSON.parse((await admin(s, "/api/admin/metrics")).body);
     assert.equal(m.difficulty, "easy"); assert.equal(m.tax, 0.05);
+    assert.equal(m.nextSeasonDifficulty, "normal", "a change here isn't kept for the next season (no DIFFICULTY env)");
     const c = new Client(s);
     const st = await c.next(m => m.type === "state" && m.world.rules.difficulty === "easy");
     assert.equal(st.world.rules.tax, 0.05);
@@ -141,7 +142,11 @@ describe("admin API", () => {
       assert.equal(m.difficulty, "hard"); assert.equal(m.tax, 0.09);
       await t.stop();
       const u = await startServer({ DIFFICULTY: "easy" }, t.db);   // existing world: the log wins
-      assert.equal(JSON.parse((await admin(u, "/api/admin/metrics")).body).difficulty, "hard");
+      const mu = JSON.parse((await admin(u, "/api/admin/metrics")).body);
+      assert.equal(mu.difficulty, "hard");
+      assert.equal(mu.nextSeasonDifficulty, "easy", "the admin page says what the next season starts on");
+      assert.equal((await admin(u, "/api/admin/new-season", {})).status, 200);
+      assert.equal(JSON.parse((await admin(u, "/api/admin/metrics")).body).difficulty, "easy");
       await u.stop();
     } finally { await t.stop(); cleanup(t); }
   });

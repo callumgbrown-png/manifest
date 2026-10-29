@@ -35,7 +35,7 @@
   <button id="applyDifficulty" class="secondary">Set difficulty</button></div>
 <h3>Season</h3>
 <div class="quiet" id="seasonInfo">–</div>
-<div class="quiet">Starting a new season saves the final standings to the past-seasons page, then gives every account a fresh company. Live controls go back to the values in <code>config/rules.json</code>.</div>
+<div class="quiet">Starting a new season saves the final standings to the past-seasons page, then gives every account a fresh company. Players who are online are asked to log in again. The new season starts on <b id="nextDiff">–</b> <span id="nextDiffWhy"></span>, with that level's tax, port fee and upkeep; any hand-set values or difficulty change made here are not kept.</div>
 <div class="row"><button id="newSeason" class="secondary">Archive and start a new season</button></div>
 <script>
 "use strict";
@@ -60,6 +60,8 @@ async function load() {
   $("seasonInfo").textContent = m.seasonOver ? `Season over after ${m.seasonDays} days. Trading is closed until you start a new season.`
     : `Day ${m.day} of ${m.seasonDays}.`;
   $("diffNow").textContent = m.difficulty;
+  $("nextDiff").textContent = m.nextSeasonDifficulty;
+  $("nextDiffWhy").textContent = m.nextSeasonDifficulty === m.difficulty ? "" : "(the server's starting difficulty, not the current one)";
   if (first) { if (m.difficulty !== "custom") $("difficulty").value = m.difficulty; $("tax").value = m.tax; $("upkeep").value = m.upkeep; $("portFee").value = m.portFee; first = false; }
 }
 $("apply").onclick = async () => {

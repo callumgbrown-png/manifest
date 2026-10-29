@@ -391,6 +391,10 @@ test("admin page shows health and changes live rules", { skip: SKIP, timeout: 60
   await page.waitForFunction(() => document.getElementById("err")!.textContent === "Saved.");
   const m = await (await fetch(s.url + "/api/admin/metrics", { headers: { "x-admin-token": ADMIN } })).json();
   assert.equal(m.tax, 0.06); assert.equal(m.upkeep, 400);
+  // A hand-set value makes the world "custom"; the page says the next season still starts on the server's level.
+  assert.equal(await page.textContent("#diffNow"), "custom");
+  assert.equal(await page.textContent("#nextDiff"), "normal");
+  assert.match((await page.textContent("#nextDiffWhy"))!, /not the current one/);
   await page.fill("#tax", "0.9");
   await page.click("#apply");
   await page.waitForFunction(() => document.getElementById("err")!.textContent === "tax must be 0 to 0.3");
@@ -408,6 +412,13 @@ test("past seasons page lists finished seasons", { skip: SKIP, timeout: 60000 },
   const text = (await page.textContent("#list"))!;
   assert.match(text, /Season 1 · ended/);
   assert.ok(text.includes("Alpha Lines") && text.includes("Beta Shipping"));
+  // Companies on the same net worth share a place, like the in-game leaderboard.
+  const rows = await page.$$eval(".season tr", trs => trs.slice(1).map(tr => [Number(tr.cells[0].textContent), tr.cells[2].textContent, tr.className]));
+  rows.forEach(([place, worth, cls], i) => {
+    const first = rows.findIndex(r => r[1] === worth);
+    assert.equal(place, first + 1, `row ${i + 1} (${worth}) shares the place of the first company on that worth`);
+    assert.equal(cls === "first", place === 1);
+  });
   await page.click("text=Back to the game");
   await page.waitForURL(s.url + "/");
   assert.deepEqual(errors, []);

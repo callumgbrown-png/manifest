@@ -74,6 +74,12 @@ function startDifficulty() {
   if (!r.ok) console.error(`DIFFICULTY=${DIFFICULTY} ignored: ${r.error}`);
 }
 
+/** The difficulty a new season starts on: the DIFFICULTY env if it names a preset, else the rules' default. */
+function nextSeasonDifficulty(): string {
+  const presets = rules.difficulty?.presets ?? {};
+  return DIFFICULTY && Object.hasOwn(presets, DIFFICULTY) ? DIFFICULTY : rules.difficulty?.default ?? "normal";
+}
+
 let botIds: number[] = [];
 function ensureBots() {
   botIds = [...engine.companies.values()].filter(c => isBot(c.name)).map(c => c.id);
@@ -240,7 +246,7 @@ function handle(req: IncomingMessage, res: ServerResponse) {
   }
   if (url.pathname === "/api/admin/metrics") {
     if (!isAdmin(req)) return json(res, 403, { error: "admin token required" });
-    return json(res, 200, engine.metrics());
+    return json(res, 200, { ...engine.metrics(), nextSeasonDifficulty: nextSeasonDifficulty() });
   }
   if (url.pathname === "/api/admin/set" && req.method === "POST") {
     if (!isAdmin(req)) return json(res, 403, { error: "admin token required" });
