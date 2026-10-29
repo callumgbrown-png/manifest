@@ -189,3 +189,4 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
 .youRank b { font: 600 20px var(--mono); color: var(--mine); }
 .youRank .num { margin-left: auto; font-family: var(--mono); }
 .youRank .quiet { width: 100%; font-size: 12px; }
+.legendShip { width: 22px; height: auto; image-rendering: pixelated; vertical-align: middle; margin-right: 4px; }

@@ -435,11 +435,29 @@ function drawMap() {
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - Math.cos(pos.angle) * 22, y - Math.sin(pos.angle) * 22); ctx.stroke(); ctx.lineCap = "butt";
       ctx.shadowColor = C.mine; ctx.shadowBlur = 10;
     }
+    const img = shipSprite(s);
+    if (img) {
+      // Side-view sprite: flipped to face the way the ship is sailing, never upside down.
+      const w = own ? 34 : 24, h = w * img.height / img.width;
+      ctx.save(); ctx.translate(x, y);
+      if (Math.cos(pos.angle) < 0) ctx.scale(-1, 1);
+      ctx.globalAlpha = own ? 1 : 0.7; ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, -w / 2, -h * 0.65, w, h);
+      ctx.restore(); ctx.shadowBlur = 0;
+      continue;
+    }
     ctx.save(); ctx.translate(x, y); ctx.rotate(pos.angle);
     ctx.beginPath(); ctx.moveTo(size, 0); ctx.lineTo(-size * 0.75, size * 0.62); ctx.lineTo(-size * 0.4, 0); ctx.lineTo(-size * 0.75, -size * 0.62); ctx.closePath();
     ctx.fillStyle = own ? C.mine : s.qty > 0 ? "rgba(232,238,242,.85)" : "rgba(232,238,242,.5)"; ctx.fill();
     ctx.restore(); ctx.shadowBlur = 0;
   }
+}
+
+// Ship sprites by cargo; until they load, ships draw as arrows.
+const SPRITES = Object.fromEntries(["empty", "grain", "fuel"].map(k => { const im = new Image(); im.src = `img/ship-${k}.png`; return [k, im]; }));
+function shipSprite(s) {
+  const im = SPRITES[s.qty > 0 && s.good !== null ? GOOD_NAMES[s.good] : "empty"];
+  return im.complete && im.naturalWidth ? im : null;
 }
 
 function portAt(sx, sy) {
