@@ -16,6 +16,7 @@ export interface Rules {
     consumption_per_hour: Record<Good, number>;
     reference_companies?: number;
     min_scale?: number;
+    scale_exponent?: number;
   };
   fees: { port_fee_per_docking: number; trade_tax_rate: number };
   company: { start_cash: number; start_ships: number; max_ships: number };
@@ -58,25 +59,33 @@ export class Engine {
   ships = new Map<number, Ship>();
   orders = new Map<number, Order>();
   private nextId = 1;
+  /** Market size multiplier, fixed for the season. */
+  readonly scale: number;
+  private target: number;
   private prod: number[][];
   private cons: number[][];
 
-  constructor(rules: Rules, map: MapData) {
+  /** expectedCompanies sets the market size for the whole season (see rules.markets). */
+  constructor(rules: Rules, map: MapData, expectedCompanies?: number) {
     this.rules = structuredClone(rules);
     this.map = map;
     this.n = map.ports.length;
     this.dist = shortestPaths(this.n, map.routes);
     const m = rules.markets;
-    this.prod = map.ports.map(p => GOODS.map(g => (p.produces.includes(g) ? m.production_per_hour[g] : 0)));
-    this.cons = map.ports.map(p => GOODS.map(g => (p.consumes.includes(g) ? m.consumption_per_hour[g] : 0)));
-    this.stock = map.ports.map(() => [m.target_stock, m.target_stock]);
+    this.scale = m.reference_companies && expectedCompanies
+      ? Math.max(m.min_scale ?? 0, (expectedCompanies / m.reference_companies) ** (m.scale_exponent ?? 1)) : 1;
+    const k = this.scale;
+    this.target = m.target_stock * k;
+    this.prod = map.ports.map(p => GOODS.map(g => (p.produces.includes(g) ? m.production_per_hour[g] * k : 0)));
+    this.cons = map.ports.map(p => GOODS.map(g => (p.consumes.includes(g) ? m.consumption_per_hour[g] * k : 0)));
+    this.stock = map.ports.map(() => [this.target, this.target]);
   }
 
   // ------------------------------------------------------------ market maths
 
   price(port: number, g: number, stock = this.stock[port][g]): number {
     const c = this.rules.commodities[GOODS[g]];
-    const frac = Math.min(1, Math.max(0, 1 - stock / (2 * this.rules.markets.target_stock)));
+    const frac = Math.min(1, Math.max(0, 1 - stock / (2 * this.target)));
     return c.floor + (c.ceiling - c.floor) * frac;
   }
 
@@ -282,7 +291,7 @@ export class Engine {
   advance(): void {
     if (this.seasonOver) return;
     this.tick++;
-    const cap = this.rules.markets.target_stock * this.rules.markets.max_stock_multiple;
+    const cap = this.target * this.rules.markets.max_stock_multiple;
     const k = this.marketScale();
     for (let p = 0; p < this.n; p++)
       for (let g = 0; g < 2; g++)

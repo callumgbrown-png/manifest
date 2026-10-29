@@ -55,10 +55,10 @@ class Market:
     """Stock-based port markets. Price falls linearly from ceiling (no stock)
     to floor (stock at twice the target)."""
 
-    def __init__(self, rules, n):
+    def __init__(self, rules, n, scale=1.0):
         self.floor = np.array([rules["commodities"][g]["floor"] for g in GOODS], float)
         self.ceil = np.array([rules["commodities"][g]["ceiling"] for g in GOODS], float)
-        self.target = rules["markets"]["target_stock"]
+        self.target = rules["markets"]["target_stock"] * scale
         self.cap = self.target * rules["markets"]["max_stock_multiple"]
         self.stock = np.full((n, 2), float(self.target))
 
@@ -109,14 +109,23 @@ RESERVE = {"greedy": 3000, "lagged": 5000, "casual": 8000}
 
 # ---------------------------------------------------------------- season
 
+def market_scale(rules, n_companies):
+    m = rules["markets"]
+    if "reference_companies" not in m:
+        return 1.0
+    return max(m.get("min_scale", 0), (n_companies / m["reference_companies"]) ** m.get("scale_exponent", 1))
+
+
 def run_season(seed, n_companies, rules, world, dist, prod, cons, return_companies=False,
                profiles=PROFILES):
     rng = random.Random(seed)
+    k = market_scale(rules, n_companies)
+    prod, cons = prod * k, cons * k
     n = len(world["ports"])
     m_ = rules["markets"]
     scale = max(m_.get("min_scale", 0), n_companies / m_["reference_companies"]) if "reference_companies" in m_ else 1.0
     prod, cons = prod * scale, cons * scale
-    mk = Market(rules, n)
+    mk = Market(rules, n, k)
     fee = rules["fees"]["port_fee_per_docking"]
     tax = rules["fees"]["trade_tax_rate"]
     sh = rules["ship"]

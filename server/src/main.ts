@@ -16,6 +16,8 @@ const PUBLIC = join(HERE, "..", "public");
 const PORT = Number(process.env.PORT ?? 8080);
 const TICK_MS = Number(process.env.TICK_MS ?? 3_600_000);   // 1 game hour = 1 real hour by default
 const BOTS = Number(process.env.BOTS ?? 30);   // bot companies kept in the world
+// Market size for the season, set from how many companies you expect (players + bots).
+const EXPECTED = Number(process.env.EXPECTED_COMPANIES ?? 60);
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 const DB_PATH = process.env.DB_PATH ?? join(ROOT, "data", "manifest.db");
 
@@ -36,14 +38,14 @@ db.exec(`
 `);
 const insertEvent = db.prepare("INSERT INTO events (at, kind, payload) VALUES (?, ?, ?)");
 
-let engine = new Engine(rules, map);
+let engine = new Engine(rules, map, EXPECTED);
 let replayed = 0;
 for (const row of db.prepare("SELECT kind, payload FROM events ORDER BY id").all() as { kind: string; payload: string }[]) {
   if (row.kind === "tick") engine.advance();
   else engine.apply(JSON.parse(row.payload) as Command);
   replayed++;
 }
-console.log(`Replayed ${replayed} events; game is at day ${engine.metrics().day}, hour ${engine.tick % 24}`);
+console.log(`Replayed ${replayed} events; game is at day ${engine.metrics().day}, hour ${engine.tick % 24}; market scale ${engine.scale.toFixed(2)} for ${EXPECTED} expected companies`);
 
 let botIds: number[] = [];
 function ensureBots() {
@@ -270,7 +272,7 @@ function newSeason() {
     db.prepare("INSERT INTO seasons (id, ended, results) VALUES (?, ?, ?)").run(seasonId, new Date().toISOString(), JSON.stringify(finalStandings()));
     db.prepare("INSERT INTO archived_events SELECT ?, id, at, kind, payload FROM events").run(seasonId);
     db.exec("DELETE FROM events; DELETE FROM sessions;");
-    engine = new Engine(rules, map);
+    engine = new Engine(rules, map, EXPECTED);
     const accounts = db.prepare("SELECT name FROM accounts ORDER BY rowid").all() as { name: string }[];
     const update = db.prepare("UPDATE accounts SET company = ? WHERE name = ?");
     for (const a of accounts) {
