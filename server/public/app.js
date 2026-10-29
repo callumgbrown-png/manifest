@@ -745,8 +745,12 @@ function tripProfit(s, dest, g, qty) {
   const cost = s.qty > 0 ? sellValue(s.port, g, qty, false) * (1 - tax) : g >= 0 && qty > 0 ? buyCost(s.port, g, qty) * (1 + tax) : 0;
   return { profit: sell - cost - fuel - world.rules.portFee, fuel, hours: Math.max(1, Math.ceil(distance(s.port, dest) / world.rules.speed)) };
 }
-/** Trips from where a docked ship is now, by profit per hour (the raw ranking). */
-function rawTrips(s, n = 3) {
+/** Whether a voyage of this many hours, starting `delay` hours from now, docks while trading is
+ *  still open. A ship docking on the last hour (or later) can't sell: the season is over by then. */
+function landsInSeason(hours, delay = 0) { return world.tick + delay + hours < world.seasonHours; }
+/** Trips from where a docked ship is now, by profit per hour (the raw ranking). Trips that would
+ *  dock after the season ends are left out: their cargo could never be sold. */
+function rawTrips(s, n = 3, delay = 0) {
   const cap = world.rules.capacity, here = world.ports[s.port], out = [];
   const goods = s.qty > 0 ? [s.good] : [0, 1];
   for (const g of goods) {
@@ -755,7 +759,7 @@ function rawTrips(s, n = 3) {
     for (const p of world.ports) {
       if (p.id === s.port) continue;
       const t = tripProfit(s, p.id, g, qty);
-      if (t.profit > 0) out.push({ dest: p.id, g, qty, ...t });
+      if (t.profit > 0 && landsInSeason(t.hours, delay)) out.push({ dest: p.id, g, qty, ...t });
     }
   }
   return out.sort((a, b) => b.profit / b.hours - a.profit / a.hours).slice(0, n);
@@ -766,8 +770,8 @@ function rawTrips(s, n = 3) {
 const AFTER_HOURS = 6;   // how many hours of the next step to count
 function bestTrips(s, n = 3) {
   const scored = rawTrips(s, 12).map(t => {
-    const [next] = rawTrips({ ...s, port: t.dest, qty: 0 }, 1);
-    const move = next ? null : bestMove({ ...s, port: t.dest, qty: 0 });
+    const [next] = rawTrips({ ...s, port: t.dest, qty: 0 }, 1, t.hours);
+    const move = next ? null : bestMove({ ...s, port: t.dest, qty: 0 }, t.hours);
     const after = next ? next.profit / next.hours : move ? move.score : 0;
     return { ...t, next, onward: move, score: (t.profit + after * AFTER_HOURS) / (t.hours + AFTER_HOURS) };
   });
@@ -775,12 +779,12 @@ function bestTrips(s, n = 3) {
 }
 
 /** When no trip pays from here: the port whose best trip, minus the cost of sailing there empty, pays most per hour. */
-function bestMove(s) {
+function bestMove(s, delay = 0) {
   let best = null;
   for (const p of world.ports) {
     if (p.id === s.port) continue;
     const go = tripProfit(s, p.id, -1, 0);
-    const [next] = rawTrips({ ...s, port: p.id, qty: 0 }, 1);
+    const [next] = rawTrips({ ...s, port: p.id, qty: 0 }, 1, delay + go.hours);
     if (!next) continue;
     const net = next.profit + go.profit;   // go.profit is minus fuel and the port fee
     const score = net / (go.hours + next.hours);
@@ -789,12 +793,23 @@ function bestMove(s) {
   return best;
 }
 
+/** At the very end of a season: is selling a cargo here worth more than keeping it? Unsold cargo
+ *  counts in net worth at what was paid for it (engine netWorth). */
+function endCargoAdvice(s) {
+  const sell = sellValue(s.port, s.good, s.qty, false) * (1 - world.rules.tax);
+  return sell >= s.cost
+    ? `Selling here now adds about ${fmt(sell - s.cost)} to your net worth; unsold cargo only counts at what you paid for it.`
+    : `Selling here now would lower your net worth by about ${fmt(s.cost - sell)}: unsold cargo counts at what you paid for it, so keeping it is fine.`;
+}
 function tripsHtml(s, trips = bestTrips(s), move = null) {
   if (!trips.length && move) return `<h3>Best trips from here</h3><div class="est">No trip pays from here right now. Your best move:</div>
     <div class="trips"><button class="trip move secondary" data-act="plan" data-ship="${s.id}" data-dest="${move.dest}" data-good="">
       <span>Sail empty → ${esc(world.ports[move.dest].name)}, then load ${GOOD_NAMES[move.next.g]} for ${esc(world.ports[move.next.dest].name)}</span>
       <span class="num"><b class="pos">+${fmt(move.next.profit - move.cost)}</b> · ${move.hours + move.next.hours} h</span></button></div>
     <div class="est">Getting there costs about ${fmt(move.cost)} in fuel and fees; the trip from there pays about +${fmt(move.next.profit)} at today's prices.</div>`;
+  const left = world.seasonHours - world.tick;
+  const soonest = Math.min(...world.ports.filter(p => p.id !== s.port).map(p => Math.max(1, Math.ceil(distance(s.port, p.id) / world.rules.speed))));
+  if (!trips.length && !landsInSeason(soonest)) return `<h3>Best trips from here</h3><div class="est">The season ends in ${left} h, too soon for any voyage from here to dock in time. ${s.qty > 0 ? endCargoAdvice(s) : "Your ship can stay where it is."}</div>`;
   if (!trips.length) return `<h3>Best trips from here</h3><div class="est">${s.qty > 0 ? "Nowhere pays more than selling here right now." : "No trip pays right now at these prices, from here or one hop away. Waiting costs nothing; prices move every hour."}</div>`;
   return `<h3>Best trips from here</h3><div class="trips">${trips.map(t => `<button class="trip secondary" data-act="plan" data-ship="${s.id}" data-dest="${t.dest}" data-good="${s.qty > 0 ? "" : GOOD_NAMES[t.g]}" data-qty="${t.qty}">
       <span>${s.qty > 0 ? "Sell" : `Load ${t.qty}`} <span class="tag ${GOOD_NAMES[t.g]}">${GOOD_NAMES[t.g]}</span> → ${esc(world.ports[t.dest].name)}</span>
@@ -820,6 +835,7 @@ function estimate(card) {
   const t = tripProfit(s, dest, g, qty);
   let text = `Fuel ≈ ${fmt(t.fuel)}, port fee ${world.rules.portFee}.`;
   if (g < 0 || qty <= 0) text = `Sailing empty costs about <b class="neg">${fmt(t.fuel + world.rules.portFee)}</b> (fuel ${fmt(t.fuel)}, port fee ${world.rules.portFee}).`;
+  const late = !landsInSeason(t.hours);
   if (me.ships.length === 1 && t.fuel > me.cash) text += " You can't cover the fuel, so it goes on credit (your cash goes below zero).";
   if (g >= 0 && qty > 0) {
     const verb = t.profit >= 0 ? "makes" : "loses";
@@ -828,6 +844,7 @@ function estimate(card) {
       : ` This trip ${verb} about <b class="${t.profit >= 0 ? "pos" : "neg"}">${fmt(Math.abs(t.profit))}</b> (${fmt(Math.abs(t.profit) / t.hours)} an hour).`;
     text += ` Counts the price moving as you buy and sell, and the ${fmt(there.inbound[g])} ${GOOD_NAMES[g]} already heading there.`;
   }
+  if (late) text = `<b class="neg">This ship would dock after the season ends</b> (≈${t.hours} h; ${Math.max(0, world.seasonHours - world.tick)} h left), so ${g >= 0 && qty > 0 ? "the cargo could never be sold: it only counts at what you paid for it, and the fuel is lost" : "the fuel would be wasted"}. ` + text;
   card.querySelector("[data-field=estimate]").innerHTML = text;
 }
 

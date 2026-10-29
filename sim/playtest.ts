@@ -24,7 +24,7 @@ function makeTools(e: Engine) {
     const sell = qty * e.price(to, g, e.stock[to][g] + cargo[to][g] + qty / 2) * (1 - tax());
     return sell - buy - fuel(from, to) - fee();
   }
-  function bestTrips(port: number, cash: number, cargo: number[][]) {
+  function bestTrips(port: number, cash: number, cargo: number[][], delay = 0) {
     const out: { dest: number; g: number; qty: number; profit: number; hours: number }[] = [];
     for (let g = 0; g < 2; g++) {
       const qty = Math.floor(Math.min(cap, e.stock[port][g], Math.max(0, cash - 300) / (e.price(port, g) * (1 + tax()) * 1.1)));
@@ -32,16 +32,17 @@ function makeTools(e: Engine) {
       for (let d = 0; d < e.n; d++) {
         if (d === port || !Number.isFinite(e.dist[port][d])) continue;
         const pr = profit(port, d, g, qty, cargo);
-        if (pr > 0) out.push({ dest: d, g, qty, profit: pr, hours: Math.max(1, e.voyageHours(port, d)) });
+        // Like the client: only trips that dock while trading is still open.
+        if (pr > 0 && e.tick + delay + e.voyageHours(port, d) < e.seasonHours) out.push({ dest: d, g, qty, profit: pr, hours: Math.max(1, e.voyageHours(port, d)) });
       }
     }
     return out.sort((a, b) => b.profit / b.hours - a.profit / a.hours);
   }
-  function bestMove(port: number, cash: number, cargo: number[][]) {
+  function bestMove(port: number, cash: number, cargo: number[][], delay = 0) {
     let best: { dest: number; score: number } | null = null;
     for (let d = 0; d < e.n; d++) {
       if (d === port || !Number.isFinite(e.dist[port][d])) continue;
-      const go = profit(port, d, -1, 0, cargo), [next] = bestTrips(d, cash + go, cargo);
+      const go = profit(port, d, -1, 0, cargo), [next] = bestTrips(d, cash + go, cargo, delay + e.voyageHours(port, d));
       if (!next) continue;
       const net = next.profit + go, score = net / (e.voyageHours(port, d) + next.hours);
       if (net >= 50 && (!best || score > best.score)) best = { dest: d, score };
@@ -55,8 +56,8 @@ function makeTools(e: Engine) {
     const trips = bestTrips(port, cash, cargo).slice(0, 12);
     let best: any = null;
     for (const t of trips) {
-      const [next] = bestTrips(t.dest, cash, cargo);
-      const mv = next ? null : bestMove(t.dest, cash, cargo);
+      const [next] = bestTrips(t.dest, cash, cargo, t.hours);
+      const mv = next ? null : bestMove(t.dest, cash, cargo, t.hours);
       const after = next ? next.profit / next.hours : mv ? mv.score : 0;
       const score = (t.profit + after * 6) / (t.hours + 6);
       if (!best || score > best.score) best = { ...t, score };

@@ -131,9 +131,11 @@ test("two players play through every feature in the browser", { skip: SKIP, time
 
   // ---- with your docked ship's form open, tapping a port picks it as the destination;
   //      tapping it again opens it
-  const other = map.ports.findIndex((_: any, i: number) => i !== home);
   const homeCard = card;
   await homeCard.locator("select[data-field=good]").selectOption("");
+  // Not the destination the form already shows: tapping that one opens the port instead.
+  const shown = Number(await homeCard.locator("select[data-field=dest]").inputValue());
+  const other = map.ports.findIndex((_: any, i: number) => i !== home && i !== shown);
   const company = await a.textContent("#panel h2");
   await tapPort(a, other);
   await toast(a, new RegExp(`→ ${map.ports[other].name} \\(≈\\d+ h\\)\\. Tap it again to open the port\\.`));
@@ -390,6 +392,27 @@ test("trip estimates match what really happens, and 'best trips' plans a trip", 
     await page.click('#tabs button[data-tab="fleet"]');
     await page.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("Best trips from here"));
     const card = page.locator(".shipCard[data-ship]").first();
+    // Near the end of the season, advice only offers trips that dock while trading is still open,
+    // and the estimate warns about a voyage that would dock too late. (Done in one synchronous
+    // evaluate with the clock moved forward, so no server update can land in between.)
+    const end = await page.evaluate(() => {
+      const w = window as any, world = w.eval("world"), s = w.eval("me").ships[0], dist = w.eval("distance");
+      const card = document.querySelector(".shipCard[data-ship]")!, sel = card.querySelector("[data-field=dest]") as HTMLSelectElement;
+      const saved = world.tick, old = sel.value;
+      world.tick = world.seasonHours - 6;
+      const raw = w.eval("rawTrips")(s, 40).map((t: any) => t.hours);
+      const best = w.eval("bestTrips")(s, 10).map((t: any) => t.hours + (t.next ? t.next.hours : 0));
+      const far = world.ports.filter((p: any) => p.id !== s.port).sort((a: any, b: any) => dist(s.port, b.id) - dist(s.port, a.id))[0].id;
+      sel.value = String(far); w.eval("estimate")(card);
+      const text = card.querySelector("[data-field=estimate]")!.textContent;
+      world.tick = world.seasonHours - 1;
+      const html = w.eval("tripsHtml")(s);
+      world.tick = saved; sel.value = old; w.eval("estimate")(card);
+      return { raw, best, text, html };
+    });
+    for (const h of [...end.raw, ...end.best]) assert.ok(h < 6, `a ${h} h trip can't finish in the last 6 hours`);
+    assert.match(end.text!, /^This ship would dock after the season ends/);
+    assert.match(end.html, /The season ends in 1 h, too soon for any voyage from here to dock in time\. Your ship can stay where it is\./);
     // Best trips are profitable by the honest estimate, and ranked by profit per hour counting the
     // next step from where they end (score), so a dead-end trip ranks below a slightly poorer one.
     const trips = await page.evaluate(() => { const w = window as any; return w.eval("bestTrips")(w.eval("me").ships[0], 10); });

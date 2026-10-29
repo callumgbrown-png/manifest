@@ -74,4 +74,4 @@ Current rules pass all health checks across 10 seasons: see `docs/economy-v1.png
 
 ## Not built yet
 
-Player corporations, more regions and commodities, warehouses and sell orders, email verification, anti-multi-account checks beyond one company per account, payments.
+Player corporations, more regions and commodities, warehouses, email verification, anti-multi-account checks beyond one company per account, payments.
