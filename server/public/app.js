@@ -817,6 +817,24 @@ function tripsHtml(s, trips = bestTrips(s), move = null) {
       ${t.next ? `<span class="then">then +${fmt(t.next.profit)} from there</span>` : t.onward ? `<span class="then">then a short hop to more trips</span>` : `<span class="then">nothing pays from there yet</span>`}</button>`).join("")}</div>`;
 }
 
+/** Why the server would refuse this trip for lack of cash (engine.ts sail), or null if it's affordable.
+ *  Cargo must always be paid for; fuel too, unless this is the company's last ship (then it goes on credit). */
+function cashShortfall(s, dest, g, qty, fuel) {
+  const loading = s.qty === 0 && g >= 0 && qty > 0;
+  if (loading && (qty > world.rules.capacity || qty > world.ports[s.port].stock[g])) return null;   // refused for another reason
+  const last = me.ships.length === 1, have = last ? Math.max(0, me.cash) : me.cash;
+  const cost = n => buyCost(s.port, g, n) * (1 + world.rules.tax) + (last ? 0 : fuelCost(s.port, dest, g, n));
+  const need = loading ? cost(qty) : last ? 0 : fuel;
+  if (need <= have) return null;
+  const what = loading ? (last ? "the cargo costs" : "cargo and fuel cost") : "the fuel costs";
+  let text = `${what} about ${fmt(need)} and you have ${fmt(me.cash)}.`;
+  let n = 0;
+  if (loading) { let lo = 0, hi = qty; while (lo < hi) { const m = Math.ceil((lo + hi) / 2); if (cost(m) <= have) lo = m; else hi = m - 1; } n = lo; }
+  if (n > 0) text += ` You can afford about ${n} ${GOOD_NAMES[g]}.`;
+  else if (last) text += " Sail empty instead: your last ship's fuel can go on credit.";
+  else text += ` Only a company's last ship can sail on credit: sell cargo or scrap a spare ship (${fmt(world.rules.shipPrice / 2)}) first.`;
+  return text;
+}
 function estimate(card) {
   const s = me.ships.find(x => x.id === Number(card.dataset.ship));
   const destVal = card.querySelector("[data-field=dest]").value;
@@ -837,6 +855,10 @@ function estimate(card) {
   if (g < 0 || qty <= 0) text = `Sailing empty costs about <b class="neg">${fmt(t.fuel + world.rules.portFee)}</b> (fuel ${fmt(t.fuel)}, port fee ${world.rules.portFee}).`;
   const late = !landsInSeason(t.hours);
   if (me.ships.length === 1 && t.fuel > me.cash) text += " You can't cover the fuel, so it goes on credit (your cash goes below zero).";
+  // The server refuses a trip whose cargo (and, unless this is your last ship, fuel) costs more
+  // than your cash; say so before the click instead of after it.
+  const short = cashShortfall(s, dest, g, qty, t.fuel);
+  if (short) text = `<b class="neg">Not enough cash: ${short}</b> ` + text;
   if (g >= 0 && qty > 0) {
     const verb = t.profit >= 0 ? "makes" : "loses";
     text += s.qty > 0
@@ -927,7 +949,10 @@ function ordersPanel() {
 /** "Buy a ship" when you can afford one; otherwise say how much more cash it needs instead of a button that only errors. */
 function buyShipHtml() {
   const price = world.rules.shipPrice;
-  if (me.cash >= price) return `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(price)})</button></div>`;
+  // Ships count at half their price in net worth (engine netWorth), so a new ship drops your net
+  // worth at once; without saying so, the net-worth chart's sudden fall looks like a loss.
+  if (me.cash >= price) return `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(price)})</button></div>
+    <div class="est">Ships count at half their price, so your net worth drops by ${fmt(price / 2)} at first; the extra ship has to earn it back. Every ship after the first costs ${fmt(world.rules.upkeep)} a day.</div>`;
   return `<div class="row"><button disabled>Buy a ship here (${fmt(price)})</button><span class="quiet">You need ${fmt(price - me.cash)} more cash.</span></div>`;
 }
 function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }

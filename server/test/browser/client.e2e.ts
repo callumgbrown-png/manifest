@@ -121,6 +121,10 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   // A new company (10,000 cash) can't afford a 12,000 ship: the button is disabled and says what's missing.
   assert.ok(await a.locator('#panel button:disabled', { hasText: "Buy a ship here" }).count(), "buy-ship button shown, disabled, at a port with your ship");
   assert.match((await a.textContent("#panel"))!, /You need 2,000 more cash\./);
+  // With the cash, the button explains that a new ship lowers net worth at first (ships count at half price).
+  const buyText = await a.evaluate(() => { const w = window as any, me = w.eval("me"), cash = me.cash; me.cash = 20000; const h = w.eval("buyShipHtml")(); me.cash = cash; return h; });
+  assert.match(buyText, /data-act="buyShip">Buy a ship here \(12,000\)/);
+  assert.match(buyText, /your net worth drops by 6,000 at first/);
 
   // ---- the trip estimate updates as you change the form
   await a.click('#tabs button[data-tab="fleet"]');
@@ -157,6 +161,35 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   assert.match((await card.locator("[data-field=estimate]").textContent())!, /^Sailing empty costs about [\d,]+ \(fuel [\d,]+, port fee 25\)\.$/);
   await card.locator("select[data-field=good]").selectOption("grain");
   assert.match((await card.locator("[data-field=estimate]").textContent())!, /This trip (makes|loses) about [\d,]+ \([\d,]+ an hour\)/);
+
+  // ---- short of cash, the estimate says so before the server refuses: with one ship only the
+  //      cargo must be paid for (fuel goes on credit); with a spare ship the fuel must be too.
+  //      (One synchronous evaluate with cash and fleet changed in the page, so no update lands in between.)
+  const broke = await a.evaluate(() => {
+    const w = window as any, me = w.eval("me"), card = document.querySelector(".shipCard[data-ship]")!;
+    // (No named arrow functions in here: tsx would wrap them in a helper the page doesn't have.)
+    const out: string[] = [];
+    w.__est = function () { w.eval("estimate")(card); out.push(card.querySelector("[data-field=estimate]")!.textContent!); };
+    const est = w.__est;
+    const cash = me.cash, ships = me.ships;
+    (card.querySelector("[data-field=qty]") as HTMLInputElement).value = "60";
+    me.cash = 500; est();
+    me.cash = -500; est();
+    (card.querySelector("[data-field=good]") as HTMLSelectElement).value = "";
+    est();
+    me.ships = [...ships, { ...ships[0], id: 999 }]; est();
+    me.cash = 1e6; est();
+    me.cash = cash; me.ships = ships;
+    (card.querySelector("[data-field=good]") as HTMLSelectElement).value = "grain"; est();
+    const [oneShip, inDebt, emptyOne, emptyTwo, rich] = out;
+    return { oneShip, inDebt, emptyOne, emptyTwo, rich };
+  });
+  assert.match(broke.oneShip, /^Not enough cash: the cargo costs about [\d,]+ and you have 500\. You can afford about \d+ grain\./);
+  assert.match(broke.inDebt, /^Not enough cash: the cargo costs about [\d,]+ and you have -500\. Sail empty instead: your last ship's fuel can go on credit\./);
+  assert.doesNotMatch(broke.emptyOne, /Not enough cash/, "a last ship can always sail empty");
+  assert.match(broke.emptyOne, /goes on credit/);
+  assert.match(broke.emptyTwo, /^Not enough cash: the fuel costs about [\d,]+ and you have -500\. Only a company's last ship can sail on credit/);
+  assert.doesNotMatch(broke.rich, /Not enough cash/);
 
   // ---- server refusals show as a red toast
   await card.locator("input[data-field=qty]").fill("500");
