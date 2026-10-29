@@ -465,7 +465,9 @@ export class Engine {
     const k = Math.max(1, Math.floor(worth.length / 100));
     return {
       tick: this.tick,
-      day: Math.floor(this.tick / 24) + 1,
+      day: Math.min(this.rules.season.days, Math.floor(this.tick / 24) + 1),
+      seasonDays: this.rules.season.days,
+      seasonOver: this.seasonOver,
       companies: comps.length,
       ships: this.ships.size,
       moneySupply: Math.round(comps.reduce((a, c) => a + c.cash, 0)),

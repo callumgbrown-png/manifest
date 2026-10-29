@@ -17,7 +17,7 @@ export async function startServer(env: Record<string, string> = {}, db?: string)
   const dbPath = db ?? join(dir!, "game.db");
   const proc = spawn(process.execPath, ["--no-warnings", "--import", "tsx", "src/main.ts"], {
     cwd: SERVER_DIR,
-    env: { ...process.env, PORT: "0", DB_PATH: dbPath, BOTS: "0", TICK_MS: "100000000", ADMIN_TOKEN: ADMIN, ...env },
+    env: { ...process.env, PORT: "0", DB_PATH: dbPath, BOTS: "0", TICK_MS: "100000000", ADMIN_TOKEN: ADMIN, SIGNUPS_PER_HOUR: "1000", ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let out = "";
@@ -54,8 +54,8 @@ export class Client {
   private mark = 0;
   ready: Promise<void>;
 
-  constructor(s: Srv) {
-    this.ws = new WebSocket(`ws://localhost:${s.port}/ws`);
+  constructor(s: Srv, headers?: Record<string, string>) {
+    this.ws = new WebSocket(`ws://localhost:${s.port}/ws`, { headers });
     this.ready = new Promise((res, rej) => { this.ws.once("open", () => res()); this.ws.once("error", rej); });
     this.ws.on("message", raw => {
       const m = JSON.parse(String(raw));

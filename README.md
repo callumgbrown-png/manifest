@@ -15,6 +15,7 @@ TICK_MS=5000 ADMIN_TOKEN=a-long-random-admin-token npm run dev
 Open http://localhost:8080 to play and http://localhost:8080/admin for the economy dashboard.
 `TICK_MS` is the length of one game hour in milliseconds: 5000 for testing, 3600000 (one real hour) for a live season.
 `BOTS` (default 30) is how many computer traders keep markets moving; `EXPECTED_COMPANIES` (default 60) sizes the markets for the season. Set it to players + bots you expect.
+`SESSION_DAYS` (default 30) is how long a login lasts. `LOGIN_FAILS` (10 per 15 minutes) and `SIGNUPS_PER_HOUR` (10) limit each address; set `TRUST_PROXY=1` behind Caddy so the player's real address is used.
 On Windows, double-click `server/start.bat`.
 
 ## What's in the MVP

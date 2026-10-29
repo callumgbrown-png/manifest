@@ -165,6 +165,80 @@ describe("accounts", () => {
   });
 });
 
+describe("sessions and abuse limits", () => {
+  test("logging out ends the session on the server", async () => {
+    const s = await startServer();
+    try {
+      const a = new Client(s);
+      const { token } = await a.auth("register", "Leaver Co");
+      a.send({ type: "logout" });
+      await a.next(m => m.type === "loggedOut");
+      assert.equal((await a.next(m => m.type === "state")).me, null);
+      assert.equal((await a.cmd({ type: "sell", ship: 2 })).error, "Log in first");
+      const b = new Client(s); await b.ready;
+      b.send({ type: "resume", token });
+      assert.match((await b.next(m => m.type === "authError")).error, /Session expired/);
+      assert.equal((await b.auth("login", "Leaver Co")).type, "auth", "can log in again");
+      a.close(); b.close();
+    } finally { await s.stop(); cleanup(s); }
+  });
+
+  test("sessions expire after SESSION_DAYS", async () => {
+    const s = await startServer({ SESSION_DAYS: String(1.5 / 86400) });   // 1.5 seconds
+    try {
+      const a = new Client(s);
+      const { token } = await a.auth("register", "Brief Co");
+      const b = new Client(s); await b.ready;
+      b.send({ type: "resume", token });
+      assert.ok((await b.next(m => m.type === "state" && m.me)).me);
+      await sleep(1700);
+      const c = new Client(s); await c.ready;
+      c.send({ type: "resume", token });
+      assert.match((await c.next(m => m.type === "authError")).error, /Session expired/);
+      a.close(); b.close(); c.close();
+    } finally { await s.stop(); cleanup(s); }
+  });
+
+  test("too many failed log-ins from one address are blocked, even across reconnects", async () => {
+    const s = await startServer({ LOGIN_FAILS: "3", TRUST_PROXY: "1" });
+    try {
+      const a = new Client(s, { "x-forwarded-for": "10.0.0.1" });
+      await a.auth("register", "Target Co");
+      for (let i = 0; i < 3; i++) assert.equal((await a.auth("login", "Target Co", "guess" + i + "xxxx")).error, "Wrong name or password");
+      const again = new Client(s, { "x-forwarded-for": "10.0.0.1" });
+      assert.match((await again.auth("login", "Target Co")).error, /Too many failed log-ins.*15 minutes/);
+      // Someone else (a different address) isn't affected; only the last forwarded address counts.
+      const other = new Client(s, { "x-forwarded-for": "10.0.0.1, 10.0.0.2" });
+      assert.equal((await other.auth("login", "Target Co")).type, "auth");
+      a.close(); again.close(); other.close();
+    } finally { await s.stop(); cleanup(s); }
+  });
+
+  test("forwarded addresses are ignored unless TRUST_PROXY is set", async () => {
+    const s = await startServer({ LOGIN_FAILS: "1" });
+    try {
+      const a = new Client(s, { "x-forwarded-for": "1.1.1.1" });
+      await a.auth("register", "Proxy Co");
+      await a.auth("login", "Proxy Co", "wrong-password");
+      const b = new Client(s, { "x-forwarded-for": "2.2.2.2" });
+      assert.match((await b.auth("login", "Proxy Co")).error, /Too many failed/, "spoofed header doesn't dodge the limit");
+      a.close(); b.close();
+    } finally { await s.stop(); cleanup(s); }
+  });
+
+  test("sign-ups are limited per address", async () => {
+    const s = await startServer({ SIGNUPS_PER_HOUR: "2" });
+    try {
+      const a = new Client(s);
+      assert.equal((await a.auth("register", "First Co")).type, "auth");
+      assert.equal((await a.auth("register", "Second Co")).type, "auth");
+      assert.match((await a.auth("register", "Third Co")).error, /Too many new companies/);
+      assert.equal((await a.auth("login", "First Co")).type, "auth", "logging in still works");
+      a.close();
+    } finally { await s.stop(); cleanup(s); }
+  });
+});
+
 describe("playing over WebSockets", () => {
   let s: Srv;
   before(async () => { s = await startServer({ TICK_MS: "200" }); });

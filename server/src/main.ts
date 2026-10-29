@@ -19,6 +19,11 @@ const BOTS = Number(process.env.BOTS ?? 30);   // bot companies kept in the worl
 // Market size for the season, set from how many companies you expect (players + bots).
 const EXPECTED = Number(process.env.EXPECTED_COMPANIES ?? 60);
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
+const SESSION_DAYS = Number(process.env.SESSION_DAYS ?? 30);   // log in again after this
+const LOGIN_FAILS = Number(process.env.LOGIN_FAILS ?? 10);     // failed logins per address per 15 minutes
+const SIGNUPS = Number(process.env.SIGNUPS_PER_HOUR ?? 10);    // new companies per address per hour
+// Behind Caddy or another proxy, the player's address is the last X-Forwarded-For entry.
+const TRUST_PROXY = process.env.TRUST_PROXY === "1";
 const DB_PATH = process.env.DB_PATH ?? join(ROOT, "data", "manifest.db");
 
 const rules = JSON.parse(readFileSync(join(ROOT, "config", "rules.json"), "utf8"));
@@ -97,9 +102,32 @@ function newSession(company: number) {
 }
 
 function companyForToken(token: string): number | undefined {
-  const row = db.prepare("SELECT company FROM sessions WHERE token = ?").get(String(token ?? "")) as { company: number } | undefined;
-  return row?.company;
+  const row = db.prepare("SELECT company, created FROM sessions WHERE token = ?").get(String(token ?? "")) as { company: number; created: string } | undefined;
+  if (!row) return undefined;
+  if (Date.now() - Date.parse(row.created) > SESSION_DAYS * 86_400_000) { endSession(token); return undefined; }
+  return row.company;
 }
+
+function endSession(token: string) {
+  db.prepare("DELETE FROM sessions WHERE token = ?").run(String(token ?? ""));
+}
+
+/** Counts events per address in a sliding window, to slow down password guessing and sign-up spam. */
+class Limiter {
+  private hits = new Map<string, number[]>();
+  constructor(private max: number, private windowMs: number) {}
+  private recent(key: string) {
+    const now = Date.now(), list = (this.hits.get(key) ?? []).filter(t => now - t < this.windowMs);
+    if (list.length) this.hits.set(key, list); else this.hits.delete(key);
+    return list;
+  }
+  blocked(key: string) { return this.recent(key).length >= this.max; }
+  /** Minutes until the oldest hit leaves the window. */
+  wait(key: string) { const l = this.recent(key); return l.length ? Math.ceil((this.windowMs - (Date.now() - l[0])) / 60_000) : 0; }
+  hit(key: string) { const l = this.recent(key); l.push(Date.now()); this.hits.set(key, l); }
+}
+const failedLogins = new Limiter(LOGIN_FAILS, 15 * 60_000);
+const signups = new Limiter(SIGNUPS, 60 * 60_000);
 
 // ------------------------------------------------------------ views
 
@@ -215,12 +243,13 @@ function handle(req: IncomingMessage, res: ServerResponse) {
 
 // ------------------------------------------------------------ websockets
 
-interface Client { ws: WebSocket; company?: number; recent: number[] }
+interface Client { ws: WebSocket; ip: string; company?: number; token?: string; recent: number[] }
 const clients = new Set<Client>();
 const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 16 * 1024 });
 
-wss.on("connection", ws => {
-  const client: Client = { ws, recent: [] };
+wss.on("connection", (ws, req) => {
+  const forwarded = TRUST_PROXY ? String(req.headers["x-forwarded-for"] ?? "").split(",").pop()!.trim() : "";
+  const client: Client = { ws, ip: forwarded || req.socket.remoteAddress || "?", recent: [] };
   clients.add(client);
   send(client, { type: "static", dist: engine.dist.map(r => r.map(d => Math.round(d))) });
   send(client, { type: "state", world: publicView(), me: null });
@@ -244,9 +273,16 @@ wss.on("connection", ws => {
 
 function onMessage(client: Client, msg: any) {
   if (msg.type === "register" || msg.type === "login") {
+    const limiter = msg.type === "register" ? signups : failedLogins;
+    if (limiter.blocked(client.ip)) {
+      const what = msg.type === "register" ? "Too many new companies" : "Too many failed log-ins";
+      return send(client, { type: "authError", error: `${what} from your connection. Try again in ${limiter.wait(client.ip)} minutes.` });
+    }
     const r = msg.type === "register" ? register(msg.name, msg.password) : login(msg.name, msg.password);
+    if (msg.type === "register" ? !("error" in r) : "error" in r) limiter.hit(client.ip);
     if ("error" in r) return send(client, { type: "authError", error: r.error });
     client.company = companyForToken(r.token);
+    client.token = r.token;
     send(client, { type: "auth", token: r.token });
     if (msg.type === "register") broadcastSoon(); else sendState(client);
     return;
@@ -254,6 +290,14 @@ function onMessage(client: Client, msg: any) {
   if (msg.type === "resume") {
     client.company = companyForToken(msg.token);
     if (!client.company) return send(client, { type: "authError", error: "Session expired, please log in" });
+    client.token = String(msg.token);
+    return sendState(client);
+  }
+  if (msg.type === "logout") {
+    // Ends this session everywhere: the saved token stops working.
+    if (client.token) endSession(client.token);
+    client.company = client.token = undefined;
+    send(client, { type: "loggedOut" });
     return sendState(client);
   }
   if (msg.type === "cmd") {

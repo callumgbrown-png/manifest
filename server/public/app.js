@@ -47,7 +47,8 @@ function connect() {
     } else if (msg.type === "result") {
       const cb = pendingReq.get(msg.reqId); pendingReq.delete(msg.reqId);
       if (!msg.ok) toast(msg.error, true); else if (cb) cb();
-    } else if (msg.type === "error") toast(msg.error, true);
+    } else if (msg.type === "loggedOut") location.reload();
+    else if (msg.type === "error") toast(msg.error, true);
   };
 }
 
@@ -72,7 +73,12 @@ $("authForm").addEventListener("submit", e => {
   $("authError").textContent = "";
   ws.send(JSON.stringify({ type: authMode, name: $("authName").value, password: $("authPass").value }));
 });
-$("logout").addEventListener("click", () => { store.set("token", null); location.reload(); });
+$("logout").addEventListener("click", () => {
+  store.set("token", null);
+  // Tell the server to end the session, then start over; reload anyway if it doesn't answer.
+  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "logout" }));
+  setTimeout(() => location.reload(), 300);
+});
 
 // ------------------------------------------------------------ game maths (display only; the server decides)
 
@@ -213,7 +219,7 @@ function portPanel() {
     ${orders.length ? `<table><tr><th>Player</th><th>Wants to</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${orders.map(o => `<tr><td>${esc(o.ownerName)}</td><td>${o.side === "sell" ? "sell" : "buy"}</td><td>${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="quiet">None yet.</div>`}
     <h3>Your ships here</h3>
     ${docked.length ? docked.map(shipCard).join("") : `<div class="quiet">None of your ships are docked here.</div>`}
-    ${me && docked.length && me.ships.length < world.rules.maxShips ? `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(world.rules.shipPrice)})</button></div>` : ""}`;
+    ${me && docked.length && !world.seasonOver && me.ships.length < world.rules.maxShips ? `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(world.rules.shipPrice)})</button></div>` : ""}`;
 }
 
 function shipCard(s) {
@@ -223,6 +229,10 @@ function shipCard(s) {
       <div class="quiet">Sailing to ${esc(world.ports[s.dest].name)}, arrives in ${hoursLeft(s)} h</div></div>`;
   }
   const port = world.ports[s.port];
+  if (world.seasonOver) {
+    return `<div class="shipCard"><div class="top"><b>Ship ${s.id}</b>${cargo}</div>
+      <div class="quiet">Docked at ${esc(port.name)}. Trading is closed until the next season starts.</div></div>`;
+  }
   const matching = world.orders.filter(o => o.side === "buy" && o.port === s.port && o.good === s.good && o.owner !== me.id);
   const forSale = world.orders.filter(o => o.side === "sell" && o.port === s.port && o.owner !== me.id
     && (s.qty === 0 || o.good === s.good) && s.qty < world.rules.capacity);
@@ -279,7 +289,8 @@ function ordersPanel() {
   const b = world.rules.bands;
   return `<h2>Orders</h2>
     <div class="quiet">Post a price you'll pay for goods delivered to a port; your cash is held until it fills. To sell at your own price, use "List for sale" on a docked ship with cargo. Orders that cross fill automatically.</div>
-    ${me ? `<h3>Post an order</h3>
+    ${me && world.seasonOver ? `<div class="est">Trading is closed until the next season starts.</div>` : ""}
+    ${me && !world.seasonOver ? `<h3>Post an order</h3>
     <div class="row"><select id="oPort">${world.ports.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}" ${p.id === selectedPort ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
     <div class="row"><select id="oGood" style="width:auto">${GOOD_NAMES.map(g => `<option>${g}</option>`).join("")}</select>
       <input id="oQty" type="number" min="1" max="1000" value="100" style="width:90px" title="Quantity">
@@ -287,7 +298,7 @@ function ordersPanel() {
       <button data-act="placeOrder">Post</button></div>
     <div class="est">Grain ${b.grain.floor}–${b.grain.ceiling}, fuel ${b.fuel.floor}–${b.fuel.ceiling} per unit.</div>` : ""}
     <h3>Your orders</h3>
-    ${mine.length ? `<table>${mine.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${o.side === "sell" ? "selling" : "buying"} ${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td><td><button class="link" data-act="cancelOrder" data-order="${o.id}">Cancel</button></td></tr>`).join("")}</table>` : `<div class="quiet">None.</div>`}
+    ${mine.length ? `<table>${mine.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${o.side === "sell" ? "selling" : "buying"} ${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td><td>${world.seasonOver ? "" : `<button class="link" data-act="cancelOrder" data-order="${o.id}">Cancel</button>`}</td></tr>`).join("")}</table>` : `<div class="quiet">None.</div>`}
     <h3>All open orders</h3>
     ${others.length ? `<table><tr><th>Port</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${others.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${o.side === "sell" ? "for sale" : "wanted"}: ${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="quiet">No open orders.</div>`}`;
 }

@@ -235,6 +235,7 @@ test("admin page shows health and changes live rules", { skip: SKIP, timeout: 60
   await page.waitForFunction(() => document.querySelectorAll(".tile").length === 7);
   assert.ok((await page.textContent("#tiles"))!.includes("Companies"));
   assert.equal(await page.inputValue("#tax"), "0.07");
+  assert.match((await page.textContent("#seasonInfo"))!, /^Day \d+ of 56\.$/);
   // A blank box is left alone instead of being set to zero.
   await page.fill("#upkeep", "");
   await page.fill("#tax", "0.06");
@@ -262,4 +263,45 @@ test("past seasons page lists finished seasons", { skip: SKIP, timeout: 60000 },
   await page.click("text=Back to the game");
   await page.waitForURL(s.url + "/");
   assert.deepEqual(errors, []);
+});
+
+test("season end closes trading in the client; admin starts the next season", { skip: SKIP, timeout: 120000 }, async () => {
+  const t = await startServer({ TICK_MS: "2" });
+  try {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    page.on("pageerror", (e: Error) => errors.push(`season: ${e.message}`));
+    await page.goto(t.url);
+    await page.fill("#authName", "Last Season"); await page.fill("#authPass", "password123");
+    await page.click('button[data-mode="register"]');
+    await page.waitForFunction(() => document.getElementById("hName")!.textContent === "Last Season");
+    await page.waitForFunction(() => document.getElementById("hClock")!.textContent === "Season over", null, { timeout: 60000 });
+    assert.match((await page.textContent("#seasonBanner"))!, /The season has ended\. Last Season finished first/);
+    await page.click('#tabs button[data-tab="fleet"]');
+    await page.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("Trading is closed"));
+    assert.equal(await page.locator("#panel button[data-act]").count(), 0, "no trading buttons");
+    await page.click('#tabs button[data-tab="orders"]');
+    assert.equal(await page.locator("#oPort").count(), 0, "no order form");
+
+    const admin = await ctx.newPage();
+    await admin.goto(t.url + "/admin");
+    await admin.fill("#token", ADMIN); await admin.click("#save");
+    await admin.waitForFunction(() => /Season over after 56 days/.test(document.getElementById("seasonInfo")!.textContent!));
+    // Cancelling the confirmation does nothing.
+    admin.once("dialog", (d: any) => d.dismiss());
+    await admin.click("#newSeason");
+    await admin.waitForTimeout(300);
+    assert.deepEqual(await (await fetch(t.url + "/api/seasons")).json(), []);
+    admin.once("dialog", (d: any) => d.accept());
+    await admin.click("#newSeason");
+    await admin.waitForFunction(() => document.getElementById("err")!.textContent === "Season 2 has started.");
+    // The player is asked to log in again and gets a fresh company.
+    await page.waitForFunction(() => document.getElementById("authError")!.textContent!.includes("A new season has started"));
+    await page.fill("#authName", "Last Season"); await page.fill("#authPass", "password123");
+    await page.click('button[data-mode="login"]');
+    await page.waitForFunction(() => document.getElementById("hCash")!.textContent === "10,000");
+    // (With 2 ms hours the new season can already be over again, so the banner isn't checked here.)
+    await ctx.close();
+    assert.deepEqual(errors, []);
+  } finally { await t.stop(); cleanup(t); }
 });

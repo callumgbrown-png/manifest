@@ -28,6 +28,10 @@
   <label style="margin:0">Port fee per docking<input id="portFee" type="number" step="5"></label>
 </div>
 <div class="row"><button id="apply">Apply changes</button></div>
+<h3>Season</h3>
+<div class="quiet" id="seasonInfo">–</div>
+<div class="quiet">Starting a new season saves the final standings to the past-seasons page, then gives every account a fresh company. Live controls go back to the values in <code>config/rules.json</code>.</div>
+<div class="row"><button id="newSeason" class="secondary">Archive and start a new season</button></div>
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
@@ -48,6 +52,8 @@ async function load() {
     ["Companies in debt", m.inDebt, m.companies && m.inDebt / m.companies > 0.1],
   ];
   $("tiles").innerHTML = tiles.map(([k, v, warn]) => `<div class="tile ${warn ? "warn" : ""}"><span>${k}</span><b>${v}</b></div>`).join("");
+  $("seasonInfo").textContent = m.seasonOver ? `Season over after ${m.seasonDays} days. Trading is closed until you start a new season.`
+    : `Day ${m.day} of ${m.seasonDays}.`;
   if (first) { $("tax").value = m.tax; $("upkeep").value = m.upkeep; $("portFee").value = m.portFee; first = false; }
 }
 $("apply").onclick = async () => {
@@ -60,6 +66,15 @@ $("apply").onclick = async () => {
   const res = await r.json();
   await load();   // refresh first: load() clears the message line
   $("err").textContent = res.ok ? "Saved." : res.error;
+};
+$("newSeason").onclick = async () => {
+  if (!token) { $("err").textContent = "Enter the admin token first."; return; }
+  if (!confirm("End this season now and start a new one? Every company is reset. This can't be undone.")) return;
+  const r = await fetch("/api/admin/new-season", { method: "POST", headers: { "x-admin-token": token } });
+  const res = await r.json();
+  first = true;   // show the new season's rules in the controls
+  await load();
+  $("err").textContent = res.ok ? `Season ${res.season} has started.` : res.error;
 };
 load(); setInterval(load, 10000);
 </script>
