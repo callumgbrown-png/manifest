@@ -185,8 +185,8 @@ function portPanel() {
     <h3>Market</h3>
     <table><tr><th>Good</th><th class="num">Price</th><th class="num">Stock</th><th class="num">Inbound</th></tr>${rows}</table>
     <div class="est">${p.emptyInbound} empty ship${p.emptyInbound === 1 ? "" : "s"} heading here to load. Inbound cargo will push prices down when it lands.</div>
-    <h3>Buy orders here</h3>
-    ${orders.length ? `<table><tr><th>Buyer</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${orders.map(o => `<tr><td>${esc(o.ownerName)}</td><td>${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="quiet">None yet.</div>`}
+    <h3>Player orders here</h3>
+    ${orders.length ? `<table><tr><th>Player</th><th>Wants to</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${orders.map(o => `<tr><td>${esc(o.ownerName)}</td><td>${o.side === "sell" ? "sell" : "buy"}</td><td>${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="quiet">None yet.</div>`}
     <h3>Your ships here</h3>
     ${docked.length ? docked.map(shipCard).join("") : `<div class="quiet">None of your ships are docked here.</div>`}
     ${me && docked.length && me.ships.length < world.rules.maxShips ? `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(world.rules.shipPrice)})</button></div>` : ""}`;
@@ -199,13 +199,21 @@ function shipCard(s) {
       <div class="quiet">Sailing to ${esc(world.ports[s.dest].name)}, arrives in ${hoursLeft(s)} h</div></div>`;
   }
   const port = world.ports[s.port];
-  const matching = world.orders.filter(o => o.port === s.port && o.good === s.good && o.owner !== me.id);
+  const matching = world.orders.filter(o => o.side === "buy" && o.port === s.port && o.good === s.good && o.owner !== me.id);
+  const forSale = world.orders.filter(o => o.side === "sell" && o.port === s.port && o.owner !== me.id
+    && (s.qty === 0 || o.good === s.good) && s.qty < world.rules.capacity);
   const dests = world.ports.filter(p => p.id !== s.port).sort((a, b) => a.name.localeCompare(b.name));
   return `<div class="shipCard" data-ship="${s.id}">
     <div class="top"><b>Ship ${s.id}</b>${cargo}</div>
     <div class="quiet">Docked at ${esc(port.name)}</div>
     ${s.qty > 0 ? `<div class="row"><button data-act="sell" data-ship="${s.id}">Sell to market at ${port.prices[s.good].toFixed(2)}</button>
-      ${matching.map(o => `<button class="secondary" data-act="fill" data-ship="${s.id}" data-order="${o.id}">Fill ${esc(o.ownerName)}'s order at ${o.price.toFixed(2)}</button>`).join("")}</div>` : ""}
+      ${matching.map(o => `<button class="secondary" data-act="fill" data-ship="${s.id}" data-order="${o.id}">Fill ${esc(o.ownerName)}'s order at ${o.price.toFixed(2)}</button>`).join("")}</div>
+      <div class="row"><input data-field="sellQty" type="number" min="1" max="${s.qty}" value="${s.qty}" style="width:80px" title="Quantity">
+        <input data-field="sellPrice" type="number" step="0.5" value="${(port.prices[s.good] * 1.15).toFixed(1)}" style="width:90px" title="Your price per unit">
+        <button class="secondary" data-act="listSell" data-ship="${s.id}">List for sale here</button></div>
+      <div class="est">Listing leaves the goods at this port for other players to buy, and frees your ship.</div>` : ""}
+    ${forSale.length ? `<h3>For sale here</h3>${forSale.map(o => `<div class="row"><span>${o.qty} ${GOOD_NAMES[o.good]} from ${esc(o.ownerName)} at ${o.price.toFixed(2)}</span>
+      <button class="secondary" data-act="buyOrder" data-ship="${s.id}" data-order="${o.id}" data-qty="${Math.min(o.qty, world.rules.capacity - s.qty)}">Buy ${Math.min(o.qty, world.rules.capacity - s.qty)}</button></div>`).join("")}` : ""}
     <label>Destination<select data-field="dest">${dests.map(p => `<option value="${p.id}">${esc(p.name)} (≈${Math.ceil(distance(s.port, p.id) / world.rules.speed)} h)</option>`).join("")}</select></label>
     ${s.qty === 0 ? `<div class="row" style="margin-top:4px">
       <select data-field="good" style="width:auto"><option value="">Sail empty</option>${GOOD_NAMES.map((g, i) => `<option value="${g}">Load ${g} at ${port.prices[i].toFixed(2)}</option>`).join("")}</select>
@@ -245,8 +253,8 @@ function ordersPanel() {
   const mine = me ? world.orders.filter(o => o.owner === me.id) : [];
   const others = world.orders.filter(o => !me || o.owner !== me.id);
   const b = world.rules.bands;
-  return `<h2>Buy orders</h2>
-    <div class="quiet">Post a price you'll pay for goods delivered to a port. Your cash is held until the order is filled or cancelled.</div>
+  return `<h2>Orders</h2>
+    <div class="quiet">Post a price you'll pay for goods delivered to a port; your cash is held until it fills. To sell at your own price, use "List for sale" on a docked ship with cargo. Orders that cross fill automatically.</div>
     ${me ? `<h3>Post an order</h3>
     <div class="row"><select id="oPort">${world.ports.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}" ${p.id === selectedPort ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
     <div class="row"><select id="oGood" style="width:auto">${GOOD_NAMES.map(g => `<option>${g}</option>`).join("")}</select>
@@ -255,9 +263,9 @@ function ordersPanel() {
       <button data-act="placeOrder">Post</button></div>
     <div class="est">Grain ${b.grain.floor}–${b.grain.ceiling}, fuel ${b.fuel.floor}–${b.fuel.ceiling} per unit.</div>` : ""}
     <h3>Your orders</h3>
-    ${mine.length ? `<table>${mine.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td><td><button class="link" data-act="cancelOrder" data-order="${o.id}">Cancel</button></td></tr>`).join("")}</table>` : `<div class="quiet">None.</div>`}
+    ${mine.length ? `<table>${mine.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${o.side === "sell" ? "selling" : "buying"} ${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td><td><button class="link" data-act="cancelOrder" data-order="${o.id}">Cancel</button></td></tr>`).join("")}</table>` : `<div class="quiet">None.</div>`}
     <h3>All open orders</h3>
-    ${others.length ? `<table><tr><th>Port</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${others.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="quiet">No open orders.</div>`}`;
+    ${others.length ? `<table><tr><th>Port</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${others.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${o.side === "sell" ? "for sale" : "wanted"}: ${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="quiet">No open orders.</div>`}`;
 }
 
 function boardPanel() {
@@ -280,6 +288,12 @@ function bindPanel() {
     if (act === "scrap") command({ type: "scrapShip", ship }, () => toast("Ship scrapped"));
     if (act === "buyShip") command({ type: "buyShip", port: selectedPort }, () => toast("New ship bought"));
     if (act === "cancelOrder") command({ type: "cancelOrder", order: Number(btn.dataset.order) }, () => toast("Order cancelled"));
+    if (act === "listSell") {
+      const card = btn.closest(".shipCard");
+      command({ type: "placeSell", ship, qty: Number(card.querySelector("[data-field=sellQty]").value),
+        price: Number(card.querySelector("[data-field=sellPrice]").value) }, () => toast("Listed for sale"));
+    }
+    if (act === "buyOrder") command({ type: "buyFromOrder", ship, order: Number(btn.dataset.order), qty: Number(btn.dataset.qty) }, () => toast("Bought"));
     if (act === "placeOrder") command({ type: "placeOrder", port: Number($("oPort").value), good: $("oGood").value,
       qty: Number($("oQty").value), price: Number($("oPrice").value) }, () => toast("Order posted"));
     if (act === "sail") {

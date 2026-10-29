@@ -34,7 +34,14 @@ export interface Ship {
   good: number | null; qty: number; cost: number;
 }
 export interface Company { id: number; name: string; cash: number; ships: number[] }
-export interface Order { id: number; owner: number; port: number; good: number; qty: number; price: number }
+/** A buy order holds cash in escrow; a sell order holds goods at the port. */
+export interface Order {
+  id: number; owner: number; port: number; good: number; qty: number; price: number;
+  side: "buy" | "sell";
+  /** Sell orders only: what the seller paid for the goods still listed. */
+  cost?: number;
+}
+const MAX_OPEN_ORDERS = 10;
 
 export type Command =
   | { type: "register"; name: string; startPort: number }
@@ -43,7 +50,9 @@ export type Command =
   | { type: "buyShip"; company: number; port: number }
   | { type: "scrapShip"; company: number; ship: number }
   | { type: "placeOrder"; company: number; port: number; good: Good; qty: number; price: number }
-  | { type: "cancelOrder"; company: number; order: number }
+  | { type: "placeSell"; company: number; ship: number; qty: number; price: number }
+  | { type: "buyFromOrder"; company: number; ship: number; order: number; qty: number }
+  | { type: "cancelOrder"; company: number; order: number; ship?: number }
   | { type: "adminSet"; tax?: number; upkeep?: number; portFee?: number };
 
 export type Result = { ok: true; id?: number } | { ok: false; error: string };
@@ -123,7 +132,9 @@ export class Engine {
       case "buyShip": return this.buyShip(cmd.company, cmd.port);
       case "scrapShip": return this.scrapShip(cmd.company, cmd.ship);
       case "placeOrder": return this.placeOrder(cmd);
-      case "cancelOrder": return this.cancelOrder(cmd.company, cmd.order);
+      case "placeSell": return this.placeSell(cmd);
+      case "buyFromOrder": return this.buyFromOrder(cmd);
+      case "cancelOrder": return this.cancelOrder(cmd.company, cmd.order, cmd.ship);
       case "adminSet": return this.adminSet(cmd);
     }
   }
@@ -199,7 +210,7 @@ export class Engine {
     const tax = this.rules.fees.trade_tax_rate;
     if (orderId !== undefined) {
       const o = this.orders.get(orderId);
-      if (!o || o.port !== s.port || o.good !== s.good) return fail("order doesn't match this ship");
+      if (!o || o.side !== "buy" || o.port !== s.port || o.good !== s.good) return fail("order doesn't match this ship");
       if (o.owner === company) return fail("can't fill your own order");
       const fill = Math.min(o.qty, s.qty);
       const gross = fill * o.price;
@@ -256,16 +267,112 @@ export class Engine {
     if (!(qty > 0 && qty <= 1000)) return fail("quantity must be 1 to 1000");
     if (!(price >= band.floor && price <= band.ceiling)) return fail(`price must be between ${band.floor} and ${band.ceiling}`);
     if (qty * price > c.cash) return fail("not enough cash to cover the order");
-    c.cash -= qty * price;   // held in escrow until filled or cancelled
+    if (this.openOrders(c.id) >= MAX_OPEN_ORDERS) return fail(`you can have at most ${MAX_OPEN_ORDERS} open orders`);
+    // Fill first from cheaper sell orders already at this port (cheapest first).
+    // The goods are delivered to the buyer, who uses them, as with any filled buy order.
+    let left = qty;
+    const tax = this.rules.fees.trade_tax_rate;
+    for (const o of this.matching(cmd.port, g, "sell", c.id).filter(o => o.price <= price)) {
+      if (left <= 0) break;
+      const fill = Math.min(left, o.qty);
+      c.cash -= fill * o.price;
+      this.companies.get(o.owner)!.cash += fill * o.price * (1 - tax);
+      this.shrink(o, fill);
+      left -= fill;
+    }
+    if (left === 0) return { ok: true };
+    c.cash -= left * price;   // held in escrow until filled or cancelled
     const id = this.nextId++;
-    this.orders.set(id, { id, owner: c.id, port: cmd.port, good: g, qty, price });
+    this.orders.set(id, { id, owner: c.id, port: cmd.port, good: g, qty: left, price, side: "buy" });
     return { ok: true, id };
   }
 
-  private cancelOrder(company: number, orderId: number): Result {
+  /** List cargo from a docked ship for sale at this port. The ship is then free to sail. */
+  private placeSell(cmd: Extract<Command, { type: "placeSell" }>): Result {
+    const own = this.ownShip(cmd.company, cmd.ship);
+    if (typeof own === "string") return fail(own);
+    const { c, s } = own;
+    if (s.dest !== null) return fail("ship is at sea");
+    if (s.qty <= 0 || s.good === null) return fail("nothing to sell");
+    const qty = Math.floor(cmd.qty), price = Math.round(cmd.price * 100) / 100;
+    if (!(qty > 0 && qty <= s.qty)) return fail("quantity must be between 1 and the cargo on board");
+    const band = this.rules.commodities[GOODS[s.good]];
+    if (!(price >= band.floor && price <= band.ceiling)) return fail(`price must be between ${band.floor} and ${band.ceiling}`);
+    if (this.openOrders(c.id) >= MAX_OPEN_ORDERS) return fail(`you can have at most ${MAX_OPEN_ORDERS} open orders`);
+    const g = s.good, tax = this.rules.fees.trade_tax_rate;
+    const unitCost = s.cost / s.qty;
+    s.qty -= qty; s.cost -= unitCost * qty;
+    if (s.qty === 0) { s.good = null; s.cost = 0; }
+    // Fill first against higher buy orders at this port (best price first).
+    let left = qty;
+    for (const o of this.matching(s.port, g, "buy", c.id).filter(o => o.price >= price)) {
+      if (left <= 0) break;
+      const fill = Math.min(left, o.qty);
+      c.cash += fill * o.price * (1 - tax);   // buyer's cash is already in escrow
+      this.shrink(o, fill);
+      left -= fill;
+    }
+    if (left === 0) return { ok: true };
+    const id = this.nextId++;
+    this.orders.set(id, { id, owner: c.id, port: s.port, good: g, qty: left, price, side: "sell", cost: unitCost * left });
+    return { ok: true, id };
+  }
+
+  /** Buy goods from another player's sell order straight onto a docked ship. */
+  private buyFromOrder(cmd: Extract<Command, { type: "buyFromOrder" }>): Result {
+    const own = this.ownShip(cmd.company, cmd.ship);
+    if (typeof own === "string") return fail(own);
+    const { c, s } = own;
+    const o = this.orders.get(cmd.order);
+    if (!o || o.side !== "sell") return fail("no such sell order");
+    if (o.owner === c.id) return fail("can't buy from your own order");
+    if (s.dest !== null || s.port !== o.port) return fail("your ship must be docked at that port");
+    if (s.qty > 0 && s.good !== o.good) return fail("ship is carrying a different good");
+    const qty = Math.floor(cmd.qty);
+    if (!(qty > 0 && qty <= o.qty)) return fail("quantity must be between 1 and the amount listed");
+    if (s.qty + qty > this.rules.ship.capacity) return fail("over capacity");
+    const pay = qty * o.price;
+    if (pay > c.cash) return fail("not enough cash");
+    c.cash -= pay;
+    this.companies.get(o.owner)!.cash += pay * (1 - this.rules.fees.trade_tax_rate);
+    s.good = o.good; s.qty += qty; s.cost += pay;
+    this.shrink(o, qty);
+    return { ok: true };
+  }
+
+  private openOrders(company: number) {
+    let n = 0;
+    for (const o of this.orders.values()) if (o.owner === company) n++;
+    return n;
+  }
+
+  /** Other companies' orders on one side at a port, best price first, oldest first on ties. */
+  private matching(port: number, good: number, side: "buy" | "sell", notOwner: number): Order[] {
+    return [...this.orders.values()]
+      .filter(o => o.port === port && o.good === good && o.side === side && o.owner !== notOwner)
+      .sort((a, b) => (side === "buy" ? b.price - a.price : a.price - b.price) || a.id - b.id);
+  }
+
+  private shrink(o: Order, qty: number) {
+    if (o.cost !== undefined) o.cost *= (o.qty - qty) / o.qty;
+    o.qty -= qty;
+    if (o.qty <= 0) this.orders.delete(o.id);
+  }
+
+  private cancelOrder(company: number, orderId: number, shipId?: number): Result {
     const o = this.orders.get(orderId);
     if (!o || o.owner !== company) return fail("not your order");
-    this.companies.get(company)!.cash += o.qty * o.price;
+    if (o.side === "buy") {
+      this.companies.get(company)!.cash += o.qty * o.price;
+    } else {
+      // Unsold goods go back onto one of your ships docked at that port.
+      const ships = this.companies.get(company)!.ships.map(id => this.ships.get(id)!)
+        .filter(s => s.dest === null && s.port === o.port && (s.qty === 0 || s.good === o.good)
+          && s.qty + o.qty <= this.rules.ship.capacity && (shipId === undefined || s.id === shipId));
+      const s = ships[0];
+      if (!s) return fail("dock a ship with room for the goods at that port to take them back");
+      s.good = o.good; s.qty += o.qty; s.cost += o.cost ?? 0;
+    }
     this.orders.delete(orderId);
     return { ok: true };
   }
@@ -328,7 +435,8 @@ export class Engine {
   netWorth(c: Company): number {
     let w = c.cash;
     for (const id of c.ships) w += this.rules.ship.price * 0.5 + this.ships.get(id)!.cost;
-    for (const o of this.orders.values()) if (o.owner === c.id) w += o.qty * o.price;
+    for (const o of this.orders.values())
+      if (o.owner === c.id) w += o.side === "buy" ? o.qty * o.price : (o.cost ?? 0);
     return w;
   }
 
@@ -355,7 +463,7 @@ export class Engine {
       companies: comps.length,
       ships: this.ships.size,
       moneySupply: Math.round(comps.reduce((a, c) => a + c.cash, 0)),
-      escrow: Math.round([...this.orders.values()].reduce((a, o) => a + o.qty * o.price, 0)),
+      escrow: Math.round([...this.orders.values()].filter(o => o.side === "buy").reduce((a, o) => a + o.qty * o.price, 0)),
       top1pctShare: total > 0 ? worth.slice(0, k).reduce((a, b) => a + Math.max(0, b), 0) / total : 0,
       inDebt: comps.filter(c => c.cash < 0).length,
       tax: this.rules.fees.trade_tax_rate,

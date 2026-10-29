@@ -230,7 +230,7 @@ wss.on("connection", ws => {
     }
     if (msg.type === "cmd") {
       if (!client.company) return send(client, { type: "result", reqId: msg.reqId, ok: false, error: "Log in first" });
-      const allowed = ["sail", "sell", "buyShip", "scrapShip", "placeOrder", "cancelOrder"];
+      const allowed = ["sail", "sell", "buyShip", "scrapShip", "placeOrder", "placeSell", "buyFromOrder", "cancelOrder"];
       if (!msg.cmd || !allowed.includes(msg.cmd.type)) return send(client, { type: "result", reqId: msg.reqId, ok: false, error: "Unknown command" });
       const cmd = { ...msg.cmd, company: client.company } as Command;  // never trust a company id from the client
       const r = commit(cmd);

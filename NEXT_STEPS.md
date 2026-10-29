@@ -13,7 +13,7 @@ Work top to bottom. Tick items off here and commit with each finished step.
 - [x] Make `server/test/bots.test.ts` pass (`cd server && npm test`), then merge this branch into `main`. Done: 12/12 tests pass; merged. Work on `main` from now on.
 
 ## After that
-- [ ] Sell orders (players post goods for sale at a port) with matching against buy orders
+- [x] Sell orders (players post goods for sale at a port) with matching against buy orders. Done: "List for sale" on a docked ship with cargo; goods wait at the port and the ship is freed; other players buy onto their ships; crossing buy and sell orders fill automatically at the resting order's price; max 10 open orders per company; cancelling a sell needs a docked ship with room. 6 new tests; checked in a browser with two players.
 - [ ] Season results page showing past seasons from the `seasons` table
 - [ ] Email field on sign-up (optional) for playtest invites
 - [ ] Check progression feels rewarding: median company only grows ~16k to ~17k a season; propose a fix in this file rather than changing rules silently
