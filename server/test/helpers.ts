@@ -84,7 +84,12 @@ export class Client {
     const p = this.next(m => m.type === "auth" || m.type === "authError");
     this.send({ type, name, password });
     const r = await p;
-    if (r.type === "auth") await this.next(m => m.type === "state" && m.me);
+    // The state can arrive in the same read as the auth reply, before a new
+    // waiter is registered, so look at messages already received first.
+    if (r.type === "auth") {
+      const isMe = (m: any) => m.type === "state" && m.me;
+      if (!this.msgs.slice(this.msgs.indexOf(r) + 1).some(isMe)) await this.next(isMe);
+    }
     return r;
   }
 
