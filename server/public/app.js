@@ -269,7 +269,7 @@ function ordersPanel() {
 }
 
 function boardPanel() {
-  return `<h2>Leaderboard</h2><div class="quiet">Ranked by net worth: cash, half the value of ships, cargo and open orders. Companies marked bot are computer traders that keep the markets moving.</div>
+  return `<h2>Leaderboard</h2><div class="quiet">Ranked by net worth: cash, half the value of ships, cargo and open orders. Companies marked bot are computer traders that keep the markets moving. <a href="/seasons" style="color:var(--accent)">Past seasons</a></div>
     <h3>Top companies</h3>
     <table><tr><th>#</th><th>Company</th><th class="num">Ships</th><th class="num">Net worth</th></tr>
     ${world.leaderboard.map((c, i) => `<tr${me && c.id === me.id ? ' style="color:var(--mine)"' : ""}><td>${i + 1}</td><td>${esc(c.name)}${c.bot ? ' <span class="tag">bot</span>' : ""}</td><td class="num">${c.ships}</td><td class="num">${fmt(c.worth)}</td></tr>`).join("")}</table>`;

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manifest seasons</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body { padding: 24px 16px; max-width: 760px; margin: 0 auto; }
+  .season { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 14px 0; }
+  .first td { color: var(--grain); font-weight: 600; }
+</style>
+</head>
+<body>
+<a href="/" class="quiet">&larr; Back to the game</a>
+<h2 style="margin-top:14px">Past seasons</h2>
+<div class="quiet">Final standings, top 10 of each season.</div>
+<div id="list"><p class="quiet">Loading…</p></div>
+<script>
+"use strict";
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+fetch("/api/seasons").then(r => r.json()).then(seasons => {
+  const list = document.getElementById("list");
+  if (!seasons.length) { list.innerHTML = '<p class="quiet">No season has finished yet.</p>'; return; }
+  list.innerHTML = seasons.map(s => `<div class="season"><h3 style="margin-top:0">Season ${s.id} · ended ${new Date(s.ended).toLocaleDateString("en-IE", { day: "numeric", month: "long", year: "numeric" })}</h3>
+    <table><tr><th>#</th><th>Company</th><th class="num">Net worth</th></tr>
+    ${s.top.map((c, i) => `<tr class="${i === 0 ? "first" : ""}"><td>${i + 1}</td><td>${esc(c.name)}${c.bot ? ' <span class="tag">bot</span>' : ""}</td><td class="num">${Math.round(c.worth).toLocaleString("en-IE")}</td></tr>`).join("")}
+    </table></div>`).join("");
+}).catch(() => { document.getElementById("list").innerHTML = '<p class="error">Could not load seasons.</p>'; });
+</script>
+</body>
+</html>

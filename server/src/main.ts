@@ -164,6 +164,10 @@ function json(res: ServerResponse, code: number, body: unknown) {
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
   if (url.pathname === "/api/health") return json(res, 200, { ok: true, tick: engine.tick });
+  if (url.pathname === "/api/seasons") {
+    const rows = db.prepare("SELECT id, ended, results FROM seasons ORDER BY id DESC").all() as { id: number; ended: string; results: string }[];
+    return json(res, 200, rows.map(r => ({ id: r.id, ended: r.ended, top: (JSON.parse(r.results) as unknown[]).slice(0, 10) })));
+  }
   if (url.pathname === "/api/admin/metrics") {
     if (!isAdmin(req)) return json(res, 403, { error: "admin token required" });
     return json(res, 200, engine.metrics());
@@ -187,7 +191,7 @@ const server = createServer((req, res) => {
     return json(res, 200, newSeason());
   }
   // Static files
-  let path = url.pathname === "/" ? "/index.html" : url.pathname === "/admin" ? "/admin.html" : url.pathname;
+  let path = url.pathname === "/" ? "/index.html" : url.pathname === "/admin" ? "/admin.html" : url.pathname === "/seasons" ? "/seasons.html" : url.pathname;
   path = normalize(path).replace(/^(\.\.[/\\])+/, "");
   const file = join(PUBLIC, path);
   if (!file.startsWith(PUBLIC) || !existsSync(file)) { res.writeHead(404); return res.end("not found"); }
