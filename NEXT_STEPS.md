@@ -1,6 +1,6 @@
 # Next steps (work queue for scheduled sessions)
 
-**All queued work done** apart from items waiting on Dave's answers below.
+Queued UI work is under "Next: UI" at the bottom. Items under "Ideas" need Dave's go-ahead first.
 
 ## Questions for Dave
 - **Collect emails at sign-up?** Storing emails is personal data under GDPR, so it needs a short privacy notice (what's stored, why, how to delete it) and a way to remove an account. Options: (a) don't store emails in the game; collect tester contacts through the Discord sign-up instead, (b) add an optional email field plus a privacy notice and a "delete my account" button. Recommendation: (a) for the closed test. Reply with a choice and it gets built.
@@ -44,3 +44,21 @@ Work top to bottom. Tick items off here and commit with each finished step.
 - [x] Bots less accurate with their trades (Dave, 29 Oct). Each bot now misjudges sale prices by up to `botError` either way (a difficulty preset: easy 12%, normal 8%, hard 4%); the mistake differs per bot, port and good and drifts every 12 hours, so bots take imperfect routes and sometimes sell at a loss instead of all finding the perfect trade. 30 bots, one season, normal: top bot ~15,400 (was ~21,600), money supply +7% over the season (was +25%), trip count unchanged. 20%+ was tried and rejected: most bots ended near broke and money supply halved. Applies to running worlds at once (bot choices are logged commands, so replays are unaffected).
 - [x] Flaky server tests (found by the scheduled run, 29 Oct; not a queued item). On a busy machine 3–5 tests in `test/server.test.ts` timed out (accounts, log-out, failed log-ins, sign-up limits). Cause was in the test helper, not the game: `Client.auth()` waited for the `auth` reply and only then started listening for the `state` that follows, so when both arrived in one read the `state` was missed. It now checks messages already received first. 94/94 pass, including 4 runs under heavy CPU load that failed before.
 - [x] Check progression feels rewarding: median company only grows ~16k to ~17k a season; propose a fix in this file rather than changing rules silently. Done: question added for Dave above.
+- [x] Fix the first five minutes (Dave, 29 Oct). Found by playing a new company: about half of ports have no paying trip at any moment (61% in week one), new companies started at a random port, and the trip form defaulted to "Sail empty" to the alphabetically first port (one click cost the test player 765). Done, with tests:
+  - New players start at a random port from the better half of ports where a trip pays now (`pickStartPort` in `server/src/bots.ts`; also used when a new season re-registers players). Test: picked port pays >95% of checks across a season.
+  - The trip form starts on the best trip; if nothing pays, on the suggested move; otherwise the nearest port. Never the first port alphabetically.
+  - When nothing pays, "Best trips" suggests a move: sail empty to the port whose best trip, minus the cost of getting there, pays most per hour (at least +50 net); one click fills the form.
+  - Empty sailing shows its cost in red ("Sailing empty costs about 765").
+  - Phone: your ship's card comes first on the Port tab, above the market; header about half the height (stats on one row, Log out beside the pills).
+  - Browser tests updated for the new defaults. The estimate test now only checks the estimate never overpromises: in the bot-free test world, prices can climb a lot while a ship is at sea, so real profit often beats the estimate.
+
+## Next: UI
+- [ ] Pick a destination by tapping a port on the map while a docked ship's card is open (fills the destination and updates the estimate).
+- [ ] Short first-time guide (3-4 steps: your ship, buy where it's cheap, sail where it's needed, sell) shown once; "How to play" link on the sign-in card.
+- [ ] Make "Found a company" the primary sign-in button.
+- [ ] Pin the player's own rank at the top of the leaderboard ("You: 24th of 31").
+- [ ] Notify when a ship docks, including with the tab closed (browser notifications, opt-in).
+- [ ] Trip log (each finished trip and its profit) and a cash-over-time chart on the Fleet tab.
+
+## Ideas (ask Dave before building; they change the economy or cost money)
+- More goods beyond grain and fuel; delivery contracts with a bonus; season goals or achievements; events (storm closes a lane, shortage spikes a price); chat or Discord link, later player corporations; how the game makes money (cosmetics or a supporter pack, nothing that buys an edge).

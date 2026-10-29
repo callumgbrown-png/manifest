@@ -68,3 +68,22 @@ test("difficulty presets set how far off bots' price guesses are", () => {
   e.apply({ type: "setDifficulty", level: "hard" });
   assert.ok(e.botError < rules.difficulty.presets.easy.botError);
 });
+
+test("new players start where a trip pays, all season", async () => {
+  const { pickStartPort, bestStartTrip } = await import("../src/bots.ts");
+  const e = new Engine(rules, map, 60);
+  const ids: number[] = [];
+  for (let i = 0; i < 30; i++) ids.push((e.apply({ type: "register", name: botName(i), startPort: (i * 7) % e.n }) as any).id);
+  let seed = 1;
+  const random = (n: number) => { seed = (seed * 48271) % 2147483647; return seed % n; };
+  let checks = 0, good = 0, randomGood = 0;
+  while (!e.seasonOver) {
+    e.advance();
+    runBots(e, ids, (c: any) => e.apply(c), { minProfit: e.botMinProfit, error: e.botError });
+    if (e.tick % 12) continue;
+    checks++;
+    if (bestStartTrip(e, pickStartPort(e, random)) > 0) good++;
+    if (bestStartTrip(e, random(e.n)) > 0) randomGood++;
+  }
+  assert.ok(good / checks > 0.95, `picked start port pays ${good}/${checks} times (random port: ${randomGood})`);
+});

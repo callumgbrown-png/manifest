@@ -112,3 +112,32 @@ export function runBots(engine: Engine, botIds: number[], commit: (c: Command) =
       commit({ type: "buyShip", company: id, port: docked.port });
   }
 }
+
+/** Best profit a fresh company (empty ship, starting cash) could make on one trip from port p, at today's prices. */
+export function bestStartTrip(engine: Engine, p: number, cash = engine.rules.company.start_cash) {
+  const tax = engine.rules.fees.trade_tax_rate, fee = engine.rules.fees.port_fee_per_docking, cap = engine.rules.ship.capacity;
+  const { cargo } = engine.inbound();
+  let best = -Infinity;
+  for (let g = 0; g < 2; g++) {
+    const qty = Math.floor(Math.min(cap, engine.stock[p][g], cash / (engine.price(p, g) * (1 + tax) * 1.1)));
+    if (qty < 20) continue;
+    const buy = engine.buyCost(p, g, qty).cost * (1 + tax);
+    for (let d = 0; d < engine.n; d++) {
+      if (d === p || !Number.isFinite(engine.dist[p][d])) continue;
+      const sell = qty * engine.price(d, g, engine.stock[d][g] + cargo[d][g] + qty / 2) * (1 - tax);
+      const v = sell - buy - engine.fuelNeeded(p, d) * engine.price(p, 1) - fee;
+      if (v > best) best = v;
+    }
+  }
+  return best;
+}
+
+/** Where a new player starts: a random port from the better half of those where a trip pays now,
+ *  so nobody's first screen is "no trip pays". Falls back to any port if none pay. */
+export function pickStartPort(engine: Engine, random: (n: number) => number) {
+  const paying = Array.from({ length: engine.n }, (_, p) => ({ p, v: bestStartTrip(engine, p) }))
+    .filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  if (!paying.length) return random(engine.n);
+  const pool = paying.slice(0, Math.max(1, Math.ceil(paying.length / 2)));
+  return pool[random(pool.length)].p;
+}

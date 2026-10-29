@@ -8,7 +8,7 @@ import { join, dirname, extname, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Engine, GOODS, type Command } from "./engine.js";
-import { runBots, botName, isBot } from "./bots.js";
+import { runBots, botName, isBot, pickStartPort } from "./bots.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..");
@@ -101,7 +101,7 @@ function register(name: string, password: string): { token: string } | { error: 
   if (!/^[A-Za-z0-9 _.-]{3,24}$/.test(name)) return { error: "Company name must be 3-24 letters, numbers or spaces" };
   if (String(password ?? "").length < 8) return { error: "Password must be at least 8 characters" };
   if (db.prepare("SELECT 1 FROM accounts WHERE name = ?").get(name)) return { error: "That name is taken" };
-  const res = commit({ type: "register", name, startPort: randomInt(engine.n) });
+  const res = commit({ type: "register", name, startPort: pickStartPort(engine, randomInt) });
   if (!res.ok) return { error: res.error };
   const salt = randomBytes(16).toString("hex");
   db.prepare("INSERT INTO accounts (name, salt, hash, company) VALUES (?, ?, ?, ?)").run(name, salt, hashPassword(password, salt), res.id!);
@@ -387,7 +387,7 @@ function newSeason() {
     const accounts = db.prepare("SELECT name FROM accounts ORDER BY rowid").all() as { name: string }[];
     const update = db.prepare("UPDATE accounts SET company = ? WHERE name = ?");
     for (const a of accounts) {
-      const r = commit({ type: "register", name: a.name, startPort: randomInt(engine.n) });
+      const r = commit({ type: "register", name: a.name, startPort: pickStartPort(engine, randomInt) });
       if (r.ok) update.run(r.id!, a.name);
     }
     db.exec("COMMIT");

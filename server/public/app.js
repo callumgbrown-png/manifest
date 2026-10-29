@@ -541,16 +541,20 @@ function portPanel() {
   const orders = world.orders.filter(o => o.port === p.id);
   const docked = (me?.ships ?? []).filter(s => s.dest === null && s.port === p.id);
   const coming = (me?.ships ?? []).filter(s => s.dest === p.id);
+  // On a phone your ship's buttons come first, above the market, so you can act without scrolling.
+  const shipsFirst = docked.length > 0 && window.matchMedia("(max-width: 860px)").matches;
+  const shipsHtml = `<h3>Your ships here</h3>
+    ${docked.length ? docked.map(shipCard).join("") : `<div class="empty">None of your ships are docked here.${coming.length ? ` ${coming.length === 1 ? "One is" : coming.length + " are"} on the way.` : me ? " Pick a port with your ship from the map or the Fleet tab." : ""}</div>`}
+    ${me && docked.length && !world.seasonOver && me.ships.length < world.rules.maxShips ? `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(world.rules.shipPrice)})</button></div>` : ""}`;
   return `
     <h2>${esc(p.name)}</h2><div class="chips">${chips.join("") || `<span class="quiet">A quiet port</span>`}</div>
+    ${shipsFirst ? shipsHtml : ""}
     <h3>Market</h3>
     <table class="market"><tr><th>Good</th><th class="num">Price</th><th class="sparkCell">Trend</th><th class="num">Stock</th><th class="num">Inbound</th></tr>${rows}</table>
     <div class="est">${p.emptyInbound} empty ship${p.emptyInbound === 1 ? "" : "s"} heading here to load. Inbound cargo will push prices down when it lands.</div>
     <h3>Player orders here</h3>
     ${orders.length ? `<table><tr><th>Player</th><th>Wants to</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${orders.map(o => `<tr${me && o.owner === me.id ? ' class="me"' : ""}><td>${esc(o.ownerName)}</td><td>${o.side === "sell" ? "sell" : "buy"}</td><td><span class="tag ${GOOD_NAMES[o.good]}">${GOOD_NAMES[o.good]}</span></td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="quiet">None yet.</div>`}
-    <h3>Your ships here</h3>
-    ${docked.length ? docked.map(shipCard).join("") : `<div class="empty">None of your ships are docked here.${coming.length ? ` ${coming.length === 1 ? "One is" : coming.length + " are"} on the way.` : me ? " Pick a port with your ship from the map or the Fleet tab." : ""}</div>`}
-    ${me && docked.length && !world.seasonOver && me.ships.length < world.rules.maxShips ? `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(world.rules.shipPrice)})</button></div>` : ""}`;
+    ${shipsFirst ? "" : shipsHtml}`;
 }
 
 function shipCard(s) {
@@ -571,6 +575,12 @@ function shipCard(s) {
   const forSale = world.orders.filter(o => o.side === "sell" && o.port === s.port && o.owner !== me.id
     && (s.qty === 0 || o.good === s.good) && s.qty < world.rules.capacity);
   const dests = world.ports.filter(p => p.id !== s.port).sort((a, b) => a.name.localeCompare(b.name));
+  // The form starts on the best trip, or the best port to sail to when nothing pays here,
+  // never on whichever port happens to come first alphabetically.
+  const trips = bestTrips(s), move = trips.length || s.qty > 0 ? null : bestMove(s);
+  const plan = trips[0] ? { dest: trips[0].dest, good: s.qty > 0 ? "" : GOOD_NAMES[trips[0].g], qty: trips[0].qty }
+    : move ? { dest: move.dest, good: "", qty: world.rules.capacity }
+    : { dest: nearestPort(s.port), good: "", qty: world.rules.capacity };
   return `<div class="shipCard" data-ship="${s.id}">
     <div class="top"><b>Ship ${s.id}</b>${cargo}</div>
     <div class="quiet">Docked at ${esc(port.name)}</div>
@@ -582,11 +592,11 @@ function shipCard(s) {
       <div class="est">Listing leaves the goods at this port for other players to buy, and frees your ship.</div>` : ""}
     ${forSale.length ? `<h3>For sale here</h3>${forSale.map(o => `<div class="row"><span>${o.qty} ${GOOD_NAMES[o.good]} from ${esc(o.ownerName)} at ${o.price.toFixed(2)}</span>
       <button class="secondary" data-act="buyOrder" data-ship="${s.id}" data-order="${o.id}" data-qty="${Math.min(o.qty, world.rules.capacity - s.qty)}">Buy ${Math.min(o.qty, world.rules.capacity - s.qty)}</button></div>`).join("")}` : ""}
-    ${tripsHtml(s)}
-    <label>Destination<select data-field="dest">${dests.map(p => `<option value="${p.id}">${esc(p.name)} (≈${Math.ceil(distance(s.port, p.id) / world.rules.speed)} h)</option>`).join("")}</select></label>
+    ${tripsHtml(s, trips, move)}
+    <label>Destination<select data-field="dest">${dests.map(p => `<option value="${p.id}"${p.id === plan.dest ? " selected" : ""}>${esc(p.name)} (≈${Math.ceil(distance(s.port, p.id) / world.rules.speed)} h)</option>`).join("")}</select></label>
     ${s.qty === 0 ? `<div class="row" style="margin-top:4px">
-      <select data-field="good" style="width:auto"><option value="">Sail empty</option>${GOOD_NAMES.map((g, i) => `<option value="${g}">Load ${g} at ${port.prices[i].toFixed(2)}</option>`).join("")}</select>
-      <input data-field="qty" type="number" min="1" max="${world.rules.capacity}" value="${world.rules.capacity}" style="width:90px"></div>` : ""}
+      <select data-field="good" style="width:auto"><option value="">Sail empty</option>${GOOD_NAMES.map((g, i) => `<option value="${g}"${g === plan.good ? " selected" : ""}>Load ${g} at ${port.prices[i].toFixed(2)}</option>`).join("")}</select>
+      <input data-field="qty" type="number" min="1" max="${world.rules.capacity}" value="${plan.qty}" style="width:90px"></div>` : ""}
     <div class="est big" data-field="estimate"></div>
     <div class="row"><button data-act="sail" data-ship="${s.id}">Set sail</button>
       ${me.ships.length > 1 && s.qty === 0 ? `<button class="link" data-act="scrap" data-ship="${s.id}">Scrap for ${fmt(world.rules.shipPrice / 2)}</button>` : ""}</div>
@@ -636,9 +646,34 @@ function bestTrips(s, n = 3) {
   return out.sort((a, b) => b.profit / b.hours - a.profit / a.hours).slice(0, n);
 }
 
-function tripsHtml(s) {
-  const trips = bestTrips(s);
-  if (!trips.length) return `<h3>Best trips from here</h3><div class="est">${s.qty > 0 ? "Nowhere pays more than selling here right now." : "No trip pays right now at these prices. Try another port, or wait for prices to move."}</div>`;
+/** Nearest other port, used as a harmless default when nothing else is suggested. */
+function nearestPort(from) {
+  let best = -1;
+  for (const p of world.ports) if (p.id !== from && (best < 0 || distance(from, p.id) < distance(from, best))) best = p.id;
+  return best;
+}
+/** When no trip pays from here: the port whose best trip, minus the cost of sailing there empty, pays most per hour. */
+function bestMove(s) {
+  let best = null;
+  for (const p of world.ports) {
+    if (p.id === s.port) continue;
+    const go = tripProfit(s, p.id, -1, 0);
+    const [next] = bestTrips({ ...s, port: p.id, qty: 0 }, 1);
+    if (!next) continue;
+    const net = next.profit + go.profit;   // go.profit is minus fuel and the port fee
+    const score = net / (go.hours + next.hours);
+    if (net >= 50 && (!best || score > best.score)) best = { dest: p.id, score, cost: -go.profit, hours: go.hours, next };
+  }
+  return best;
+}
+
+function tripsHtml(s, trips = bestTrips(s), move = null) {
+  if (!trips.length && move) return `<h3>Best trips from here</h3><div class="est">No trip pays from here right now. Your best move:</div>
+    <div class="trips"><button class="trip move secondary" data-act="plan" data-ship="${s.id}" data-dest="${move.dest}" data-good="">
+      <span>Sail empty → ${esc(world.ports[move.dest].name)}, then load ${GOOD_NAMES[move.next.g]} for ${esc(world.ports[move.next.dest].name)}</span>
+      <span class="num"><b class="pos">+${fmt(move.next.profit - move.cost)}</b> · ${move.hours + move.next.hours} h</span></button></div>
+    <div class="est">Getting there costs about ${fmt(move.cost)} in fuel and fees; the trip from there pays about +${fmt(move.next.profit)} at today's prices.</div>`;
+  if (!trips.length) return `<h3>Best trips from here</h3><div class="est">${s.qty > 0 ? "Nowhere pays more than selling here right now." : "No trip pays right now at these prices, from here or one hop away. Waiting costs nothing; prices move every hour."}</div>`;
   return `<h3>Best trips from here</h3><div class="trips">${trips.map(t => `<button class="trip secondary" data-act="plan" data-ship="${s.id}" data-dest="${t.dest}" data-good="${s.qty > 0 ? "" : GOOD_NAMES[t.g]}" data-qty="${t.qty}">
       <span>${s.qty > 0 ? "Sell" : `Load ${t.qty}`} <span class="tag ${GOOD_NAMES[t.g]}">${GOOD_NAMES[t.g]}</span> → ${esc(world.ports[t.dest].name)}</span>
       <span class="num"><b class="pos">+${fmt(t.profit)}</b> · ${t.hours} h</span></button>`).join("")}</div>`;
@@ -653,6 +688,7 @@ function estimate(card) {
   const there = world.ports[dest];
   const t = tripProfit(s, dest, g, qty);
   let text = `Fuel ≈ ${fmt(t.fuel)}, port fee ${world.rules.portFee}.`;
+  if (g < 0 || qty <= 0) text = `Sailing empty costs about <b class="neg">${fmt(t.fuel + world.rules.portFee)}</b> (fuel ${fmt(t.fuel)}, port fee ${world.rules.portFee}).`;
   if (me.ships.length === 1 && t.fuel > me.cash) text += " You can't cover the fuel, so it goes on credit (your cash goes below zero).";
   if (g >= 0 && qty > 0) {
     const verb = t.profit >= 0 ? "makes" : "loses";
@@ -742,7 +778,8 @@ function bindPanel() {
         el.value = v; formState.set(formKey(el), v);
       };
       set("dest", btn.dataset.dest);
-      if (btn.dataset.good) { set("good", btn.dataset.good); set("qty", btn.dataset.qty); }
+      set("good", btn.dataset.good ?? "");
+      if (btn.dataset.qty) set("qty", btn.dataset.qty);
       estimate(card);
       card.querySelector("[data-act=sail]").focus();
     }

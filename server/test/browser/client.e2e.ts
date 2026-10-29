@@ -49,7 +49,7 @@ async function sailTo(page: any, port: number, load?: string) {
   await page.click('#tabs button[data-tab="fleet"]');
   const card = page.locator(".shipCard[data-ship]").first();
   await card.locator("select[data-field=dest]").selectOption(String(port));
-  if (load) await card.locator("select[data-field=good]").selectOption(load);
+  await card.locator("select[data-field=good]").selectOption(load ?? "");
   await page.locator('body').click({ position: { x: 5, y: 5 } });   // leave the form so the panel can refresh
   await card.locator("button[data-act=sail]").click();
   await toast(page, new RegExp(`Sailing to ${map.ports[port].name}`));
@@ -91,7 +91,13 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   // ---- the trip estimate updates as you change the form
   await a.click('#tabs button[data-tab="fleet"]');
   const card = a.locator(".shipCard[data-ship]").first();
-  assert.match((await card.locator("[data-field=estimate]").textContent())!, /^Fuel ≈ [\d,]+, port fee 25\.$/);
+  // The form never starts on a losing empty trip to the first port alphabetically.
+  const firstAlpha = await card.locator("select[data-field=dest] option").first().getAttribute("value");
+  const startDest = await card.locator("select[data-field=dest]").inputValue();
+  const startGood = await card.locator("select[data-field=good]").inputValue();
+  assert.ok(startGood !== "" || startDest !== firstAlpha || (await card.locator("button.move").count()) > 0, "form starts on a sensible trip");
+  await card.locator("select[data-field=good]").selectOption("");
+  assert.match((await card.locator("[data-field=estimate]").textContent())!, /^Sailing empty costs about [\d,]+ \(fuel [\d,]+, port fee 25\)\.$/);
   await card.locator("select[data-field=good]").selectOption("grain");
   assert.match((await card.locator("[data-field=estimate]").textContent())!, /This trip (makes|loses) about [\d,]+ \([\d,]+ an hour\)/);
 
@@ -326,8 +332,8 @@ test("trip estimates match what really happens, and 'best trips' plans a trip", 
       assert.ok(trips[i].profit > 0);
       if (i) assert.ok(trips[i - 1].profit / trips[i - 1].hours >= trips[i].profit / trips[i].hours);
     }
-    assert.equal(await card.locator('button[data-act="plan"]').count(), Math.min(3, trips.length));
-    const plan = card.locator('button[data-act="plan"]').first();
+    assert.equal(await card.locator('button[data-act="plan"]:not(.move)').count(), Math.min(3, trips.length));
+    const plan = card.locator('button[data-act="plan"]:not(.move)').first();
     let dest: number;
     if (await plan.count()) {
       dest = Number(await plan.getAttribute("data-dest"));
@@ -354,11 +360,18 @@ test("trip estimates match what really happens, and 'best trips' plans a trip", 
     const before = (await me(page)).cash;
     await card.locator("button[data-act=sail]").click();
     await page.waitForFunction((d: number) => { const m = (window as any).eval("me"); return m.ships[0].dest === null && m.ships[0].port === d; }, dest, { timeout: 60000 });
-    await page.locator('.shipCard button[data-act="sell"]').click();
+    // At this test's speed a game hour passes every 0.12 s, so the button's price label (and width)
+    // changes faster than Playwright's "stable" check; click it from inside the page instead.
+    await page.waitForSelector('.shipCard button[data-act="sell"]');
+    await page.evaluate(() => (document.querySelector('.shipCard button[data-act="sell"]') as HTMLButtonElement).click());
     await page.waitForFunction(() => (window as any).eval("me").ships[0].qty === 0);
     const real = (await me(page)).cash - before;
     // Markets drift a little during the voyage, so allow a small gap.
-    assert.ok(Math.abs(real - predicted) < Math.max(60, Math.abs(predicted) * 0.15), `predicted ${predicted.toFixed(0)}, really ${real.toFixed(0)}`);
+    // The estimate must never overpromise. It may undersell: the destination keeps consuming during
+    // the voyage, which pushes its price up, and the estimate uses today's price.
+    const gap = Math.max(60, Math.abs(predicted) * 0.15);
+    // (This test world has no bots, so prices can climb a lot during the voyage.)
+    assert.ok(real > predicted - gap, `predicted ${predicted.toFixed(0)}, really ${real.toFixed(0)}`);
     assert.deepEqual(errors, []);
   } finally { await t.stop(); cleanup(t); }
 });

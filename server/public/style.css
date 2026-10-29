@@ -156,8 +156,15 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
   .legend { position: static; margin: 0 10px 10px; justify-content: center; }
   aside { border-left: 0; border-top: 1px solid var(--line); }
   header { gap: 10px 14px; padding: 10px 14px 12px; }
-  .stats { order: 3; width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
-  .stat b { font-size: 14px; }
+  .stats { order: 3; width: 100%; display: grid; grid-template-columns: repeat(4, auto); justify-content: space-between; gap: 4px 10px; }
+  .stat span { font-size: 9px; }
+  .stat b { font-size: 13px; }
+  header { gap: 6px 10px; padding: 8px 12px 10px; }
+  header .spacer { display: none; }
+  #logout { margin-left: auto; padding: 4px 2px; }
+  .brand span { letter-spacing: .12em; }
+  header .pill { padding-top: 2px; padding-bottom: 2px; font-size: 11px; }
+  .stat b { white-space: nowrap; font-size: 12px; }
   .legend { gap: 8px 12px; font-size: 11px; right: 12px; }
   nav { position: sticky; top: 0; z-index: 2; }
   #panel { padding: 16px 14px; }
