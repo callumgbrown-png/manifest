@@ -44,9 +44,21 @@ db.exec(`
 const insertEvent = db.prepare("INSERT INTO events (at, kind, payload) VALUES (?, ?, ?)");
 
 let engine = new Engine(rules, map, EXPECTED);
+
+// Recent hourly prices for the client's trend lines. Not stored: rebuilt while replaying the log.
+const HISTORY_HOURS = 72;
+let history: { tick: number; prices: number[][] }[] = [];
+function recordPrices() {
+  const prices = engine.stock.map((_, p) => [0, 1].map(g => Math.round(engine.price(p, g) * 100) / 100));
+  if (history.at(-1)?.tick === engine.tick) history.pop();
+  history.push({ tick: engine.tick, prices });
+  if (history.length > HISTORY_HOURS) history.shift();
+}
+recordPrices();
+
 let replayed = 0;
 for (const row of db.prepare("SELECT kind, payload FROM events ORDER BY id").all() as { kind: string; payload: string }[]) {
-  if (row.kind === "tick") engine.advance();
+  if (row.kind === "tick") { engine.advance(); recordPrices(); }
   else engine.apply(JSON.parse(row.payload) as Command);
   replayed++;
 }
@@ -252,6 +264,7 @@ wss.on("connection", (ws, req) => {
   const client: Client = { ws, ip: forwarded || req.socket.remoteAddress || "?", recent: [] };
   clients.add(client);
   send(client, { type: "static", dist: engine.dist.map(r => r.map(d => Math.round(d))) });
+  send(client, { type: "history", history });
   send(client, { type: "state", world: publicView(), me: null });
   ws.on("close", () => clients.delete(client));
   // Without this, an oversized or broken frame throws and kills the whole server.
@@ -344,6 +357,8 @@ function newSeason() {
     db.prepare("INSERT INTO archived_events SELECT ?, id, at, kind, payload FROM events").run(seasonId);
     db.exec("DELETE FROM events; DELETE FROM sessions;");
     engine = new Engine(rules, map, EXPECTED);
+    history = [];
+    recordPrices();
     const accounts = db.prepare("SELECT name FROM accounts ORDER BY rowid").all() as { name: string }[];
     const update = db.prepare("UPDATE accounts SET company = ? WHERE name = ?");
     for (const a of accounts) {
@@ -353,7 +368,11 @@ function newSeason() {
     db.exec("COMMIT");
   } catch (e) { db.exec("ROLLBACK"); throw e; }
   ensureBots();
-  for (const c of clients) { c.company = undefined; send(c, { type: "authError", error: "A new season has started. Log in again." }); }
+  for (const c of clients) {
+    c.company = c.token = undefined;
+    send(c, { type: "history", history });
+    send(c, { type: "authError", error: "A new season has started. Log in again." });
+  }
   broadcastSoon();
   return { ok: true, season: seasonId + 1 };
 }
@@ -365,6 +384,7 @@ setInterval(() => {
   if (!engine.seasonOver) {
     engine.advance();
     insertEvent.run(new Date().toISOString(), "tick", "{}");
+    recordPrices();
     runBots(engine, botIds, commit);
   }
   if (engine.seasonOver && !lastSeasonOver) console.log("Season over. Final standings:", finalStandings().slice(0, 5));

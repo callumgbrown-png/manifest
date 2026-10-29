@@ -61,6 +61,18 @@ describe("HTTP", () => {
     assert.equal((await raw(s, "/api/health")).status, 200);
   });
 
+  test("new connections get recent price history", async () => {
+    const c = new Client(s);
+    const h = await c.seen(m => m.type === "history");
+    assert.ok(h.history.length >= 1);
+    const last = h.history.at(-1);
+    assert.equal(last.tick, 0);
+    assert.equal(last.prices.length, map.ports.length);
+    const st = await c.seen(m => m.type === "state");
+    assert.deepEqual(last.prices.map((p: number[]) => p), st.world.ports.map((p: any) => p.prices));
+    c.close();
+  });
+
   test("seasons list starts empty", async () => {
     assert.deepEqual(JSON.parse((await raw(s, "/api/seasons")).body), []);
   });
@@ -418,6 +430,9 @@ describe("restart and seasons", () => {
       assert.equal(st.world.rules.tax, 0.06);
       assert.ok(st.world.orders.some((o: any) => o.ownerName === "Replay Co" && o.qty === 20));
       assert.equal(st.world.leaderboard.filter((c: any) => c.bot).length, 4, "bots not duplicated on restart");
+      const hist = (await b.seen(m => m.type === "history")).history;
+      assert.equal(hist.at(-1).tick, st.world.tick, "price history rebuilt from the log");
+      assert.ok(hist.length === Math.min(72, st.world.tick + 1));
       // Restart again with no new activity: identical world.
       const before = JSON.stringify({ ...st.world, tickMs: 0 });
       b.close(); await t.stop();
