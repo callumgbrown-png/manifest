@@ -192,8 +192,14 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   const cashBefore = (await me(a)).cash;
   await a.selectOption("#oPort", String(home));
   await a.selectOption("#oGood", "fuel");
+  // The panel warns that filled buy orders don't deliver goods to you, labels its boxes,
+  // and says what the order costs as you type.
+  assert.match((await a.textContent("#panel"))!, /don't come to you/);
+  assert.equal(await a.locator("label.mini", { hasText: "Price each" }).locator("#oPrice").count(), 1);
   await a.fill("#oQty", "10"); await a.fill("#oPrice", "50");
+  assert.equal(await a.textContent("#oCost"), "If it fills, this costs you 500.");
   await a.locator("body").click({ position: { x: 5, y: 5 } });
+  assert.equal(await a.textContent("#oCost"), "If it fills, this costs you 500.", "still right after the panel refreshes");
   await a.click('button[data-act="placeOrder"]');
   await toast(a, /Order posted/);
   await a.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("buying fuel"));

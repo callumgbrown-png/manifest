@@ -28,6 +28,8 @@ label input, label select { margin-top: 4px; }
 .quiet { color: var(--quiet); }
 .error { color: var(--bad); min-height: 1.2em; margin: 10px 0 0; }
 .row { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+.row.labelled { align-items: flex-end; }
+label.mini { margin: 0; font-size: 11px; display: flex; flex-direction: column; }
 .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .pos { color: var(--good); } .neg { color: var(--bad); }
 
@@ -122,6 +124,7 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
 .tag.mine { color: var(--mine); border-color: rgba(95,211,168,.5); background: rgba(95,211,168,.07); }
 .est { font-size: 12px; color: var(--quiet); margin-top: 8px; }
 .est b.pos { color: var(--good); } .est b.neg { color: var(--bad); }
+.est.warn { color: var(--ink); border-left: 3px solid var(--bad); padding-left: 8px; }
 .est.big { font-size: 13px; color: var(--ink); background: var(--sea-deep); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 
 .market td { padding: 9px 6px 9px 0; }

@@ -701,8 +701,8 @@ function shipCard(s) {
     <div class="quiet">Docked at ${esc(port.name)}</div>
     ${s.qty > 0 ? `<div class="row"><button data-act="sell" data-ship="${s.id}">Sell to market at ${port.prices[s.good].toFixed(2)}</button>
       ${matching.map(o => `<button class="secondary" data-act="fill" data-ship="${s.id}" data-order="${o.id}">Fill ${esc(o.ownerName)}'s order at ${o.price.toFixed(2)}</button>`).join("")}</div>
-      <div class="row"><input data-field="sellQty" type="number" min="1" max="${s.qty}" value="${s.qty}" style="width:80px" title="Quantity">
-        <input data-field="sellPrice" type="number" step="0.5" value="${(port.prices[s.good] * 1.15).toFixed(1)}" style="width:90px" title="Your price per unit">
+      <div class="row labelled"><label class="mini">Quantity<input data-field="sellQty" type="number" min="1" max="${s.qty}" value="${s.qty}" style="width:80px"></label>
+        <label class="mini">Price each<input data-field="sellPrice" type="number" step="0.5" value="${(port.prices[s.good] * 1.15).toFixed(1)}" style="width:90px"></label>
         <button class="secondary" data-act="listSell" data-ship="${s.id}">List for sale here</button></div>
       <div class="est">Listing leaves the goods at this port for other players to buy, and frees your ship.</div>` : ""}
     ${forSale.length ? `<h3>For sale here</h3>${forSale.map(o => `<div class="row"><span>${o.qty} ${GOOD_NAMES[o.good]} from ${esc(o.ownerName)} at ${o.price.toFixed(2)}</span>
@@ -898,22 +898,28 @@ function tripLog() {
     ${done.length ? `<div class="est">Last ${done.length} finished trip${done.length === 1 ? "" : "s"}: <b class="${total >= 0 ? "pos" : "neg"}">${total >= 0 ? "+" : "−"}${fmt(Math.abs(total))}</b> after cargo, fuel, fees and tax.${trips.some(t => t.listed) ? " * Listed cargo isn't counted until it sells." : ""}</div>` : ""}`;
 }
 
+/** What a buy order costs if it fills completely: the goods don't come back to you. */
+function orderCostText(qty, price) {
+  const total = Math.floor(qty) * price;
+  return total > 0 ? `If it fills, this costs you ${fmt(total)}.` : "";
+}
 function ordersPanel() {
   const mine = me ? world.orders.filter(o => o.owner === me.id) : [];
   const others = world.orders.filter(o => !me || o.owner !== me.id);
   const b = world.rules.bands;
   return `<h2>Orders</h2>
-    <div class="quiet">Post a price you'll pay for goods delivered to a port; your cash is held until it fills. To sell at your own price, use "List for sale" on a docked ship with cargo. Orders that cross fill automatically.</div>
+    <div class="quiet">A buy order pays other players to deliver goods to a port; your cash is held until one fills it. To sell at your own price, use "List for sale" on a docked ship with cargo. Orders that cross fill automatically.</div>
+    <div class="est warn">Goods delivered to your buy order are used up at that port. They don't come to you, so a filled order costs you its full price and doesn't add to your net worth.</div>
     ${me && world.seasonOver ? `<div class="est">Trading is closed until the next season starts.</div>` : ""}
     ${me && !world.seasonOver ? `<h3>Post an order</h3>
     <div class="row"><select id="oPort">${world.ports.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}" ${p.id === selectedPort ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
-    <div class="row"><select id="oGood" style="width:auto">${GOOD_NAMES.map(g => `<option>${g}</option>`).join("")}</select>
-      <input id="oQty" type="number" min="1" max="1000" value="100" style="width:90px" title="Quantity">
-      <input id="oPrice" type="number" step="0.5" value="30" style="width:90px" title="Price per unit">
+    <div class="row labelled"><label class="mini">Good<select id="oGood" style="width:auto">${GOOD_NAMES.map(g => `<option>${g}</option>`).join("")}</select></label>
+      <label class="mini">Quantity<input id="oQty" type="number" min="1" max="1000" value="100" style="width:90px"></label>
+      <label class="mini">Price each<input id="oPrice" type="number" step="0.5" value="30" style="width:90px"></label>
       <button data-act="placeOrder">Post</button></div>
-    <div class="est">Grain ${b.grain.floor}–${b.grain.ceiling}, fuel ${b.fuel.floor}–${b.fuel.ceiling} per unit.</div>` : ""}
+    <div class="est">Grain ${b.grain.floor}–${b.grain.ceiling}, fuel ${b.fuel.floor}–${b.fuel.ceiling} per unit. <span id="oCost">${orderCostText(100, 30)}</span></div>` : ""}
     <h3>Your orders</h3>
-    ${mine.length ? `<table>${mine.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td><span class="tag ${GOOD_NAMES[o.good]}">${o.side === "sell" ? "selling" : "buying"} ${GOOD_NAMES[o.good]}</span></td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td><td>${world.seasonOver ? "" : `<button class="link" data-act="cancelOrder" data-order="${o.id}">Cancel</button>`}</td></tr>`).join("")}</table>` : `<div class="empty">You have no open orders.</div>`}
+    ${mine.length ? `<table><tr><th>Port</th><th>Order</th><th class="num">Qty</th><th class="num">Price</th><th></th></tr>${mine.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td><span class="tag ${GOOD_NAMES[o.good]}">${o.side === "sell" ? "selling" : "buying"} ${GOOD_NAMES[o.good]}</span></td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td><td>${world.seasonOver ? "" : `<button class="link" data-act="cancelOrder" data-order="${o.id}">Cancel</button>`}</td></tr>`).join("")}</table>` : `<div class="empty">You have no open orders.</div>`}
     <h3>All open orders</h3>
     ${others.length ? `<table><tr><th>Port</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${others.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${o.side === "sell" ? "for sale" : "wanted"}: ${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="empty">No other open orders.</div>`}`;
 }
@@ -950,6 +956,11 @@ function bindPanel() {
     card.querySelectorAll("select, input").forEach(el => el.addEventListener("input", () => estimate(card)));
     estimate(card);
   });
+  if ($("oCost")) {   // after restoreForm, so it matches what the player typed
+    const cost = () => { $("oCost").textContent = orderCostText(Number($("oQty").value), Number($("oPrice").value)); };
+    for (const id of ["oQty", "oPrice"]) $(id).addEventListener("input", cost);
+    cost();
+  }
   document.querySelectorAll("[data-act]").forEach(btn => btn.addEventListener("click", () => {
     const act = btn.dataset.act, ship = Number(btn.dataset.ship);
     if (act === "notify") {

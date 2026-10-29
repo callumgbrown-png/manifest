@@ -259,6 +259,18 @@ describe("buy orders", () => {
     assert.equal(c.cash, rules.company.start_cash - 10 * 10);
   });
 
+  test("a filled buy order delivers nothing to the buyer: net worth drops by the price paid (the Orders tab says so)", () => {
+    const { e, cs, ship } = world(2);
+    const [A, B] = cs;
+    const worth0 = e.netWorth(A);
+    const id = (e.apply({ type: "placeOrder", company: A.id, port: 0, good: "grain", qty: 10, price: 20 }) as any).id;
+    assert.ok(near(e.netWorth(A), worth0), "escrow still counts while the order is open");
+    Object.assign(ship(B), { good: 0, qty: 10, cost: 100 });
+    assert.equal(err(e.apply({ type: "sell", company: B.id, ship: ship(B).id, order: id })), "ok");
+    assert.ok(near(e.netWorth(A), worth0 - 200));
+    assert.ok(A.ships.every(s => e.ships.get(s)!.qty === 0), "no goods arrive on the buyer's ships");
+  });
+
   test("prices round to the cent and escrow matches what's held", () => {
     const { e, cs } = world(1);
     const r = e.apply({ type: "placeOrder", company: cs[0].id, port: 0, good: "grain", qty: 3, price: 20.123 });
