@@ -391,6 +391,27 @@ describe("markets", () => {
     assert.equal(e.stock[cons][0], 0);
   });
 
+  test("seasons open with producers stocked up and consumers short, so trade pays at once", () => {
+    const e = new Engine(rules, map, 60);
+    const target = rules.markets.target_stock * e.scale, sp = rules.markets.start_spread;
+    assert.ok(sp > 0);
+    map.ports.forEach((p: any, i: number) => ["grain", "fuel"].forEach((g, j) => {
+      const makes = p.produces.includes(g), needs = p.consumes.includes(g);
+      const want = target * (1 + (makes && !needs ? sp : 0) - (needs && !makes ? sp : 0));
+      assert.ok(near(e.stock[i][j], want), `${p.name} ${g}`);
+    }));
+    // Some full load bought at a producer and sold at a consumer makes money in hour one.
+    let best = -Infinity;
+    for (let a = 0; a < e.n; a++) for (let b = 0; b < e.n; b++) for (const g of [0, 1]) {
+      if (a === b) continue;
+      const q = rules.ship.capacity;
+      const profit = e.sellValue(b, g, q) * (1 - tax) - e.buyCost(a, g, q).cost * (1 + tax)
+        - e.fuelNeeded(a, b) * e.price(a, 1) - rules.fees.port_fee_per_docking;
+      best = Math.max(best, profit);
+    }
+    assert.ok(best > 0, `best opening trade ${best.toFixed(0)}`);
+  });
+
   test("market size is fixed for the season by the expected number of companies", () => {
     const small = new Engine(rules, map, 30), big = new Engine(rules, map, 300), none = new Engine(rules, map);
     assert.ok(near(big.scale, 1)); assert.equal(none.scale, 1);

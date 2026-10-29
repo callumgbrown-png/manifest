@@ -55,12 +55,16 @@ class Market:
     """Stock-based port markets. Price falls linearly from ceiling (no stock)
     to floor (stock at twice the target)."""
 
-    def __init__(self, rules, n, scale=1.0):
+    def __init__(self, rules, n, scale=1.0, makes=None, needs=None):
         self.floor = np.array([rules["commodities"][g]["floor"] for g in GOODS], float)
         self.ceil = np.array([rules["commodities"][g]["ceiling"] for g in GOODS], float)
         self.target = rules["markets"]["target_stock"] * scale
         self.cap = self.target * rules["markets"]["max_stock_multiple"]
         self.stock = np.full((n, 2), float(self.target))
+        # Seasons open with producers stocked up and consumers short (same as the server).
+        spread = rules["markets"].get("start_spread", 0)
+        if makes is not None and spread:
+            self.stock *= 1 + spread * (makes & ~needs) - spread * (needs & ~makes)
 
     def price_at(self, stock, g):
         frac = np.clip(1 - stock / (2 * self.target), 0, 1)
@@ -125,7 +129,7 @@ def run_season(seed, n_companies, rules, world, dist, prod, cons, return_compani
     m_ = rules["markets"]
     scale = max(m_.get("min_scale", 0), n_companies / m_["reference_companies"]) if "reference_companies" in m_ else 1.0
     prod, cons = prod * scale, cons * scale
-    mk = Market(rules, n, k)
+    mk = Market(rules, n, k, makes=prod > 0, needs=cons > 0)
     fee = rules["fees"]["port_fee_per_docking"]
     tax = rules["fees"]["trade_tax_rate"]
     sh = rules["ship"]

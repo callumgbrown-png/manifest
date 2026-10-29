@@ -33,7 +33,9 @@
     },
     "reference_companies": 300,
     "min_scale": 0.05,
-    "scale_exponent": 0.3
+    "scale_exponent": 0.3,
+    "_start_comment": "Each season opens with ports that only produce a good stocked at target x (1 + start_spread) and ports that only consume it at target x (1 - start_spread). With every port at the target, prices were equal everywhere and no trade paid for the first ~6 days (hour 134 with 30 bots). 0.2 makes trade pay from hour one; simulated money change stays within -1.9% to +0.3% a day at 30, 100 and 300 companies.",
+    "start_spread": 0.2
   },
   "information": {
     "_comment": "If true, every port shows how much cargo is already sailing towards it, so players can avoid piling onto the same route.",

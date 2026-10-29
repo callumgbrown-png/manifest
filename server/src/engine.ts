@@ -17,6 +17,7 @@ export interface Rules {
     reference_companies?: number;
     min_scale?: number;
     scale_exponent?: number;
+    start_spread?: number;
   };
   fees: { port_fee_per_docking: number; trade_tax_rate: number };
   company: { start_cash: number; start_ships: number; max_ships: number };
@@ -87,7 +88,12 @@ export class Engine {
     this.target = m.target_stock * k;
     this.prod = map.ports.map(p => GOODS.map(g => (p.produces.includes(g) ? m.production_per_hour[g] * k : 0)));
     this.cons = map.ports.map(p => GOODS.map(g => (p.consumes.includes(g) ? m.consumption_per_hour[g] * k : 0)));
-    this.stock = map.ports.map(() => [this.target, this.target]);
+    // Seasons open with producers stocked up and consumers short, so trade pays from the first hour.
+    const spread = m.start_spread ?? 0;
+    this.stock = map.ports.map(p => GOODS.map(g => {
+      const makes = p.produces.includes(g), needs = p.consumes.includes(g);
+      return this.target * (1 + (makes && !needs ? spread : 0) - (needs && !makes ? spread : 0));
+    }));
   }
 
   // ------------------------------------------------------------ market maths
