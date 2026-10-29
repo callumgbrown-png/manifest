@@ -11,7 +11,7 @@ const presets = rules.difficulty.presets;
 test("a new world starts at the default difficulty, matching the base rules", () => {
   const e = new Engine(rules, map);
   assert.equal(e.difficulty, rules.difficulty.default);
-  const { botMinProfit, ...normal } = presets.normal;
+  const { botMinProfit, botError, ...normal } = presets.normal;
   assert.equal(botMinProfit, 0);
   assert.deepEqual(normal, { tax: rules.fees.trade_tax_rate, portFee: rules.fees.port_fee_per_docking, upkeep: rules.ship.upkeep_per_day });
 });

@@ -410,7 +410,7 @@ setInterval(() => {
     engine.advance();
     insertEvent.run(new Date().toISOString(), "tick", "{}");
     recordPrices();
-    runBots(engine, botIds, commit, { minProfit: engine.botMinProfit });
+    runBots(engine, botIds, commit, { minProfit: engine.botMinProfit, error: engine.botError });
   }
   if (engine.seasonOver && !lastSeasonOver) console.log("Season over. Final standings:", finalStandings().slice(0, 5));
   lastSeasonOver = engine.seasonOver;

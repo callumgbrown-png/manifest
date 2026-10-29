@@ -17,6 +17,25 @@ export function isBot(name: string) { return name.includes(BOT_MARK); }
 export interface BotStyle {
   /** A bot only takes a trip that clears this much profit, leaving smaller margins for players. */
   minProfit: number;
+  /** How far off a bot's guess of a sale price can be, as a fraction either way (0 = perfect). */
+  error?: number;
+}
+
+/** Repeatable pseudo-random number in [-1, 1) from a few integers. */
+function noise(...xs: number[]) {
+  let h = 2166136261;
+  for (const x of xs) { h ^= x; h = Math.imul(h, 16777619); h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15; }
+  return ((h >>> 0) / 2 ** 31) - 1;
+}
+
+/** A bot's belief about the sale price multiplier at a port: its own mistake,
+ *  different per bot, port and good, and drifting to a new value every 12 hours
+ *  so bots don't share one blind spot or repeat the same error all season. */
+function misjudge(error: number, bot: number, port: number, good: number, tick: number) {
+  if (!error) return 1;
+  const period = 12, phase = tick / period, k = Math.floor(phase), t = phase - k;
+  const a = noise(bot, port, good, k), b = noise(bot, port, good, k + 1);
+  return 1 + error * (a + (b - a) * t);
 }
 
 /** One decision pass: every idle bot ship sells cargo or picks its best trade. */
@@ -24,6 +43,7 @@ export function runBots(engine: Engine, botIds: number[], commit: (c: Command) =
   const tax = engine.rules.fees.trade_tax_rate, fee = engine.rules.fees.port_fee_per_docking;
   const cap = engine.rules.ship.capacity;
   const { cargo, emptyShips } = engine.inbound();
+  const error = Math.max(0, Math.min(0.9, style.error ?? 0));
   // Best full-load trade available from each port right now, used to decide
   // where an empty ship should sail when nothing pays from where it is.
   const bestFrom = Array.from({ length: engine.n }, (_, p) => {
@@ -57,7 +77,7 @@ export function runBots(engine: Engine, botIds: number[], commit: (c: Command) =
           if (d === s.port || !Number.isFinite(engine.dist[s.port][d])) continue;
           const hours = engine.voyageHours(s.port, d);
           const expected = engine.stock[d][g] + cargo[d][g] + qty / 2;
-          const sell = qty * engine.price(d, g, expected) * (1 - tax);
+          const sell = qty * engine.price(d, g, expected) * (1 - tax) * misjudge(error, id, d, g, engine.tick);
           const fuel = engine.fuelNeeded(s.port, d) * engine.price(s.port, 1);
           const profit = sell - buy - fuel - fee;
           if (profit < style.minProfit) continue;
@@ -73,7 +93,7 @@ export function runBots(engine: Engine, botIds: number[], commit: (c: Command) =
         let move = { score: 0, dest: -1 };
         for (let d = 0; d < engine.n; d++) {
           if (d === s.port || !Number.isFinite(engine.dist[s.port][d])) continue;
-          const value = bestFrom[d] / (1 + emptyShips[d]) - style.minProfit - engine.fuelNeeded(s.port, d) * engine.price(s.port, 1) - fee;
+          const value = bestFrom[d] * misjudge(error, id, d, 2, engine.tick) / (1 + emptyShips[d]) - style.minProfit - engine.fuelNeeded(s.port, d) * engine.price(s.port, 1) - fee;
           const score = value / (engine.voyageHours(s.port, d) + 6);
           if (score > move.score) move = { score, dest: d };
         }

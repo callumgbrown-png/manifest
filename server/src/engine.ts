@@ -20,7 +20,7 @@ export interface Rules {
     start_spread?: number;
   };
   fees: { port_fee_per_docking: number; trade_tax_rate: number };
-  difficulty?: { default: string; presets: Record<string, { tax: number; portFee: number; upkeep: number; botMinProfit?: number }> };
+  difficulty?: { default: string; presets: Record<string, { tax: number; portFee: number; upkeep: number; botMinProfit?: number; botError?: number }> };
   company: { start_cash: number; start_ships: number; max_ships: number };
   ship: { price: number; capacity: number; speed_per_hour: number; fuel_per_100_distance: number; upkeep_per_day: number };
 }
@@ -75,6 +75,8 @@ export class Engine {
   difficulty: string;
   /** Smallest profit a bot trip must clear under the current difficulty. */
   botMinProfit = 0;
+  /** How far off a bot's guess of a sale price can be (0.2 = up to 20% either way). */
+  botError = 0;
   /** Market size multiplier, fixed for the season. */
   readonly scale: number;
   /** Stock at which a port's price sits mid-band (sent to clients for honest estimates). */
@@ -98,6 +100,7 @@ export class Engine {
     // Seasons open with producers stocked up and consumers short, so trade pays from the first hour.
     const spread = m.start_spread ?? 0;
     this.difficulty = rules.difficulty?.default ?? "normal";
+    this.botError = rules.difficulty?.presets?.[this.difficulty]?.botError ?? 0;
     if (rules.difficulty) this.setDifficulty(this.difficulty);
     this.stock = map.ports.map(p => GOODS.map(g => {
       const makes = p.produces.includes(g), needs = p.consumes.includes(g);
@@ -421,6 +424,7 @@ export class Engine {
     this.rules.fees.port_fee_per_docking = p[level].portFee;
     this.rules.ship.upkeep_per_day = p[level].upkeep;
     this.botMinProfit = p[level].botMinProfit ?? 0;
+    this.botError = p[level].botError ?? 0;
     this.difficulty = level;
     return { ok: true };
   }

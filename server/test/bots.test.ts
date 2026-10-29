@@ -42,3 +42,29 @@ test("after the season ends, the clock stops and trading is refused", () => {
   assert.equal((e.apply({ type: "sail", company: id, ship, dest: 1 }) as any).error, "the season has ended");
   assert.ok(e.apply({ type: "adminSet", tax: 0.05 }).ok, "admin can still adjust");
 });
+
+test("misjudging bots earn less than perfect ones, and still stay out of debt", () => {
+  const season = (error: number) => {
+    const e = new Engine(rules, map, 30);
+    const ids: number[] = [];
+    for (let i = 0; i < 30; i++) ids.push((e.apply({ type: "register", name: botName(i), startPort: (i * 7) % e.n }) as any).id);
+    let trips = 0;
+    const commit = (c: any) => { if (c.type === "sail" && c.buy) trips++; return e.apply(c); };
+    while (!e.seasonOver) { e.advance(); runBots(e, ids, commit, { minProfit: 0, error }); }
+    const worth = ids.reduce((t, id) => t + e.companies.get(id)!.cash, 0);
+    return { worth, trips, inDebt: e.metrics().inDebt };
+  };
+  const perfect = season(0), sloppy = season(rules.difficulty.presets.easy.botError);
+  assert.ok(sloppy.trips > 500, `misjudging bots still trade (${sloppy.trips} loaded trips)`);
+  assert.equal(sloppy.inDebt, 0, "no bot in debt");
+  assert.ok(sloppy.worth < perfect.worth, `misjudging bots earn less: ${sloppy.worth} vs ${perfect.worth}`);
+});
+
+test("difficulty presets set how far off bots' price guesses are", () => {
+  const e = new Engine(rules, map);
+  assert.equal(e.botError, rules.difficulty.presets.normal.botError);
+  e.apply({ type: "setDifficulty", level: "easy" });
+  assert.equal(e.botError, rules.difficulty.presets.easy.botError);
+  e.apply({ type: "setDifficulty", level: "hard" });
+  assert.ok(e.botError < rules.difficulty.presets.easy.botError);
+});

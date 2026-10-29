@@ -42,12 +42,12 @@
     "inbound_cargo_visible": true
   },
   "difficulty": {
-    "_comment": "World difficulty, chosen on the admin page or with the DIFFICULTY env when a world or season starts. Each preset sets tax, port fee and upkeep for everyone, and botMinProfit: the smallest profit a bot trip must clear, which leaves the smaller margins for players. Simulated season (players checking in every 4 hours, 30-60 bots): easy, players finish around 31,000-35,000 vs about 17,500 on normal; money grows 0.9-1.3%/day on easy vs 0.5-0.9% on normal (a little inflation, accepted by Dave).",
+    "_comment": "World difficulty, chosen on the admin page or with the DIFFICULTY env when a world or season starts. Each preset sets tax, port fee and upkeep for everyone, and botMinProfit: the smallest profit a bot trip must clear, which leaves the smaller margins for players; and botError: how far off (as a fraction, either way) each bot's guess of a sale price can be, so bots pick imperfect routes and sometimes lose money. Simulated season (players checking in every 4 hours, 30-60 bots): easy, players finish around 31,000-35,000 vs about 17,500 on normal; money grows 0.9-1.3%/day on easy vs 0.5-0.9% on normal (a little inflation, accepted by Dave).",
     "default": "normal",
     "presets": {
-      "easy": { "tax": 0.05, "portFee": 15, "upkeep": 300, "botMinProfit": 500 },
-      "normal": { "tax": 0.07, "portFee": 25, "upkeep": 400, "botMinProfit": 0 },
-      "hard": { "tax": 0.09, "portFee": 40, "upkeep": 500, "botMinProfit": 0 }
+      "easy": { "tax": 0.05, "portFee": 15, "upkeep": 300, "botMinProfit": 500, "botError": 0.12 },
+      "normal": { "tax": 0.07, "portFee": 25, "upkeep": 400, "botMinProfit": 0, "botError": 0.08 },
+      "hard": { "tax": 0.09, "portFee": 40, "upkeep": 500, "botMinProfit": 0, "botError": 0.04 }
     }
   },
   "fees": {
