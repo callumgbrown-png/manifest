@@ -118,7 +118,9 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   const home = A0.ships[0].port;
   assert.equal(await a.textContent("#panel h2"), map.ports[home].name);
   assert.equal(await a.locator("#panel table tr").count() >= 3, true);
-  assert.ok(await a.locator('button[data-act="buyShip"]').count(), "buy-ship button shown at a port with your ship");
+  // A new company (10,000 cash) can't afford a 12,000 ship: the button is disabled and says what's missing.
+  assert.ok(await a.locator('#panel button:disabled', { hasText: "Buy a ship here" }).count(), "buy-ship button shown, disabled, at a port with your ship");
+  assert.match((await a.textContent("#panel"))!, /You need 2,000 more cash\./);
 
   // ---- the trip estimate updates as you change the form
   await a.click('#tabs button[data-tab="fleet"]');
@@ -251,14 +253,22 @@ test("two players play through every feature in the browser", { skip: SKIP, time
     await toast(a, /Ship scrapped/);
   } else {
     await selectPort(a, home);
-    await a.click('button[data-act="buyShip"]');
-    await toast(a, /not enough cash/);
+    assert.equal(await a.locator('button[data-act="buyShip"]').count(), 0, "no buy button that would only fail");
   }
 
   // ---- leaderboard
   await a.click('#tabs button[data-tab="board"]');
   const rows = await a.locator("#panel table tr").allTextContents();
   assert.ok(rows.some(r => r.includes("Alpha Lines")) && rows.some(r => r.includes("Beta Shipping")));
+  // Places in the table match the "You" card, and equal net worth shares a place.
+  const board = await a.evaluate(() => {
+    const lb = (window as any).eval("world").leaderboard, m = (window as any).eval("me");
+    const shown = [...document.querySelectorAll("#panel table tr .rank")].map(e => Number(e.textContent));
+    return { lb, shown, rank: m.rank, tied: m.tied, card: document.querySelector(".youRank b")!.textContent, mine: Number(document.querySelector("#panel tr.me .rank")?.textContent) };
+  });
+  board.lb.forEach((c: any, i: number) => assert.equal(board.shown[i], 1 + board.lb.findIndex((x: any) => x.worth === c.worth)));
+  if (board.mine) assert.equal(board.mine, board.rank);
+  assert.match(board.card!, board.tied ? /^joint \d+(st|nd|rd|th)$/ : /^\d+(st|nd|rd|th)$/);
 
   // ---- the session survives a reload; log out shows the sign-in screen; log back in
   await a.reload();
@@ -426,7 +436,8 @@ test("trip estimates match what really happens, and 'best trips' plans a trip", 
     let dest: number;
     if (await plan.count()) {
       dest = Number(await plan.getAttribute("data-dest"));
-      await plan.click();
+      // (Clicked from inside the page: see the note on the "Set sail" click below.)
+      await page.evaluate((d: number) => (document.querySelector(`.shipCard[data-ship] button[data-act="plan"][data-dest="${d}"]:not(.move)`) as HTMLButtonElement).click(), dest);
       assert.equal(await card.locator("select[data-field=dest]").inputValue(), String(dest), "plan fills the destination");
       assert.notEqual(await card.locator("select[data-field=good]").inputValue(), "", "and the cargo");
       assert.match((await card.locator("[data-field=estimate]").textContent())!, /This trip makes about/);
@@ -447,7 +458,9 @@ test("trip estimates match what really happens, and 'best trips' plans a trip", 
       return w.eval("tripProfit")(s, Number((card.querySelector("[data-field=dest]") as HTMLSelectElement).value), g, qty).profit;
     });
     const before = (await me(page)).cash;
-    await card.locator("button[data-act=sail]").click();
+    // A game hour passes every 0.12 s here and each one rebuilds the panel, so Playwright's click
+    // keeps finding a fresh button; click it from inside the page (a real click holds the rebuild).
+    await page.evaluate(() => (document.querySelector(".shipCard[data-ship] button[data-act=sail]") as HTMLButtonElement).click());
     await page.waitForFunction((d: number) => { const m = (window as any).eval("me"); return m.ships[0].dest === null && m.ships[0].port === d; }, dest, { timeout: 60000 });
     // At this test's speed a game hour passes every 0.12 s, so the button's price label (and width)
     // changes faster than Playwright's "stable" check; click it from inside the page instead.

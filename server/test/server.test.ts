@@ -436,6 +436,18 @@ describe("playing over WebSockets", () => {
     assert.ok(lb.every((x: any) => x.bot === false));
     c.close();
   });
+
+  test("companies with the same net worth share a place", async () => {
+    // Two brand-new companies both have exactly the starting net worth.
+    const a = new Client(s); await a.auth("register", uniq("Twin"));
+    const b = new Client(s); await b.auth("register", uniq("Twin"));
+    const st = await b.state(m => m.me && m.world.leaderboard.some((x: any) => x.id === m.me.id));
+    const m = st.me, lb = st.world.leaderboard;
+    assert.ok(m.tied >= 1, "the other new company has the same net worth");
+    assert.equal(m.rank, 1 + lb.filter((x: any) => x.worth > m.worth).length, "rank counts only richer companies");
+    assert.equal(m.rank, 1 + lb.findIndex((x: any) => x.worth === m.worth), "and matches the first row with your net worth");
+    a.close(); b.close();
+  });
 });
 
 describe("restart and seasons", () => {

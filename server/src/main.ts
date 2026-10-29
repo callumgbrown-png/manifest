@@ -190,11 +190,15 @@ function publicView() {
 function privateView(company: number) {
   const c = engine.companies.get(company);
   if (!c) return null;
+  const worth = Math.round(engine.netWorth(c));
+  const others = [...engine.companies.values()].filter(o => o.id !== c.id).map(o => Math.round(engine.netWorth(o)));
   return {
-    id: c.id, name: c.name, cash: Math.round(c.cash), worth: Math.round(engine.netWorth(c)),
+    id: c.id, name: c.name, cash: Math.round(c.cash), worth,
     ships: c.ships.map(id => { const s = engine.ships.get(id)!; return { ...s, cost: Math.round(s.cost) }; }),
     // Your place on the leaderboard even outside the top 20, out of all companies.
-    rank: 1 + [...engine.companies.values()].filter(o => o.id !== c.id && engine.netWorth(o) > engine.netWorth(c)).length,
+    // Compared on rounded net worth, as shown, so equal-looking companies share a place.
+    rank: 1 + others.filter(w => w > worth).length,
+    tied: others.filter(w => w === worth).length,
     companies: engine.companies.size,
     trips: (engine.trips.get(c.id) ?? []).slice(-15).reverse()
       .map(t => ({ ...t, spent: Math.round(t.spent), earned: Math.round(t.earned) })),

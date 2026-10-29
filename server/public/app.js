@@ -660,13 +660,13 @@ function portPanel() {
   const shipsFirst = docked.length > 0 && window.matchMedia("(max-width: 860px)").matches;
   const shipsHtml = `<h3>Your ships here</h3>
     ${docked.length ? docked.map(shipCard).join("") : `<div class="empty">None of your ships are docked here.${coming.length ? ` ${coming.length === 1 ? "One is" : coming.length + " are"} on the way.` : me ? " Pick a port with your ship from the map or the Fleet tab." : ""}</div>`}
-    ${me && docked.length && !world.seasonOver && me.ships.length < world.rules.maxShips ? `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(world.rules.shipPrice)})</button></div>` : ""}`;
+    ${me && docked.length && !world.seasonOver && me.ships.length < world.rules.maxShips ? buyShipHtml() : ""}`;
   return `
     <h2>${esc(p.name)}</h2><div class="chips">${chips.join("") || `<span class="quiet">A quiet port</span>`}</div>
     ${shipsFirst ? shipsHtml : ""}
     <h3>Market</h3>
     <table class="market"><tr><th>Good</th><th class="num">Price</th><th class="sparkCell">Trend</th><th class="num">Stock</th><th class="num">Inbound</th></tr>${rows}</table>
-    <div class="est">${p.emptyInbound} empty ship${p.emptyInbound === 1 ? "" : "s"} heading here to load. Inbound cargo will push prices down when it lands.</div>
+    <div class="est">${p.emptyInbound ? `${p.emptyInbound} empty ship${p.emptyInbound === 1 ? "" : "s"} heading here to load.` : "No empty ships heading here to load."} Inbound cargo will push prices down when it lands.</div>
     <h3>Player orders here</h3>
     ${orders.length ? `<table><tr><th>Player</th><th>Wants to</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${orders.map(o => `<tr${me && o.owner === me.id ? ' class="me"' : ""}><td>${esc(o.ownerName)}</td><td>${o.side === "sell" ? "sell" : "buy"}</td><td><span class="tag ${GOOD_NAMES[o.good]}">${GOOD_NAMES[o.good]}</span></td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="quiet">None yet.</div>`}
     ${shipsFirst ? "" : shipsHtml}`;
@@ -842,7 +842,7 @@ function estimate(card) {
     text += s.qty > 0
       ? ` Compared with selling here now, sailing there ${verb} <b class="${t.profit >= 0 ? "pos" : "neg"}">${fmt(Math.abs(t.profit))}</b>.`
       : ` This trip ${verb} about <b class="${t.profit >= 0 ? "pos" : "neg"}">${fmt(Math.abs(t.profit))}</b> (${fmt(Math.abs(t.profit) / t.hours)} an hour).`;
-    text += ` Counts the price moving as you buy and sell, and the ${fmt(there.inbound[g])} ${GOOD_NAMES[g]} already heading there.`;
+    text += ` Counts the price moving as you buy and sell${there.inbound[g] > 0 ? `, and the ${fmt(there.inbound[g])} ${GOOD_NAMES[g]} already heading there` : ""}.`;
   }
   if (late) text = `<b class="neg">This ship would dock after the season ends</b> (≈${t.hours} h; ${Math.max(0, world.seasonHours - world.tick)} h left), so ${g >= 0 && qty > 0 ? "the cargo could never be sold: it only counts at what you paid for it, and the fuel is lost" : "the fuel would be wasted"}. ` + text;
   card.querySelector("[data-field=estimate]").innerHTML = text;
@@ -918,6 +918,12 @@ function ordersPanel() {
     ${others.length ? `<table><tr><th>Port</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${others.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${o.side === "sell" ? "for sale" : "wanted"}: ${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="empty">No other open orders.</div>`}`;
 }
 
+/** "Buy a ship" when you can afford one; otherwise say how much more cash it needs instead of a button that only errors. */
+function buyShipHtml() {
+  const price = world.rules.shipPrice;
+  if (me.cash >= price) return `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(price)})</button></div>`;
+  return `<div class="row"><button disabled>Buy a ship here (${fmt(price)})</button><span class="quiet">You need ${fmt(price - me.cash)} more cash.</span></div>`;
+}
 function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
 function boardPanel() {
   const top = Math.max(1, world.leaderboard[0]?.worth ?? 1);
@@ -925,12 +931,14 @@ function boardPanel() {
   const low = Math.min(...world.leaderboard.map(c => c.worth)), span = Math.max(1, top - low);
   const barW = w => (15 + 85 * (w - low) / span).toFixed(0);
   const listed = me && world.leaderboard.some(c => c.id === me.id);
+  // Companies with the same net worth share a place (1, 2, 2, 4), matching the "You" card.
+  const rankOf = i => 1 + world.leaderboard.findIndex(c => c.worth === world.leaderboard[i].worth);
   return `<h2>Leaderboard</h2><div class="quiet">Ranked by net worth: cash, half the value of ships, cargo and open orders. Companies marked bot are computer traders that keep the markets moving. <a href="/seasons">Past seasons</a></div>
-    ${me && me.rank ? `<div class="youRank"><span>You</span><b>${ordinal(me.rank)}</b><span>of ${me.companies}</span><span class="num">${fmt(me.worth)}</span>
+    ${me && me.rank ? `<div class="youRank"><span>You</span><b>${me.tied ? "joint " : ""}${ordinal(me.rank)}</b><span>of ${me.companies}</span><span class="num">${fmt(me.worth)}</span>
       <span class="quiet">${me.rank === 1 ? "You're in the lead." : `${fmt(top - me.worth)} behind the leader`}</span></div>` : ""}
     <h3>Top companies</h3>
     <table><tr><th>#</th><th>Company</th><th class="num">Ships</th><th class="num">Net worth</th></tr>
-    ${world.leaderboard.map((c, i) => `<tr${me && c.id === me.id ? ' class="me"' : ""}><td><span class="rank${i < 3 ? " r" + (i + 1) : ""}">${i + 1}</span></td>
+    ${world.leaderboard.map((c, i) => [c, rankOf(i)]).map(([c, r]) => `<tr${me && c.id === me.id ? ' class="me"' : ""}><td><span class="rank${r <= 3 ? " r" + r : ""}">${r}</span></td>
       <td>${esc(c.name)}${c.bot ? ' <span class="tag">bot</span>' : ""}${me && c.id === me.id ? ' <span class="tag mine">you</span>' : ""}<div class="bar${me && c.id === me.id ? " mine" : ""}"><i style="width:${barW(c.worth)}%"></i></div></td>
       <td class="num">${c.ships}</td><td class="num">${fmt(c.worth)}</td></tr>`).join("")}</table>
     ${me && !listed ? `<div class="est big">You're outside the top ${world.leaderboard.length} with ${fmt(me.worth)}. The leader has ${fmt(top)}.</div>` : ""}`;
