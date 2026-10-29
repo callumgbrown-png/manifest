@@ -1,6 +1,9 @@
 # Next steps (work queue for scheduled sessions)
 
+**All queued work done** apart from items waiting on Dave's answers below.
+
 ## Questions for Dave
+- **Collect emails at sign-up?** Storing emails is personal data under GDPR, so it needs a short privacy notice (what's stored, why, how to delete it) and a way to remove an account. Options: (a) don't store emails in the game; collect tester contacts through the Discord sign-up instead, (b) add an optional email field plus a privacy notice and a "delete my account" button. Recommendation: (a) for the closed test. Reply with a choice and it gets built.
 - **Is progression rewarding enough?** In simulation the median company only grows from 16,000 to about 17,000 net worth over a season (top bots in a 10-company world reach ~24,000). Options: (a) leave it and see how real players feel, (b) raise rewards by lowering tax from 7% to 4–5% (simulate first to keep inflation in check), (c) add season goals or achievements so progress isn't only net worth. Recommendation: (a) plus a short tester survey question about it.
 - **Small worlds drift down about 1% a day.** With market scaling, 20–100 companies now lose ~1%/day of money (it was +8%/day inflation before). Options: (a) accept it and lower tax from the admin page during the closed test if players feel poor, (b) scale tax and port fee down for small worlds too. Recommendation: (a), decide after real players try it.
 
@@ -16,5 +19,5 @@ Work top to bottom. Tick items off here and commit with each finished step.
 ## After that
 - [x] Sell orders (players post goods for sale at a port) with matching against buy orders. Done: "List for sale" on a docked ship with cargo; goods wait at the port and the ship is freed; other players buy onto their ships; crossing buy and sell orders fill automatically at the resting order's price; max 10 open orders per company; cancelling a sell needs a docked ship with room. 6 new tests; checked in a browser with two players.
 - [x] Season results page showing past seasons from the `seasons` table. Done: `/seasons` page and `/api/seasons`, linked from the leaderboard. Tested a full 56-day season with bots, then `new-season`; archive and reset work.
-- [ ] Email field on sign-up (optional) for playtest invites
+- [ ] Email field on sign-up (optional) for playtest invites. **Waiting for Dave's answer above.** Don't build until answered.
 - [x] Check progression feels rewarding: median company only grows ~16k to ~17k a season; propose a fix in this file rather than changing rules silently. Done: question added for Dave above.
