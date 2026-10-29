@@ -36,6 +36,16 @@ export interface Ship {
   good: number | null; qty: number; cost: number;
 }
 export interface Company { id: number; name: string; cash: number; ships: number[] }
+/** One voyage, for the player's trip log: what it cost (cargo, fuel, port fee) and what the cargo sold for. */
+export interface Trip {
+  ship: number; from: number; to: number; good: number | null; qty: number;
+  spent: number; earned: number; departTick: number; arriveTick: number;
+  /** Still running: at sea, or docked with cargo not yet sold. */
+  open: boolean;
+  /** Some cargo was listed for sale at a port instead of sold, so the profit shown is incomplete. */
+  listed?: boolean;
+}
+const TRIPS_KEPT = 25;
 /** A buy order holds cash in escrow; a sell order holds goods at the port. */
 export interface Order {
   id: number; owner: number; port: number; good: number; qty: number; price: number;
@@ -70,6 +80,10 @@ export class Engine {
   companies = new Map<number, Company>();
   ships = new Map<number, Ship>();
   orders = new Map<number, Order>();
+  /** Recent trips per company, newest last (for the trip log). */
+  trips = new Map<number, Trip[]>();
+  /** Net worth per company at the start of each game day (for the progress chart). */
+  worthLog = new Map<number, number[]>();
   private nextId = 1;
   /** The difficulty preset in force, or "custom" once an admin changes a value by hand. */
   difficulty: string;
@@ -158,12 +172,24 @@ export class Engine {
     }
   }
 
+  /** The ship's trip still running, if any. */
+  private openTrip(company: number, ship: number) {
+    const list = this.trips.get(company);
+    for (let i = (list?.length ?? 0) - 1; i >= 0; i--) if (list![i].ship === ship) return list![i].open ? list![i] : undefined;
+    return undefined;
+  }
+  private noteEarned(company: number, ship: number, amount: number, emptied: boolean) {
+    const trip = this.openTrip(company, ship);
+    if (trip) { trip.earned += amount; if (emptied) trip.open = false; }
+  }
+
   private register(name: string, startPort: number): Result {
     if (!this.isPort(startPort)) return fail("bad start port");
     const id = this.nextId++;
     const c: Company = { id, name, cash: this.rules.company.start_cash, ships: [] };
     this.companies.set(id, c);
     for (let i = 0; i < this.rules.company.start_ships; i++) this.addShip(c, startPort);
+    this.worthLog.set(id, [Math.round(this.netWorth(c))]);
     return { ok: true, id };
   }
 
@@ -221,9 +247,22 @@ export class Engine {
     }
     this.stock[s.port][FUEL] = Math.max(0, this.stock[s.port][FUEL] - fuelHave);
     c.cash -= cargoCost + fuelCost;
+    const arrive = this.tick + this.voyageHours(s.port, cmd.dest);
+    const open = this.openTrip(c.id, s.id);
+    if (open && !cmd.buy && s.qty > 0) {
+      // Carrying the same cargo on: one trip, now ending at the new port.
+      open.spent += fuelCost; open.to = cmd.dest; open.arriveTick = arrive;
+    } else {
+      if (open) open.open = false;
+      const list = this.trips.get(c.id) ?? [];
+      list.push({ ship: s.id, from: s.port, to: cmd.dest, good: s.qty > 0 ? s.good : null, qty: s.qty,
+        spent: cargoCost + fuelCost, earned: 0, departTick: this.tick, arriveTick: arrive, open: true });
+      if (list.length > TRIPS_KEPT) list.shift();
+      this.trips.set(c.id, list);
+    }
     s.dest = cmd.dest;
     s.departTick = this.tick;
-    s.arriveTick = this.tick + this.voyageHours(s.port, cmd.dest);
+    s.arriveTick = arrive;
     return { ok: true };
   }
 
@@ -241,6 +280,7 @@ export class Engine {
       const fill = Math.min(o.qty, s.qty);
       const gross = fill * o.price;
       c.cash += gross * (1 - tax);
+      this.noteEarned(c.id, s.id, gross * (1 - tax), s.qty - fill === 0);
       // The goods are delivered to the buyer, who uses them; they leave the market.
       o.qty -= fill;
       if (o.qty <= 0) this.orders.delete(o.id);
@@ -250,6 +290,7 @@ export class Engine {
       const gross = this.sellValue(s.port, s.good, s.qty);
       this.stock[s.port][s.good] += s.qty;
       c.cash += gross * (1 - tax);
+      this.noteEarned(c.id, s.id, gross * (1 - tax), true);
       s.qty = 0; s.cost = 0;
     }
     if (s.qty === 0) s.good = null;
@@ -280,6 +321,8 @@ export class Engine {
   }
 
   private removeShip(c: Company, s: Ship) {
+    const trip = this.openTrip(c.id, s.id);
+    if (trip) trip.open = false;
     this.ships.delete(s.id);
     c.ships = c.ships.filter(id => id !== s.id);
   }
@@ -330,6 +373,8 @@ export class Engine {
     const unitCost = s.cost / s.qty;
     s.qty -= qty; s.cost -= unitCost * qty;
     if (s.qty === 0) { s.good = null; s.cost = 0; }
+    const trip = this.openTrip(c.id, s.id);
+    if (trip) { trip.listed = true; if (s.qty === 0) trip.open = false; }
     // Fill first against higher buy orders at this port (best price first).
     let left = qty;
     for (const o of this.matching(s.port, g, "buy", c.id).filter(o => o.price >= price)) {
@@ -453,11 +498,15 @@ export class Engine {
         s.port = s.dest;
         s.dest = null;
         this.companies.get(s.owner)!.cash -= this.rules.fees.port_fee_per_docking;
+        const trip = this.openTrip(s.owner, s.id);
+        if (trip) { trip.spent += this.rules.fees.port_fee_per_docking; if (s.qty === 0) trip.open = false; }
       }
     }
 
     if (this.tick % 24 === 0) {
       for (const c of this.companies.values()) {
+        const log = this.worthLog.get(c.id);
+        if (log) log.push(Math.round(this.netWorth(c)));
         c.cash -= this.rules.ship.upkeep_per_day * Math.max(0, c.ships.length - 1);
         if (c.cash < 0 && c.ships.length > 1) {
           const idle = c.ships.map(id => this.ships.get(id)!).find(s => s.dest === null && s.qty === 0);

@@ -37,7 +37,9 @@ function connect() {
     if (msg.type === "state") {
       if (!world || msg.world.tick !== world.tick) tickAt = Date.now();
       const firstLogin = !me && msg.me;
+      const before = me;
       world = msg.world; me = msg.me;
+      if (before && me && before.id === me.id) noteDockings(before);
       noteprices();
       if ((selectedPort === null || firstLogin) && me?.ships?.length) selectedPort = me.ships[0].dest ?? me.ships[0].port;
       if (selectedPort === null) selectedPort = 0;
@@ -54,6 +56,26 @@ function connect() {
     } else if (msg.type === "loggedOut") location.reload();
     else if (msg.type === "error") toast(msg.error, true);
   };
+}
+
+/** Tell the player when one of their ships docks: a toast, plus a browser notification if they
+ *  turned those on and the tab isn't in view. */
+function noteDockings(before) {
+  const docked = me.ships.filter(s => s.dest === null && before.ships.some(b => b.id === s.id && b.dest !== null));
+  for (const s of docked) {
+    const text = `Ship ${s.id} docked at ${world.ports[s.port].name}${s.qty > 0 ? ` with ${s.qty} ${GOOD_NAMES[s.good]}` : ""}`;
+    toast(text);
+    if (store.get("notify") && "Notification" in window && Notification.permission === "granted" && document.hidden) {
+      try { new Notification("Manifest", { body: text, tag: `dock-${s.id}` }); } catch {}
+    }
+  }
+}
+function notifyHtml() {
+  if (!("Notification" in window)) return "";
+  const on = store.get("notify") && Notification.permission === "granted";
+  if (Notification.permission === "denied") return `<div class="est">Dock alerts are blocked in your browser settings for this site.</div>`;
+  return `<div class="row"><button class="secondary" data-act="notify">${on ? "Turn off dock alerts" : "Alert me when ships dock"}</button>
+    <span class="quiet">${on ? "On: you'll get a browser notification while this tab is open in the background." : "Works while this tab is open, even in the background."}</span></div>`;
 }
 
 function command(cmd, onOk) {
@@ -785,7 +807,43 @@ function fleetPanel() {
       <div><span>At sea</span><b>${atSea}</b></div><div><span>Docked</span><b>${me.ships.length - atSea}</b></div>
       <div><span>Cargo value</span><b>${fmt(cargo)}</b></div><div><span>Net worth</span><b>${fmt(me.worth)}</b></div>
     </div>
-    <h3>Ships</h3>${me.ships.map(shipCard).join("")}`;
+    <h3>Ships</h3>${me.ships.map(shipCard).join("")}
+    ${notifyHtml()}
+    ${worthChart()}
+    ${tripLog()}`;
+}
+
+/** Net worth at the start of each day this season, with today's value as the last point. */
+function worthChart() {
+  const pts = [...(me.worthLog ?? []), me.worth];
+  if (pts.length < 2) return "";
+  const w = 360, h = 90, lo = Math.min(...pts), hi = Math.max(...pts), span = Math.max(1, hi - lo);
+  const xy = pts.map((v, i) => [i / (pts.length - 1) * w, h - 6 - (v - lo) / span * (h - 12)]);
+  const line = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join("");
+  const change = pts[pts.length - 1] - pts[0];
+  return `<h3>Net worth this season</h3>
+    <div class="quiet">${fmt(pts[0])} → <b>${fmt(me.worth)}</b> <span class="${change >= 0 ? "pos" : "neg"}">(${change >= 0 ? "+" : "−"}${fmt(Math.abs(change))})</span></div>
+    <svg class="worthChart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Net worth by day">
+      <path d="${line}L${w},${h}L0,${h}Z" class="area"/><path d="${line}" class="line"/></svg>
+    <div class="axis"><span>Day 1</span><span>Today</span></div>`;
+}
+
+function tripLog() {
+  const trips = me.trips ?? [];
+  if (!trips.length) return `<h3>Trip log</h3><div class="empty">Your finished trips and their profit will show here.</div>`;
+  const rows = trips.map(t => {
+    const what = t.good === null ? "empty" : `${t.qty} ${GOOD_NAMES[t.good]}`;
+    const profit = t.earned - t.spent;
+    const result = t.open
+      ? `<span class="quiet">${t.good === null ? "at sea" : "in progress"}</span>`
+      : t.good === null ? `<span class="neg">−${fmt(t.spent)}</span>`
+      : `<b class="${profit >= 0 ? "pos" : "neg"}">${profit >= 0 ? "+" : "−"}${fmt(Math.abs(profit))}</b>${t.listed ? ` <span class="quiet" title="Part of the cargo was listed for sale, so it isn't counted">*</span>` : ""}`;
+    return `<tr><td class="num">${Math.floor(t.departTick / 24) + 1}</td><td>${esc(world.ports[t.from].name)} → ${esc(world.ports[t.to].name)}</td><td>${what}</td><td class="num">${result}</td></tr>`;
+  }).join("");
+  const done = trips.filter(t => !t.open), total = done.reduce((a, t) => a + t.earned - t.spent, 0);
+  return `<h3>Trip log</h3>
+    <table class="trips-log"><tr><th class="num">Day</th><th>Route</th><th>Cargo</th><th class="num">Profit</th></tr>${rows}</table>
+    ${done.length ? `<div class="est">Last ${done.length} finished trip${done.length === 1 ? "" : "s"}: <b class="${total >= 0 ? "pos" : "neg"}">${total >= 0 ? "+" : "−"}${fmt(Math.abs(total))}</b> after cargo, fuel, fees and tax.${trips.some(t => t.listed) ? " * Listed cargo isn't counted until it sells." : ""}</div>` : ""}`;
 }
 
 function ordersPanel() {
@@ -808,6 +866,7 @@ function ordersPanel() {
     ${others.length ? `<table><tr><th>Port</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${others.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${o.side === "sell" ? "for sale" : "wanted"}: ${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="empty">No other open orders.</div>`}`;
 }
 
+function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
 function boardPanel() {
   const top = Math.max(1, world.leaderboard[0]?.worth ?? 1);
   // Bars show the spread between companies, not distance from zero (everyone starts near 16,000).
@@ -815,6 +874,8 @@ function boardPanel() {
   const barW = w => (15 + 85 * (w - low) / span).toFixed(0);
   const listed = me && world.leaderboard.some(c => c.id === me.id);
   return `<h2>Leaderboard</h2><div class="quiet">Ranked by net worth: cash, half the value of ships, cargo and open orders. Companies marked bot are computer traders that keep the markets moving. <a href="/seasons">Past seasons</a></div>
+    ${me && me.rank ? `<div class="youRank"><span>You</span><b>${ordinal(me.rank)}</b><span>of ${me.companies}</span><span class="num">${fmt(me.worth)}</span>
+      <span class="quiet">${me.rank === 1 ? "You're in the lead." : `${fmt(top - me.worth)} behind the leader`}</span></div>` : ""}
     <h3>Top companies</h3>
     <table><tr><th>#</th><th>Company</th><th class="num">Ships</th><th class="num">Net worth</th></tr>
     ${world.leaderboard.map((c, i) => `<tr${me && c.id === me.id ? ' class="me"' : ""}><td><span class="rank${i < 3 ? " r" + (i + 1) : ""}">${i + 1}</span></td>
@@ -831,6 +892,10 @@ function bindPanel() {
   });
   document.querySelectorAll("[data-act]").forEach(btn => btn.addEventListener("click", () => {
     const act = btn.dataset.act, ship = Number(btn.dataset.ship);
+    if (act === "notify") {
+      if (store.get("notify") && Notification.permission === "granted") { store.set("notify", null); render(); }
+      else Notification.requestPermission().then(p => { if (p === "granted") { store.set("notify", true); toast("Dock alerts on"); } render(); });
+    }
     if (act === "sell") command({ type: "sell", ship }, () => toast("Sold"));
     if (act === "fill") command({ type: "sell", ship, order: Number(btn.dataset.order) }, () => toast("Order filled"));
     if (act === "scrap") command({ type: "scrapShip", ship }, () => toast("Ship scrapped"));

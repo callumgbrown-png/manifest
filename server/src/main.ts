@@ -193,6 +193,12 @@ function privateView(company: number) {
   return {
     id: c.id, name: c.name, cash: Math.round(c.cash), worth: Math.round(engine.netWorth(c)),
     ships: c.ships.map(id => { const s = engine.ships.get(id)!; return { ...s, cost: Math.round(s.cost) }; }),
+    // Your place on the leaderboard even outside the top 20, out of all companies.
+    rank: 1 + [...engine.companies.values()].filter(o => o.id !== c.id && engine.netWorth(o) > engine.netWorth(c)).length,
+    companies: engine.companies.size,
+    trips: (engine.trips.get(c.id) ?? []).slice(-15).reverse()
+      .map(t => ({ ...t, spent: Math.round(t.spent), earned: Math.round(t.earned) })),
+    worthLog: engine.worthLog.get(c.id) ?? [],
   };
 }
 

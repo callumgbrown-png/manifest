@@ -180,3 +180,12 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
   #panel { padding: 16px 14px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+.worthChart { width: 100%; height: 90px; display: block; margin-top: 6px; }
+.worthChart .line { fill: none; stroke: var(--mine); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.worthChart .area { fill: rgba(95,211,168,.12); stroke: none; }
+.axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--quiet); }
+.youRank { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px; border: 1px solid rgba(95,211,168,.45); border-radius: var(--radius); background: rgba(95,211,168,.07); }
+.youRank b { font: 600 20px var(--mono); color: var(--mine); }
+.youRank .num { margin-left: auto; font-family: var(--mono); }
+.youRank .quiet { width: 100%; font-size: 12px; }
