@@ -53,7 +53,7 @@ Work top to bottom. Tick items off here and commit with each finished step.
   - Browser tests updated for the new defaults. The estimate test now only checks the estimate never overpromises: in the bot-free test world, prices can climb a lot while a ship is at sea, so real profit often beats the estimate.
 
 ## Next: UI
-- [ ] Pick a destination by tapping a port on the map while a docked ship's card is open (fills the destination and updates the estimate).
+- [x] Pick a destination by tapping a port on the map while a docked ship's card is open (fills the destination and updates the estimate). Done: with a docked ship's sail form showing (Port or Fleet tab), tapping another port fills that ship's destination, updates the estimate, and toasts "Ship 3 → Kessel (≈11 h). Tap it again to open the port." Tapping the same port again, or the ship's own port, opens it as before. With several docked ships, the one whose form you last touched gets the destination. The map draws the planned route (dotted, along the sea lanes) and rings the destination; the form label says "(or tap a port on the map)". Browser test covers it (95 unit + 6 browser tests pass). **Note:** while your ship is docked, browsing another port's market now takes two taps (hover tooltips still show prices on desktop); worth asking testers if that feels right.
 - [ ] Short first-time guide (3-4 steps: your ship, buy where it's cheap, sail where it's needed, sell) shown once; "How to play" link on the sign-in card.
 - [ ] Make "Found a company" the primary sign-in button.
 - [ ] Pin the player's own rank at the top of the leaderboard ("You: 24th of 31").

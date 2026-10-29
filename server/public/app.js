@@ -301,6 +301,15 @@ function drawMap() {
   }
   ctx.setLineDash([]);
 
+  // The trip in the open sail form: its lane, dotted, and a ring on the destination.
+  const plan = planCard(), planShipObj = plan && myShips.find(s => s.id === Number(plan.dataset.ship));
+  const planDest = plan ? Number(plan.querySelector("[data-field=dest]").value) : null;
+  if (planShipObj && planDest !== null && planDest !== planShipObj.port && world.ports[planDest]) {
+    ctx.setLineDash([2, 5]); ctx.strokeStyle = rgba(C.mine, 0.9); ctx.lineWidth = 2.2; ctx.lineCap = "round";
+    ctx.beginPath(); lanePath(planShipObj.port, planDest).forEach((i, k) => ctx[k ? "lineTo" : "moveTo"](...P(world.ports[i]))); ctx.stroke();
+    ctx.setLineDash([]); ctx.lineCap = "butt";
+  }
+
   // Ports.
   const r0 = clamp(4.2 * Math.sqrt(cam.z) * Math.max(0.8, Math.min(1.15, fit * 1.4)), 3.5, 9);
   const docked = new Map();
@@ -319,6 +328,10 @@ function drawMap() {
       ctx.strokeStyle = C.mine; ctx.lineWidth = 2; ctx.setLineDash(docked.has(p.id) ? [] : [3, 3]);
       ctx.beginPath(); ctx.arc(x, y, r0 * 2.1, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     }
+    if (p.id === planDest && planShipObj) {
+      ctx.strokeStyle = C.mine; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(x, y, r0 * 2.6, 0, Math.PI * 2); ctx.stroke();
+    }
     if (p.id === selectedPort) {
       const pulse = (now % 1800) / 1800;
       ctx.strokeStyle = rgba(C.ink, 0.9 * (1 - pulse)); ctx.lineWidth = 1.5;
@@ -331,7 +344,7 @@ function drawMap() {
   // Labels, placed so they don't overlap; important ones first.
   const fontSize = clamp(10.5 + (cam.z - 1) * 0.8, 10.5, 13);
   const order = [...world.ports].sort((a, b) => weight(b) - weight(a));
-  function weight(p) { return (p.id === selectedPort ? 100 : 0) + (p.id === hovered ? 90 : 0) + (docked.has(p.id) ? 50 : 0) + (destinations.has(p.id) ? 40 : 0) + (p.produces.length ? 2 : 0); }
+  function weight(p) { return (p.id === selectedPort ? 100 : 0) + (p.id === planDest ? 95 : 0) + (p.id === hovered ? 90 : 0) + (docked.has(p.id) ? 50 : 0) + (destinations.has(p.id) ? 40 : 0) + (p.produces.length ? 2 : 0); }
   const dots = world.ports.map(p => { const [x, y] = P(p); return { x: x - r0 - 1, y: y - r0 - 1, w: 2 * r0 + 2, h: 2 * r0 + 2 }; });
   const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
   for (const p of order) {
@@ -393,7 +406,29 @@ function showTip(id, sx, sy) {
   tip.style.top = clamp(sy - th - 10, 6, H - th - 6) + "px";
 }
 
-// Drag to pan, wheel or pinch to zoom, click a port to open it.
+// While a docked ship's sail form is showing, tapping a port picks it as the destination.
+// The ship whose form you last touched wins; tapping the same port again (or the ship's own port) opens it.
+let activeShip = null;
+function planCard() {
+  if (!me || world.seasonOver) return null;
+  const cards = [...$("panel").querySelectorAll(".shipCard[data-ship]")].filter(c => c.querySelector("[data-field=dest]"));
+  return cards.find(c => Number(c.dataset.ship) === activeShip) ?? cards[0] ?? null;
+}
+function pickDestination(id) {
+  const card = planCard();
+  if (!card) return false;
+  const s = me.ships.find(x => x.id === Number(card.dataset.ship));
+  const sel = card.querySelector("[data-field=dest]");
+  if (!s || s.port === id || sel.value === String(id) || ![...sel.options].some(o => o.value === String(id))) return false;
+  sel.value = String(id); formState.set(formKey(sel), sel.value);
+  activeShip = s.id;
+  estimate(card);
+  card.querySelector("[data-act=sail]")?.scrollIntoView({ block: "nearest" });
+  toast(`Ship ${s.id} → ${world.ports[id].name} (≈${Math.ceil(distance(s.port, id) / world.rules.speed)} h). Tap it again to open the port.`);
+  return true;
+}
+
+// Drag to pan, wheel or pinch to zoom, click a port to open it (or to pick it as a destination, above).
 const pointers = new Map();
 let drag = null, pinch = null;
 canvas.addEventListener("pointerdown", e => {
@@ -433,7 +468,7 @@ function endPointer(e) {
   if (drag && pointers.size === 0) {
     if (!drag.moved && e.type === "pointerup") {
       const id = portAt(e.offsetX, e.offsetY);
-      if (id !== null) { selectedPort = id; tab = "port"; render(); }
+      if (id !== null && !pickDestination(id)) { selectedPort = id; tab = "port"; render(); }
     }
     drag = null; canvas.classList.remove("drag");
   }
@@ -499,6 +534,8 @@ let renderPending = false, pointerInPanel = false;
 const formState = new Map();
 const formKey = el => `${el.closest("[data-ship]")?.dataset.ship ?? ""}:${el.dataset.field ?? el.id}`;
 $("panel").addEventListener("pointerdown", () => { pointerInPanel = true; });
+$("panel").addEventListener("focusin", e => { const c = e.target.closest?.(".shipCard[data-ship]"); if (c) activeShip = Number(c.dataset.ship); });
+$("panel").addEventListener("pointerdown", e => { const c = e.target.closest?.(".shipCard[data-ship]"); if (c) activeShip = Number(c.dataset.ship); });
 // Clicks fire right after pointerup, so wait a moment before allowing a rebuild.
 window.addEventListener("pointerup", () => setTimeout(() => { pointerInPanel = false; if (renderPending) render(); }, 0), true);
 $("panel").addEventListener("input", e => { if (e.target.matches("input, select")) formState.set(formKey(e.target), e.target.value); });
@@ -593,7 +630,7 @@ function shipCard(s) {
     ${forSale.length ? `<h3>For sale here</h3>${forSale.map(o => `<div class="row"><span>${o.qty} ${GOOD_NAMES[o.good]} from ${esc(o.ownerName)} at ${o.price.toFixed(2)}</span>
       <button class="secondary" data-act="buyOrder" data-ship="${s.id}" data-order="${o.id}" data-qty="${Math.min(o.qty, world.rules.capacity - s.qty)}">Buy ${Math.min(o.qty, world.rules.capacity - s.qty)}</button></div>`).join("")}` : ""}
     ${tripsHtml(s, trips, move)}
-    <label>Destination<select data-field="dest">${dests.map(p => `<option value="${p.id}"${p.id === plan.dest ? " selected" : ""}>${esc(p.name)} (≈${Math.ceil(distance(s.port, p.id) / world.rules.speed)} h)</option>`).join("")}</select></label>
+    <label>Destination <span class="quiet">(or tap a port on the map)</span><select data-field="dest">${dests.map(p => `<option value="${p.id}"${p.id === plan.dest ? " selected" : ""}>${esc(p.name)} (≈${Math.ceil(distance(s.port, p.id) / world.rules.speed)} h)</option>`).join("")}</select></label>
     ${s.qty === 0 ? `<div class="row" style="margin-top:4px">
       <select data-field="good" style="width:auto"><option value="">Sail empty</option>${GOOD_NAMES.map((g, i) => `<option value="${g}"${g === plan.good ? " selected" : ""}>Load ${g} at ${port.prices[i].toFixed(2)}</option>`).join("")}</select>
       <input data-field="qty" type="number" min="1" max="${world.rules.capacity}" value="${plan.qty}" style="width:90px"></div>` : ""}

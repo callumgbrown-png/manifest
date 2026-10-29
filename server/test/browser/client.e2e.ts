@@ -38,12 +38,21 @@ const toast = async (page: any, text: RegExp) => {
 async function waitDocked(page: any, port: number) {
   await page.waitForFunction((p: number) => { const m = (window as any).eval("me"); return m?.ships[0].dest === null && m.ships[0].port === p; }, port, { timeout: 30000 });
 }
-/** Click a port on the map, the way a player picks one. */
-async function selectPort(page: any, id: number) {
+/** Tap a port on the map. */
+async function tapPort(page: any, id: number) {
   const box = await page.locator("#map").boundingBox();
   const v = await page.evaluate(() => (window as any).eval("view"));
   await page.mouse.click(box.x + v.ox + map.ports[id].x * v.scale, box.y + v.oy + map.ports[id].y * v.scale);
-  await page.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, map.ports[id].name);
+}
+/** Open a port from the map, the way a player picks one. With a docked ship's sail form showing,
+ *  the first tap picks the port as its destination and a second tap opens it. */
+async function selectPort(page: any, id: number) {
+  const name = map.ports[id].name;
+  await tapPort(page, id);
+  await page.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n
+    || document.getElementById("toast")!.textContent!.includes(`→ ${n}`), name);
+  if (await page.textContent("#panel h2") !== name) await tapPort(page, id);
+  await page.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, name);
 }
 async function sailTo(page: any, port: number, load?: string) {
   await page.click('#tabs button[data-tab="fleet"]');
@@ -85,9 +94,6 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   assert.equal(await a.locator("#panel table tr").count() >= 3, true);
   assert.ok(await a.locator('button[data-act="buyShip"]').count(), "buy-ship button shown at a port with your ship");
 
-  // ---- clicking a port on the map selects it
-  await selectPort(a, (home + 1) % map.ports.length);
-
   // ---- the trip estimate updates as you change the form
   await a.click('#tabs button[data-tab="fleet"]');
   const card = a.locator(".shipCard[data-ship]").first();
@@ -96,6 +102,27 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   const startDest = await card.locator("select[data-field=dest]").inputValue();
   const startGood = await card.locator("select[data-field=good]").inputValue();
   assert.ok(startGood !== "" || startDest !== firstAlpha || (await card.locator("button.move").count()) > 0, "form starts on a sensible trip");
+
+  // ---- with your docked ship's form open, tapping a port picks it as the destination;
+  //      tapping it again opens it
+  const other = map.ports.findIndex((_: any, i: number) => i !== home);
+  const homeCard = card;
+  await homeCard.locator("select[data-field=good]").selectOption("");
+  const company = await a.textContent("#panel h2");
+  await tapPort(a, other);
+  await toast(a, new RegExp(`→ ${map.ports[other].name} \\(≈\\d+ h\\)\\. Tap it again to open the port\\.`));
+  assert.equal(await a.textContent("#panel h2"), company, "first tap keeps the panel open");
+  assert.equal(await homeCard.locator("select[data-field=dest]").inputValue(), String(other), "first tap fills the destination");
+  const fuel = await a.evaluate((d: number) => { const w = window as any; return Math.round(w.eval("fuelCost")(w.eval("me").ships[0].port, d)); }, other);
+  assert.ok((await homeCard.locator("[data-field=estimate]").textContent())!.includes(`fuel ${fuel.toLocaleString("en-IE")}`), "and updates the estimate");
+  await tapPort(a, other);
+  await a.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, map.ports[other].name);
+  assert.equal(await a.locator(".shipCard select[data-field=dest]").count(), 0, "no ship of yours is docked there");
+  await tapPort(a, home);   // tapping your ship's own port opens it, as before
+  await a.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, map.ports[home].name);
+  // ---- clicking a port on the map selects it (two taps while your ship's form is showing)
+  await selectPort(a, (home + 1) % map.ports.length);
+  await a.click('#tabs button[data-tab="fleet"]');
   await card.locator("select[data-field=good]").selectOption("");
   assert.match((await card.locator("[data-field=estimate]").textContent())!, /^Sailing empty costs about [\d,]+ \(fuel [\d,]+, port fee 25\)\.$/);
   await card.locator("select[data-field=good]").selectOption("grain");
