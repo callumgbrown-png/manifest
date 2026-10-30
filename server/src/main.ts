@@ -349,10 +349,17 @@ function onMessage(client: Client, msg: any) {
   }
   if (msg.type === "logout") {
     // Ends this session everywhere: the saved token stops working.
-    if (client.token) endSession(client.token);
-    client.company = client.token = undefined;
-    send(client, { type: "loggedOut" });
-    return sendState(client);
+    // Other tabs or windows open on the same session are logged out too, or they
+    // could keep trading on a session the player has just ended.
+    const token = client.token;
+    if (token) endSession(token);
+    for (const c of clients) {
+      if (c !== client && (!token || c.token !== token)) continue;
+      c.company = c.token = undefined;
+      send(c, { type: "loggedOut" });
+      sendState(c);
+    }
+    return;
   }
   if (msg.type === "cmd") {
     if (!client.company) return send(client, { type: "result", reqId: msg.reqId, ok: false, error: "Log in first" });

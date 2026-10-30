@@ -133,10 +133,11 @@ $("logout").addEventListener("click", () => {
 
 // ------------------------------------------------------------ first-time guide
 
-// Shown once to a new company (remembered in this browser), and any time from "How to play".
+// Shown once to a new company (remembered in this browser), and any time from "How to play"
+// (sign-in card) or "Help" (header).
 let guidePending = false, guideAt = 0;
 function guideSteps() {
-  const ship = me?.ships?.[0], here = ship && ship.dest === null ? world?.ports[ship.port] : null;
+  const ship = me?.ships?.length === 1 ? me.ships[0] : null, here = ship && ship.dest === null ? world?.ports[ship.port] : null;
   return [
     ["Your ship", here
       ? `This is your company: one ship, docked at ${esc(here.name)}. It's the green ring on the map, and its card is on the Port and Fleet tabs. Your first ship costs nothing to keep.`
@@ -164,6 +165,7 @@ $("guideNext").addEventListener("click", () => {
 $("guideBack").addEventListener("click", () => { if (guideAt > 0) { guideAt--; showGuideStep(); } });
 $("guideSkip").addEventListener("click", closeGuide);
 $("howToPlay").addEventListener("click", openGuide);
+$("help").addEventListener("click", openGuide);
 document.addEventListener("keydown", e => {
   if ($("guide").classList.contains("hidden")) return;
   if (e.key === "Escape") return closeGuide();

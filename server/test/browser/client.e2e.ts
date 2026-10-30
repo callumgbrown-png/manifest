@@ -99,6 +99,12 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await a.click("#guideNext");
   await a.waitForSelector("#guide.hidden", { state: "attached" });
   assert.equal(await a.evaluate(() => localStorage.getItem("guideSeen")), "1");
+  // Once signed in, "How to play" in the header opens the guide again from step 1.
+  await a.click("#help");
+  await a.waitForSelector("#guide:not(.hidden)");
+  assert.equal(await a.textContent("#guideStep"), "Step 1 of 4");
+  await a.keyboard.press("Escape");
+  await a.waitForSelector("#guide.hidden", { state: "attached" });
   assert.equal(await a.textContent("#hCash"), "10,000");
   assert.equal(await a.textContent("#conn"), "live");
   assert.match((await a.textContent("#hClock"))!, /^Day \d+ of 56, \d\d:00$/);   // day 1, or 2 on a slow machine (150 ms game hours)

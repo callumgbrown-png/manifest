@@ -229,6 +229,25 @@ describe("sessions and abuse limits", () => {
     } finally { await s.stop(); cleanup(s); }
   });
 
+  test("logging out also logs out other tabs on the same session, not other sessions", async () => {
+    const s = await startServer();
+    try {
+      const a = new Client(s);
+      const { token } = await a.auth("register", "Twotab Co");
+      const b = new Client(s); await b.ready;        // a second tab sharing the saved token
+      b.send({ type: "resume", token });
+      assert.ok((await b.next(m => m.type === "state" && m.me)).me);
+      const other = new Client(s);                   // another device: its own session
+      await other.auth("login", "Twotab Co");
+      a.send({ type: "logout" });
+      await a.next(m => m.type === "loggedOut");
+      await b.next(m => m.type === "loggedOut");
+      assert.equal((await b.cmd({ type: "sell", ship: 2 })).error, "Log in first", "the other tab can't keep trading");
+      assert.notEqual((await other.cmd({ type: "sell", ship: 2 })).error, "Log in first", "another device stays logged in");
+      a.close(); b.close(); other.close();
+    } finally { await s.stop(); cleanup(s); }
+  });
+
   test("sessions expire after SESSION_DAYS", async () => {
     const s = await startServer({ SESSION_DAYS: String(1.5 / 86400) });   // 1.5 seconds
     try {

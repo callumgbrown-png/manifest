@@ -176,7 +176,8 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
   .stat b { font-size: 13px; }
   header { gap: 6px 10px; padding: 8px 12px 10px; }
   header .spacer { display: none; }
-  #logout { margin-left: auto; padding: 4px 2px; }
+  #help { margin-left: auto; padding: 4px 2px; }
+  #logout { padding: 4px 2px; }
   .brand span { letter-spacing: .12em; }
   header .pill { padding-top: 2px; padding-bottom: 2px; font-size: 11px; }
   .stat b { white-space: nowrap; font-size: 12px; }
