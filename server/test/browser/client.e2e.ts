@@ -1004,6 +1004,18 @@ test("the Port tab follows a ship from the port it left to where it docks, and l
     await p.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, map.ports[near].name);
     // The market note only mentions inbound cargo when there is some (no bots, nothing sailing).
     assert.match((await p.locator("#panel .est", { hasText: "heading here to load" }).textContent())!, /No empty ships heading here to load\. No cargo is heading here either\./);
+    // Set sail from the Fleet tab, watch the Leaderboard while it sails, then open Port: it shows the
+    // port the ship docked at, not the one it left (it used to only follow while Port was open).
+    await p.click('#tabs button[data-tab="fleet"]');
+    const fcard = p.locator(".shipCard[data-ship]").first();
+    await fcard.locator("select[data-field=dest]").selectOption(String(home));
+    await p.locator("body").click({ position: { x: 5, y: 5 } });
+    await fcard.locator("button[data-act=sail]").click();
+    await toast(p, new RegExp(`Sailing to ${map.ports[home].name}`));
+    await p.click('#tabs button[data-tab="board"]');
+    await toast(p, new RegExp(`docked at ${map.ports[home].name}`));
+    await p.click('#tabs button[data-tab="port"]');
+    assert.equal(await p.textContent("#panel h2"), map.ports[home].name, "Port tab opens where the ship docked");
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });

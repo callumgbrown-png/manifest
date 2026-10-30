@@ -64,8 +64,10 @@ function connect() {
 function noteDockings(before) {
   const docked = me.ships.filter(s => s.dest === null && before.ships.some(b => b.id === s.id && b.dest !== null));
   // Watching the port a ship just left (nothing of yours docked there now)? Follow it to where it
-  // docked, so its Sell button is in view instead of "None of your ships are docked here".
-  const watching = tab === "port" && !me.ships.some(s => s.dest === null && s.port === selectedPort)
+  // docked, so its Sell button is in view instead of "None of your ships are docked here". Also on the
+  // Fleet and Leaderboard tabs, so opening Port later shows the docked ship, not the port it left
+  // (not on Orders, whose port box starts on the selected port).
+  const watching = tab !== "orders" && !me.ships.some(s => s.dest === null && s.port === selectedPort)
     && !(document.activeElement?.matches("input, select") && $("panel").contains(document.activeElement)) && !pointerInPanel;
   const follow = watching && docked.find(s => before.ships.find(b => b.id === s.id).port === selectedPort);
   if (follow) selectedPort = follow.port;
