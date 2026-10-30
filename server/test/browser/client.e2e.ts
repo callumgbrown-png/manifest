@@ -60,11 +60,12 @@ async function closeGuide(page: any) {
   await page.keyboard.press("Escape");
   await page.waitForSelector("#guide.hidden", { state: "attached" });
 }
-async function sailTo(page: any, port: number, load?: string) {
+async function sailTo(page: any, port: number, load?: string, qty?: number) {
   await page.click('#tabs button[data-tab="fleet"]');
   const card = page.locator(".shipCard[data-ship]").first();
   await card.locator("select[data-field=dest]").selectOption(String(port));
   await card.locator("select[data-field=good]").selectOption(load ?? "");
+  if (qty) await card.locator("input[data-field=qty]").fill(String(qty));   // the box is off until a good is picked
   await page.locator('body').click({ position: { x: 5, y: 5 } });   // leave the form so the panel can refresh
   await card.locator("button[data-act=sail]").click();
   await toast(page, new RegExp(`Sailing to ${map.ports[port].name}`));
@@ -200,9 +201,12 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   assert.match(broke.emptyTwo, /^Not enough cash: the fuel costs about [\d,]+ and you have -500\. Only a company's last ship can sail on credit/);
   assert.doesNotMatch(broke.rich, /Not enough cash/);
 
-  // ---- server refusals show as a red toast
+  // ---- server refusals show as a red toast (the form itself won't send an oversized load, so
+  // send one the way an out-of-date page could)
   await card.locator("input[data-field=qty]").fill("500");
-  await card.locator("button[data-act=sail]").click();
+  assert.ok(await card.locator("button[data-act=sail]").isDisabled(), "the form won't send 500 grain");
+  await a.evaluate(() => { const w = window as any, s = w.eval("me").ships[0];
+    w.eval("command")({ type: "sail", ship: s.id, dest: w.eval("world").ports.find((p: any) => p.id !== s.port).id, buy: { good: "grain", qty: 500 } }); });
   await toast(a, /over capacity/);
   assert.ok(await a.locator("#toast.bad").count());
 
@@ -221,12 +225,13 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   // ---- sail with grain to a neighbour; ship shows as sailing; sell on arrival
   const nb = map.routes.find((r: any) => r.a === home || r.b === home);
   const dest = nb.a === home ? nb.b : nb.a;
-  await card.locator("input[data-field=qty]").fill("60");
-  await sailTo(a, dest, "grain");
+  await sailTo(a, dest, "grain", 60);
   await a.waitForFunction(() => /Sailing to .*, arrives in \d+ h/.test(document.getElementById("panel")!.textContent!));
   const cashSailing = (await me(a)).cash;
   assert.ok(cashSailing < 10000);
   await waitDocked(a, dest);
+  await a.click('#tabs button[data-tab="fleet"]');
+  await a.waitForFunction(() => /not sold yet/.test(document.querySelector(".trips-log")?.textContent ?? ""));   // docked, cargo still aboard
   await selectPort(a, dest);
   // List 20 for sale, then sell the rest to the market.
   const shipCard = a.locator(".shipCard[data-ship]").first();
@@ -300,8 +305,7 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await b.click('button[data-act="placeOrder"]');
   await toast(b, /Order posted/);
   await a.click('#tabs button[data-tab="fleet"]');
-  await a.locator(".shipCard input[data-field=qty]").first().fill("15");
-  await sailTo(a, home, "grain");
+  await sailTo(a, home, "grain", 15);
   await waitDocked(a, home);
   await a.click('#tabs button[data-tab="fleet"]');
   await a.locator('button[data-act="fill"]').click();
@@ -651,6 +655,51 @@ test("keyboard players: the guide keeps Tab inside it, and focus survives live u
     await p.focus('#tabs button[data-tab="fleet"]'); await p.keyboard.press("Enter");
     assert.equal(await p.getAttribute('#tabs button[data-tab="fleet"]', "aria-selected"), "true", "screen readers hear which tab is open");
     assert.equal(await p.getAttribute('#tabs button[data-tab="port"]', "aria-selected"), "false");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("the sail form says why a load won't work before the click, instead of a bare server refusal", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "5000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`load form: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Careful Cargo"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    await p.click('#tabs button[data-tab="fleet"]');
+    const card = p.locator(".shipCard[data-ship]").first();
+    const ship = (await me(p)).ships[0];
+    const dest = map.ports.find((q: any) => q.id !== ship.port).id;
+    await card.locator("select[data-field=dest]").selectOption(String(dest));
+    await card.locator("select[data-field=good]").selectOption("grain");
+    const sail = card.locator("button[data-act=sail]"), est = card.locator("[data-field=estimate]");
+    const qty = card.locator("input[data-field=qty]");
+    for (const [q, msg] of [["150", /holds 100 at most/], ["0", /Enter how many grain to load/], ["", /Enter how many grain to load/], ["-3", /Enter how many/]] as const) {
+      await qty.fill(q);
+      assert.match((await est.textContent())!, msg, `quantity ${JSON.stringify(q)}`);
+      assert.ok(await sail.isDisabled(), `Set sail is off for quantity ${JSON.stringify(q)}`);
+    }
+    await qty.fill("20");
+    assert.match((await est.textContent())!, /This trip (makes|loses) about/);
+    assert.ok(!(await sail.isDisabled()), "a sensible load can sail");
+    // More than the port has in stock.
+    const text = await p.evaluate(() => {
+      const w = window as any, s = w.eval("me").ships[0], port = w.eval("world").ports[s.port];
+      const card = document.querySelector(".shipCard[data-ship]")!, saved = port.stock[0];
+      port.stock[0] = 12; w.eval("estimate")(card);
+      const text = card.querySelector("[data-field=estimate]")!.textContent;
+      port.stock[0] = saved; w.eval("estimate")(card);
+      return text;
+    });
+    assert.match(text, /only has 12 grain in stock/);
+    // Sailing empty: the quantity box has nothing to count and is switched off.
+    await card.locator("select[data-field=good]").selectOption("");
+    assert.ok(await qty.isDisabled(), "quantity box is off when sailing empty");
+    assert.match((await est.textContent())!, /Sailing empty costs about/);
+    assert.ok(!(await sail.isDisabled()));
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });

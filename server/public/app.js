@@ -891,6 +891,14 @@ function cashShortfall(s, dest, g, qty, fuel) {
   else text += ` Only a company's last ship can sail on credit: sell cargo or scrap a spare ship (${fmt(world.rules.shipPrice / 2)}) first.`;
   return text;
 }
+/** Why the server would refuse loading `qty` of good `g` onto empty ship `s`, or null if it wouldn't. */
+function loadProblem(s, g, qty) {
+  const cap = world.rules.capacity, stock = Math.floor(world.ports[s.port].stock[g]);
+  if (!(qty >= 1)) return `Enter how many ${GOOD_NAMES[g]} to load (1 to ${cap}), or choose Sail empty.`;
+  if (qty > cap) return `Your ship holds ${cap} at most.`;
+  if (qty > stock) return `This port only has ${fmt(stock)} ${GOOD_NAMES[g]} in stock.`;
+  return null;
+}
 function estimate(card) {
   const s = me.ships.find(x => x.id === Number(card.dataset.ship));
   const destVal = card.querySelector("[data-field=dest]").value;
@@ -904,7 +912,17 @@ function estimate(card) {
   const dest = Number(destVal);
   const goodSel = card.querySelector("[data-field=good]");
   const g = s.qty > 0 ? s.good : (goodSel?.value ? GOOD_NAMES.indexOf(goodSel.value) : -1);
-  const qty = s.qty > 0 ? s.qty : Number(card.querySelector("[data-field=qty]")?.value || 0);
+  const qtyInput = card.querySelector("[data-field=qty]");
+  if (qtyInput) qtyInput.disabled = g < 0;   // nothing to count when sailing empty
+  const qty = s.qty > 0 ? s.qty : Math.floor(Number(qtyInput?.value || 0));
+  // The server refuses these loads; say why here and keep "Set sail" off, instead of a bare
+  // "bad cargo" or "over capacity" after the click (and an estimate for cargo that won't fit).
+  const bad = s.qty === 0 && g >= 0 ? loadProblem(s, g, qty) : null;
+  if (bad) {
+    if (sailBtn) sailBtn.disabled = true;
+    card.querySelector("[data-field=estimate]").innerHTML = `<b class="neg">${bad}</b>`;
+    return (bad.charAt(0).toLowerCase() + bad.slice(1)).replace(/\.$/, "");
+  }
   const there = world.ports[dest];
   const t = tripProfit(s, dest, g, qty);
   let text = `Fuel ≈ ${fmt(t.fuel)}, port fee ${world.rules.portFee}.`;
@@ -970,7 +988,7 @@ function tripLog() {
     const what = t.good === null ? "empty" : `${t.qty} ${GOOD_NAMES[t.good]}`;
     const profit = t.earned - t.spent;
     const result = t.open
-      ? `<span class="quiet">${t.good === null ? "at sea" : "in progress"}</span>`
+      ? `<span class="quiet">${me.ships.some(x => x.id === t.ship && x.dest !== null) ? "at sea" : t.good === null ? "docked" : "not sold yet"}</span>`
       : t.good === null ? `<span class="neg">−${fmt(t.spent)}</span>`
       : `<b class="${profit >= 0 ? "pos" : "neg"}">${profit >= 0 ? "+" : "−"}${fmt(Math.abs(profit))}</b>${t.listed ? ` <span class="quiet" title="Part of the cargo was listed for sale, so it isn't counted">*</span>` : ""}`;
     return `<tr><td class="num">${Math.floor(t.departTick / 24) + 1}</td><td>${esc(world.ports[t.from].name)} → ${esc(world.ports[t.to].name)}</td><td>${what}</td><td class="num">${result}</td></tr>`;
