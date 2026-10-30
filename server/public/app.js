@@ -699,8 +699,9 @@ function shipCard(s) {
   return `<div class="shipCard" data-ship="${s.id}">
     <div class="top"><b>Ship ${s.id}</b>${cargo}</div>
     <div class="quiet">Docked at ${esc(port.name)}</div>
-    ${s.qty > 0 ? `<div class="row"><button data-act="sell" data-ship="${s.id}">Sell to market at ${port.prices[s.good].toFixed(2)}</button>
+    ${s.qty > 0 ? `<div class="row"><button data-act="sell" data-ship="${s.id}">Sell ${s.qty} ${GOOD_NAMES[s.good]} here for ${fmt(saleNet(s))}</button>
       ${matching.map(o => `<button class="secondary" data-act="fill" data-ship="${s.id}" data-order="${o.id}">Fill ${esc(o.ownerName)}'s order at ${o.price.toFixed(2)}</button>`).join("")}</div>
+      <div class="est" data-field="saleNote">${saleNote(s)}</div>
       <div class="row labelled"><label class="mini">Quantity<input data-field="sellQty" type="number" min="1" max="${s.qty}" value="${s.qty}" style="width:80px"></label>
         <label class="mini">Price each<input data-field="sellPrice" type="number" step="0.5" value="${(port.prices[s.good] * 1.15).toFixed(1)}" style="width:90px"></label>
         <button class="secondary" data-act="listSell" data-ship="${s.id}">List for sale here</button></div>
@@ -793,6 +794,15 @@ function bestMove(s, delay = 0) {
   return best;
 }
 
+/** What selling a ship's whole cargo to this port's market pays, after tax (the server's sliding price). */
+function saleNet(s) { return sellValue(s.port, s.good, s.qty, false) * (1 - world.rules.tax); }
+/** One line under the sell button so the sum adds up: price, tax, and profit against what was paid. */
+function saleNote(s) {
+  const net = saleNet(s), gain = net - s.cost, tax = Math.round(world.rules.tax * 1000) / 10;
+  return `About ${(net / s.qty).toFixed(2)} each after ${tax}% tax (the price slides as you sell). You paid ${fmt(s.cost)}, so this sale `
+    + (gain >= 0 ? `makes <b class="pos">+${fmt(gain)}</b>.` : `loses <b class="neg">−${fmt(-gain)}</b>.`);
+}
+
 /** At the very end of a season: is selling a cargo here worth more than keeping it? Unsold cargo
  *  counts in net worth at what was paid for it (engine netWorth). */
 function endCargoAdvice(s) {
@@ -879,7 +889,7 @@ function fleetPanel() {
     <div class="bar mine" style="height:6px;margin-top:8px"><i style="width:${me.ships.length / world.rules.maxShips * 100}%"></i></div>
     <div class="tiles">
       <div><span>At sea</span><b>${atSea}</b></div><div><span>Docked</span><b>${me.ships.length - atSea}</b></div>
-      <div><span>Cargo value</span><b>${fmt(cargo)}</b></div><div><span>Net worth</span><b>${fmt(me.worth)}</b></div>
+      <div><span>Cargo (cost)</span><b>${fmt(cargo)}</b></div><div><span>Net worth</span><b>${fmt(me.worth)}</b></div>
     </div>
     <h3>Ships</h3>${me.ships.map(shipCard).join("")}
     ${notifyHtml()}

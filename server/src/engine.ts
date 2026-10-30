@@ -84,6 +84,8 @@ export class Engine {
   trips = new Map<number, Trip[]>();
   /** Net worth per company at the start of each game day (for the progress chart). */
   worthLog = new Map<number, number[]>();
+  /** Cargo bought from a sell order onto a ship with no trip running yet: counted in the next trip's cost. */
+  private boughtCost = new Map<number, number>();
   private nextId = 1;
   /** The difficulty preset in force, or "custom" once an admin changes a value by hand. */
   difficulty: string;
@@ -255,8 +257,10 @@ export class Engine {
     } else {
       if (open) open.open = false;
       const list = this.trips.get(c.id) ?? [];
+      const bought = s.qty > 0 && !cmd.buy ? this.boughtCost.get(s.id) ?? 0 : 0;
+      this.boughtCost.delete(s.id);
       list.push({ ship: s.id, from: s.port, to: cmd.dest, good: s.qty > 0 ? s.good : null, qty: s.qty,
-        spent: cargoCost + fuelCost, earned: 0, departTick: this.tick, arriveTick: arrive, open: true });
+        spent: cargoCost + fuelCost + bought, earned: 0, departTick: this.tick, arriveTick: arrive, open: true });
       if (list.length > TRIPS_KEPT) list.shift();
       this.trips.set(c.id, list);
     }
@@ -293,7 +297,7 @@ export class Engine {
       this.noteEarned(c.id, s.id, gross * (1 - tax), true);
       s.qty = 0; s.cost = 0;
     }
-    if (s.qty === 0) s.good = null;
+    if (s.qty === 0) { s.good = null; this.boughtCost.delete(s.id); }
     return { ok: true };
   }
 
@@ -324,6 +328,7 @@ export class Engine {
     const trip = this.openTrip(c.id, s.id);
     if (trip) trip.open = false;
     this.ships.delete(s.id);
+    this.boughtCost.delete(s.id);
     c.ships = c.ships.filter(id => id !== s.id);
   }
 
@@ -372,7 +377,7 @@ export class Engine {
     const g = s.good, tax = this.rules.fees.trade_tax_rate;
     const unitCost = s.cost / s.qty;
     s.qty -= qty; s.cost -= unitCost * qty;
-    if (s.qty === 0) { s.good = null; s.cost = 0; }
+    if (s.qty === 0) { s.good = null; s.cost = 0; this.boughtCost.delete(s.id); }
     const trip = this.openTrip(c.id, s.id);
     if (trip) { trip.listed = true; if (s.qty === 0) trip.open = false; }
     // Fill first against higher buy orders at this port (best price first).
@@ -408,6 +413,10 @@ export class Engine {
     c.cash -= pay;
     this.companies.get(o.owner)!.cash += pay * (1 - this.rules.fees.trade_tax_rate);
     s.good = o.good; s.qty += qty; s.cost += pay;
+    // The trip log counts what the cargo cost, so its profit matches the change in cash.
+    const trip = this.openTrip(c.id, s.id);
+    if (trip) { trip.spent += pay; trip.qty += qty; }
+    else this.boughtCost.set(s.id, (this.boughtCost.get(s.id) ?? 0) + pay);
     this.shrink(o, qty);
     return { ok: true };
   }

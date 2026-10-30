@@ -7,10 +7,10 @@ import { runBots, botName, pickStartPort } from "../server/src/bots.ts";
 
 const rules = JSON.parse(readFileSync(new URL("../config/rules.json", import.meta.url), "utf8"));
 const map = JSON.parse(readFileSync(new URL("../config/map.json", import.meta.url), "utf8"));
-const CHECK = Number(process.env.CHECK ?? 4);        // hours between a player's check-ins
-const PER = Number(process.env.PER ?? 4);            // players per strategy
-const SEEDS = Number(process.env.SEEDS ?? 3);
-const DIFF = process.env.DIFF ?? "normal";
+const CHECK = Number(process.env.CHECK || 4);        // hours between a player's check-ins
+const PER = Number(process.env.PER || 4);            // players per strategy
+const SEEDS = Number(process.env.SEEDS || 3);
+const DIFF = process.env.DIFF || "normal";
 
 type Strat = "advice" | "tripsOnly" | "oldDefault" | "newDefault" | "plan";
 interface P { id: number; strat: Strat; emptySpent: number; trips: number; moves: number; waits: number; }
@@ -67,7 +67,7 @@ function makeTools(e: Engine) {
   return { bestTrips, bestMove, alphaFirst, nearest, planned };
 }
 
-const STRATS: Strat[] = (process.env.STRATS ?? "advice,tripsOnly,oldDefault,newDefault,plan").split(",") as Strat[];
+const STRATS: Strat[] = (process.env.STRATS || "advice,tripsOnly,oldDefault,newDefault,plan").split(",") as Strat[];
 const results = Object.fromEntries(STRATS.map(k => [k, [] as number[]])) as Record<Strat, number[]>;
 const stats = Object.fromEntries(STRATS.map(k => [k, { empty: 0, trips: 0, moves: 0 }])) as Record<Strat, { empty: number; trips: number; moves: number }>;
 let botFinal: number[] = [];

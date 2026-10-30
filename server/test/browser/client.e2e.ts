@@ -215,8 +215,16 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await shipCard.locator("button[data-act=listSell]").click();
   await toast(a, /Listed for sale/);
   await a.waitForFunction(() => (window as any).eval("me").ships[0].qty === 40);
+  // The sell button says what the whole cargo fetches after tax; the note says what that makes.
+  const sellText = (await a.locator('.shipCard button[data-act="sell"]').textContent())!;
+  assert.match(sellText, /^Sell 40 grain here for [\d,]+$/);
+  assert.match((await shipCard.locator("[data-field=saleNote]").textContent())!, /after \d+(\.\d)?% tax.*You paid [\d,]+, so this sale (makes \+|loses −)[\d,]+\./);
+  const quoted = Number(sellText.split(" for ")[1].replace(/\D/g, "")), cashPre = (await me(a)).cash;
   await a.locator('.shipCard button[data-act="sell"]').click();
   await toast(a, /^Sold$/);
+  await a.waitForFunction(() => (window as any).eval("me").ships[0].qty === 0);
+  const got = (await me(a)).cash - cashPre;
+  assert.ok(Math.abs(got - quoted) < Math.max(5, quoted * 0.03), `button said ${quoted}, sale paid ${got.toFixed(0)}`);
   await a.waitForFunction(() => (window as any).eval("me").ships[0].qty === 0);
   assert.ok((await me(a)).cash > cashSailing);
 

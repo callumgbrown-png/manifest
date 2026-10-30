@@ -61,3 +61,41 @@ test("net worth is logged at the start of each day", () => {
   assert.equal(log.length, 4, "the starting value plus one per day");
   assert.equal(log[0], Math.round(rules.company.start_cash + rules.ship.price / 2));
 });
+
+test("cargo bought from another player's listing counts in the trip's cost", () => {
+  const { e, c: seller, s: ss, dest } = setup();
+  assert.ok(e.apply({ type: "sail", company: seller.id, ship: ss.id, dest, buy: { good: "grain", qty: 40 } }).ok);
+  sailUntilDocked(e, ss);
+  const order = (e.apply({ type: "placeSell", company: seller.id, ship: ss.id, qty: 40, price: 20 } as any) as any).id;
+  assert.ok(order);
+  const buyer = e.companies.get((e.apply({ type: "register", name: "B", startPort: dest }) as any).id)!;
+  const bs = e.ships.get(buyer.ships[0])!;
+  const before = buyer.cash;
+  assert.ok(e.apply({ type: "buyFromOrder", company: buyer.id, ship: bs.id, order, qty: 40 } as any).ok);
+  assert.ok(e.apply({ type: "sail", company: buyer.id, ship: bs.id, dest: 0 }).ok);
+  sailUntilDocked(e, bs);
+  assert.ok(e.apply({ type: "sell", company: buyer.id, ship: bs.id }).ok);
+  const [t] = e.trips.get(buyer.id)!;
+  assert.equal(t.qty, 40);
+  assert.ok(Math.abs((t.earned - t.spent) - (buyer.cash - before)) < 1e-6,
+    `trip profit ${t.earned - t.spent} should equal the change in cash ${buyer.cash - before}`);
+});
+
+test("topping up cargo from a listing mid-trip adds to the open trip's cost", () => {
+  const { e, c: seller, s: ss, dest } = setup();
+  assert.ok(e.apply({ type: "sail", company: seller.id, ship: ss.id, dest, buy: { good: "grain", qty: 40 } }).ok);
+  sailUntilDocked(e, ss);
+  const order = (e.apply({ type: "placeSell", company: seller.id, ship: ss.id, qty: 40, price: 20 } as any) as any).id;
+  const buyer = e.companies.get((e.apply({ type: "register", name: "B", startPort: 0 }) as any).id)!;
+  const bs = e.ships.get(buyer.ships[0])!;
+  const before = buyer.cash;
+  assert.ok(e.apply({ type: "sail", company: buyer.id, ship: bs.id, dest, buy: { good: "grain", qty: 20 } }).ok);
+  sailUntilDocked(e, bs);
+  assert.ok(e.apply({ type: "buyFromOrder", company: buyer.id, ship: bs.id, order, qty: 30 } as any).ok);
+  assert.ok(e.apply({ type: "sail", company: buyer.id, ship: bs.id, dest: 0 }).ok);
+  sailUntilDocked(e, bs);
+  assert.ok(e.apply({ type: "sell", company: buyer.id, ship: bs.id }).ok);
+  const trips = e.trips.get(buyer.id)!;
+  assert.equal(trips.length, 1, "one trip from start to sale");
+  assert.ok(Math.abs((trips[0].earned - trips[0].spent) - (buyer.cash - before)) < 1e-6);
+});
