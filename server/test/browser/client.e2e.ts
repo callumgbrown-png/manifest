@@ -290,11 +290,11 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await a.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("buying fuel"));
   assert.equal((await me(a)).cash, cashBefore - 500);
   assert.ok((await a.textContent("#panel"))!.includes("selling grain"), "the listing shows under your orders");
-  // A price outside the band is refused.
+  // A price outside the band is caught before the click (the server refuses it too).
   await a.fill("#oPrice", "5");
   await a.locator("body").click({ position: { x: 5, y: 5 } });
-  await a.click('button[data-act="placeOrder"]');
-  await toast(a, /price must be between 30 and 90/);
+  assert.equal(await a.textContent("#oCost"), "Price for fuel must be between 30 and 90.");
+  assert.ok(await a.locator('button[data-act="placeOrder"]').isDisabled());
   const buyRow = a.locator("#panel tr", { hasText: "buying fuel" });
   await buyRow.locator('button[data-act="cancelOrder"]').click();
   await toast(a, /Order cancelled/);
@@ -1210,5 +1210,53 @@ test("a seller is told when their listing sells, and the trip log counts the sal
     const shown = Number((await p.textContent(".trips-log tr:nth-child(2) td:last-child"))!.replace(/[^\d]/g, ""));
     assert.equal(shown, Math.abs(Math.round(trip.earned - trip.spent)), "the log shows the trip's real profit");
     b.close(); await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("a buy order that buys at once from a listing says so, and the form checks the price band", { skip: SKIP, timeout: 60000 }, async () => {
+  // Posting a buy order above a listing's price bought the listing at once: the toast still said
+  // "Order posted", yet no order showed under "Your orders" and cash had dropped.
+  const t = await startServer({ TICK_MS: "150", BOTS: "0" });
+  try {
+    const seller = new Client(t);
+    await seller.auth("register", "Quay Sellers");
+    const sm = () => [...seller.msgs].reverse().find((m: any) => m.type === "state" && m.me).me;
+    const from = sm().ships[0].port;
+    const dist = (await seller.seen((m: any) => m.type === "static")).dist;
+    const dest = dist[from].findIndex((d: number, i: number) => i !== from && Number.isFinite(d) && d > 0);
+    assert.ok((await seller.cmd({ type: "sail", ship: sm().ships[0].id, dest, buy: { good: "grain", qty: 30 } })).ok);
+    await seller.next((m: any) => m.type === "state" && m.me?.ships[0].dest === null, 30000);
+    assert.ok((await seller.cmd({ type: "placeSell", ship: sm().ships[0].id, qty: 30, price: 30 })).ok);
+
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`buy order crosses: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Quay Buyers"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    await p.click('#tabs button[data-tab="orders"]');
+    // A price outside the band, or a bad quantity, is caught before the click.
+    await p.selectOption("#oGood", "fuel");
+    await p.fill("#oQty", "10"); await p.fill("#oPrice", "20");
+    assert.equal(await p.textContent("#oCost"), "Price for fuel must be between 30 and 90.");
+    assert.ok(await p.locator("button[data-act=placeOrder]").isDisabled());
+    await p.fill("#oQty", "0"); await p.fill("#oPrice", "40");
+    assert.equal(await p.textContent("#oCost"), "Quantity must be 1 to 1000.");
+    assert.ok(await p.locator("button[data-act=placeOrder]").isDisabled());
+    await p.selectOption("#oGood", "grain");
+    await p.selectOption("#oPort", String(dest));
+    await p.fill("#oQty", "10"); await p.fill("#oPrice", "35");
+    assert.equal(await p.locator("button[data-act=placeOrder]").isDisabled(), false);
+    const cash = (await me(p)).cash;
+    await p.click("button[data-act=placeOrder]");
+    await toast(p, new RegExp(`^Bought 10 grain at once from a listing at ${map.ports[dest].name} for 300 \\(used up there\\)$`));
+    assert.equal((await me(p)).cash, cash - 300, "paid the listing's price");
+    // More than is listed: the rest waits as a buy order.
+    await p.fill("#oQty", "30"); await p.fill("#oPrice", "31");
+    await p.click("button[data-act=placeOrder]");
+    await toast(p, /^Bought 20 grain at once from a listing at .+ for 600 \(used up there\); the rest is posted as a buy order$/);
+    await p.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("buying grain"));
+    seller.close(); await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });

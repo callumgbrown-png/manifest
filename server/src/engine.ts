@@ -74,8 +74,9 @@ export type Command =
   | { type: "adminSet"; tax?: number; upkeep?: number; portFee?: number }
   | { type: "setDifficulty"; level: string };
 
-/** sold/earned: on a listing, how much sold at once to buy orders already waiting, and for how much after tax. */
-export type Result = { ok: true; id?: number; sold?: number; earned?: number } | { ok: false; error: string };
+/** sold/earned: on a listing, how much sold at once to buy orders already waiting, and for how much after tax.
+ *  bought/spent: on a buy order, how much it bought at once from listings already at the port, and what that cost. */
+export type Result = { ok: true; id?: number; sold?: number; earned?: number; bought?: number; spent?: number } | { ok: false; error: string };
 
 export class Engine {
   readonly rules: Rules;
@@ -361,21 +362,23 @@ export class Engine {
     if (this.openOrders(c.id) >= MAX_OPEN_ORDERS) return fail(`you can have at most ${MAX_OPEN_ORDERS} open orders`);
     // Fill first from cheaper sell orders already at this port (cheapest first).
     // The goods are delivered to the buyer, who uses them, as with any filled buy order.
-    let left = qty;
+    let left = qty, spent = 0;
     const tax = this.rules.fees.trade_tax_rate;
     for (const o of this.matching(cmd.port, g, "sell", c.id).filter(o => o.price <= price)) {
       if (left <= 0) break;
       const fill = Math.min(left, o.qty);
       c.cash -= fill * o.price;
+      spent += fill * o.price;
       this.listingSold(o, fill, fill * o.price * (1 - tax));
       this.shrink(o, fill);
       left -= fill;
     }
-    if (left === 0) return { ok: true };
+    const bought = qty - left, now = bought ? { bought, spent: Math.round(spent * 100) / 100 } : {};
+    if (left === 0) return { ok: true, ...now };
     c.cash -= left * price;   // held in escrow until filled or cancelled
     const id = this.nextId++;
     this.orders.set(id, { id, owner: c.id, port: cmd.port, good: g, qty: left, price, side: "buy" });
-    return { ok: true, id };
+    return { ok: true, id, ...now };
   }
 
   /** List cargo from a docked ship for sale at this port. The ship is then free to sail. */

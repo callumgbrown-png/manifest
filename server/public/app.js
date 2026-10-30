@@ -140,6 +140,14 @@ function listedText(res) {
   return res.id ? `${sold}; the rest is listed for sale` : sold;
 }
 
+/** What happened to a new buy order: it can buy at once from listings already at the port, and those
+ *  goods are used up there, so "Order posted" with no order on the list and less cash looked like a bug. */
+function orderPostedText(res, port, good) {
+  if (!res?.bought) return "Order posted";
+  const bought = `Bought ${res.bought} ${good} at once from a listing at ${world.ports[port].name} for ${fmt(res.spent)} (used up there)`;
+  return res.id ? `${bought}; the rest is posted as a buy order` : bought;
+}
+
 /** kind: falsy for done (tick), true or "bad" for an error, "warn" for done-but-careful. */
 function toast(text, kind = false) {
   const t = $("toast"); t.textContent = text; t.className = "toast" + (kind === "warn" ? " warn" : kind ? " bad" : "");
@@ -1221,7 +1229,10 @@ function tripLog() {
 
 /** What a buy order costs if it fills completely: the goods don't come back to you. The server
  *  refuses an order your cash doesn't cover (engine.ts placeOrder), so say that before the click. */
-function orderCostText(qty, price) {
+function orderCostText(qty, price, good = "grain") {
+  const band = world.rules.bands[good];
+  if (!(Math.floor(qty) >= 1 && Math.floor(qty) <= 1000)) return "Quantity must be 1 to 1000.";
+  if (band && !(price >= band.floor && price <= band.ceiling)) return `Price for ${good} must be between ${band.floor} and ${band.ceiling}.`;
   const total = Math.floor(qty) * price;
   if (total > 0 && me && total > me.cash) return `Not enough cash: this order needs ${fmt(total)} to cover it and you have ${fmt(me.cash)}.`;
   return total > 0 ? `If it fills, this costs you ${fmt(total)}.` : "";
@@ -1300,12 +1311,13 @@ function bindPanel() {
   });
   if ($("oCost")) {   // after restoreForm, so it matches what the player typed
     const cost = () => {
-      const qty = Number($("oQty").value), price = Number($("oPrice").value), short = Math.floor(qty) * price > me.cash;
-      $("oCost").textContent = orderCostText(qty, price);
-      $("oCost").classList.toggle("neg", short);
-      document.querySelector("[data-act=placeOrder]").disabled = short;
+      const qty = Number($("oQty").value), price = Number($("oPrice").value), good = $("oGood").value;
+      const text = orderCostText(qty, price, good), bad = !text.startsWith("If it fills");
+      $("oCost").textContent = text;
+      $("oCost").classList.toggle("neg", bad);
+      document.querySelector("[data-act=placeOrder]").disabled = bad;
     };
-    for (const id of ["oQty", "oPrice"]) $(id).addEventListener("input", cost);
+    for (const id of ["oQty", "oPrice", "oGood"]) $(id).addEventListener("input", cost);
     cost();
   }
   document.querySelectorAll("[data-act]").forEach(btn => btn.addEventListener("click", () => {
@@ -1331,8 +1343,11 @@ function bindPanel() {
         price: Number(card.querySelector("[data-field=sellPrice]").value) }, res => toast(listedText(res)));
     }
     if (act === "buyOrder") command({ type: "buyFromOrder", ship, order: Number(btn.dataset.order), qty: Number(btn.dataset.qty) }, () => toast("Bought"));
-    if (act === "placeOrder") command({ type: "placeOrder", port: Number($("oPort").value), good: $("oGood").value,
-      qty: Number($("oQty").value), price: Number($("oPrice").value) }, () => toast("Order posted"));
+    if (act === "placeOrder") {
+      const port = Number($("oPort").value), good = $("oGood").value;
+      command({ type: "placeOrder", port, good, qty: Number($("oQty").value), price: Number($("oPrice").value) },
+        res => toast(orderPostedText(res, port, good)));
+    }
     if (act === "plan") {
       // Fill the sail form with this trip; the player still presses Set sail.
       const card = btn.closest(".shipCard"), set = (field, v) => {
