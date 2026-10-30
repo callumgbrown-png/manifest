@@ -42,11 +42,15 @@ export interface Trip {
   spent: number; earned: number; departTick: number; arriveTick: number;
   /** Still running: at sea, or docked with cargo not yet sold. */
   open: boolean;
-  /** Some cargo was listed for sale at a port instead of sold, so the profit shown is incomplete. */
+  /** Some of its cargo is still listed for sale at a port, so the profit isn't final yet: sales from
+   *  the listing are added to `earned` as they happen, and the mark goes once it's all sold or taken back. */
   listed?: boolean;
 }
 const TRIPS_KEPT = 25;
 /** A spare ship the engine sold because its company's cash was below zero at the daily upkeep. */
+/** Another company filled (part of) one of your orders: for the owner's "your listing sold" note.
+ *  `amount` is what a listing paid you after tax, or what a buy order spent from escrow. */
+export interface OrderFill { id: number; order: number; side: "buy" | "sell"; port: number; good: number; qty: number; amount: number; left: number; tick: number }
 export interface ForcedSale { ship: number; port: number; tick: number; paid: number; cashBefore: number }
 /** A buy order holds cash in escrow; a sell order holds goods at the port. */
 export interface Order {
@@ -88,8 +92,14 @@ export class Engine {
   worthLog = new Map<number, number[]>();
   /** Spare ships sold automatically because cash was below zero when upkeep was charged (newest last). */
   forcedSales = new Map<number, ForcedSale[]>();
+  /** Recent fills of each company's orders by other companies, newest last. */
+  orderFills = new Map<number, OrderFill[]>();
+  private fillSeq = 0;
   /** Cargo bought from a sell order onto a ship with no trip running yet: counted in the next trip's cost. */
   private boughtCost = new Map<number, number>();
+  /** The trip each resting listing's goods came from, so a later sale (or a cancel) shows in that
+   *  trip's profit. Not sent to clients (orders are sent as they are). */
+  private listingTrip = new Map<number, Trip>();
   private nextId = 1;
   /** The difficulty preset in force, or "custom" once an admin changes a value by hand. */
   difficulty: string;
@@ -290,6 +300,7 @@ export class Engine {
       c.cash += gross * (1 - tax);
       this.noteEarned(c.id, s.id, gross * (1 - tax), s.qty - fill === 0);
       // The goods are delivered to the buyer, who uses them; they leave the market.
+      this.noteFill(o, fill, gross);
       o.qty -= fill;
       if (o.qty <= 0) this.orders.delete(o.id);
       s.cost *= (s.qty - fill) / s.qty;
@@ -355,7 +366,7 @@ export class Engine {
       if (left <= 0) break;
       const fill = Math.min(left, o.qty);
       c.cash -= fill * o.price;
-      this.companies.get(o.owner)!.cash += fill * o.price * (1 - tax);
+      this.listingSold(o, fill, fill * o.price * (1 - tax));
       this.shrink(o, fill);
       left -= fill;
     }
@@ -383,19 +394,22 @@ export class Engine {
     s.qty -= qty; s.cost -= unitCost * qty;
     if (s.qty === 0) { s.good = null; s.cost = 0; this.boughtCost.delete(s.id); }
     const trip = this.openTrip(c.id, s.id);
-    if (trip) { trip.listed = true; if (s.qty === 0) trip.open = false; }
+    if (trip && s.qty === 0) trip.open = false;
     // Fill first against higher buy orders at this port (best price first).
     let left = qty;
     for (const o of this.matching(s.port, g, "buy", c.id).filter(o => o.price >= price)) {
       if (left <= 0) break;
       const fill = Math.min(left, o.qty);
       c.cash += fill * o.price * (1 - tax);   // buyer's cash is already in escrow
+      if (trip) trip.earned += fill * o.price * (1 - tax);
+      this.noteFill(o, fill, fill * o.price);
       this.shrink(o, fill);
       left -= fill;
     }
     if (left === 0) return { ok: true };
     const id = this.nextId++;
     this.orders.set(id, { id, owner: c.id, port: s.port, good: g, qty: left, price, side: "sell", cost: unitCost * left });
+    if (trip) { trip.listed = true; this.listingTrip.set(id, trip); }
     return { ok: true, id };
   }
 
@@ -415,7 +429,7 @@ export class Engine {
     const pay = qty * o.price;
     if (pay > c.cash) return fail("not enough cash");
     c.cash -= pay;
-    this.companies.get(o.owner)!.cash += pay * (1 - this.rules.fees.trade_tax_rate);
+    this.listingSold(o, qty, pay * (1 - this.rules.fees.trade_tax_rate));
     s.good = o.good; s.qty += qty; s.cost += pay;
     // The trip log counts what the cargo cost, so its profit matches the change in cash.
     const trip = this.openTrip(c.id, s.id);
@@ -438,10 +452,32 @@ export class Engine {
       .sort((a, b) => (side === "buy" ? b.price - a.price : a.price - b.price) || a.id - b.id);
   }
 
+  /** Pay the seller for goods sold from their listing, and count it in the trip they came from. */
+  private listingSold(o: Order, qty: number, net: number) {
+    this.companies.get(o.owner)!.cash += net;
+    const trip = this.listingTrip.get(o.id);
+    if (trip) trip.earned += net;
+    this.noteFill(o, qty, net);
+  }
+  /** Record a fill for the order's owner (call before the order shrinks). */
+  private noteFill(o: Order, qty: number, amount: number) {
+    const list = this.orderFills.get(o.owner) ?? [];
+    list.push({ id: ++this.fillSeq, order: o.id, side: o.side, port: o.port, good: o.good, qty, amount, left: o.qty - qty, tick: this.tick });
+    this.orderFills.set(o.owner, list.slice(-10));
+  }
+
   private shrink(o: Order, qty: number) {
     if (o.cost !== undefined) o.cost *= (o.qty - qty) / o.qty;
     o.qty -= qty;
-    if (o.qty <= 0) this.orders.delete(o.id);
+    if (o.qty <= 0) this.removeOrder(o.id);
+  }
+
+  /** Drop an order; a trip whose listed goods are all sold or taken back loses its "listed" mark. */
+  private removeOrder(id: number) {
+    this.orders.delete(id);
+    const trip = this.listingTrip.get(id);
+    this.listingTrip.delete(id);
+    if (trip && ![...this.listingTrip.values()].includes(trip)) delete trip.listed;
   }
 
   private cancelOrder(company: number, orderId: number, shipId?: number): Result {
@@ -457,8 +493,14 @@ export class Engine {
       const s = ships[0];
       if (!s) return fail("dock a ship with room for the goods at that port to take them back");
       s.good = o.good; s.qty += o.qty; s.cost += o.cost ?? 0;
+      // The goods' cost moves from the trip they were listed from to the ship's next trip.
+      const from = this.listingTrip.get(o.id), cost = o.cost ?? 0;
+      if (from) from.spent -= cost;
+      const now = this.openTrip(company, s.id);
+      if (now) now.spent += cost;
+      else this.boughtCost.set(s.id, (this.boughtCost.get(s.id) ?? 0) + cost);
     }
-    this.orders.delete(orderId);
+    this.removeOrder(orderId);
     return { ok: true };
   }
 

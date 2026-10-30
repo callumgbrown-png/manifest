@@ -214,6 +214,7 @@ function privateView(company: number) {
       .map(t => ({ ...t, spent: Math.round(t.spent), earned: Math.round(t.earned) })),
     worthLog: engine.worthLog.get(c.id) ?? [],
     forcedSales: (engine.forcedSales.get(c.id) ?? []).map(f => ({ ...f, cashBefore: Math.round(f.cashBefore) })),
+    orderFills: (engine.orderFills.get(c.id) ?? []).map(f => ({ ...f, amount: Math.round(f.amount) })),
   };
 }
 

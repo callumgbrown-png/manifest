@@ -3,7 +3,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { startServer, ADMIN, cleanup, type Srv } from "../helpers.ts";
+import { startServer, ADMIN, cleanup, Client, type Srv } from "../helpers.ts";
 
 import { createRequire } from "node:module";
 
@@ -1151,5 +1151,47 @@ test("listings start under the market price, and a listing can only be cancelled
     }
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth) <= 390, "no sideways scroll at 390 px");
     await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("a seller is told when their listing sells, and the trip log counts the sale", { skip: SKIP, timeout: 60000 }, async () => {
+  // A listing's money arrived with no word (cash just jumped), and the trip it came from showed the
+  // whole cargo cost as a loss for good ("* Listed cargo isn't counted until it sells", but it never was).
+  const t = await startServer({ TICK_MS: "150", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`listing sold: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Quay Listers"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const run = (cmd: any) => p.evaluate((c: any) => new Promise<void>((res, rej) => {
+      (window as any).eval("command")(c, res); setTimeout(() => rej(new Error("no reply to " + c.type)), 5000);
+    }), cmd);
+    const ship = (await me(p)).ships[0], from = ship.port;
+    const dist = await p.evaluate(() => (window as any).eval("dist"));
+    const dest = dist[from].findIndex((d: number, i: number) => i !== from && Number.isFinite(d) && d > 0);
+    await run({ type: "sail", ship: ship.id, dest, buy: { good: "grain", qty: 50 } });
+    await waitDocked(p, dest);
+    await run({ type: "placeSell", ship: ship.id, qty: 50, price: 39 });
+    await p.click('#tabs button[data-tab="fleet"]');
+    await p.waitForFunction(() => /listed for sale/.test(document.querySelector(".trips-log")?.textContent ?? ""));
+    const cashListed = (await me(p)).cash;
+
+    const b = new Client(t);
+    await b.auth("register", "Quay Buyers");
+    assert.ok((await b.cmd({ type: "placeOrder", port: dest, good: "grain", qty: 20, price: 39 })).ok);
+    await toast(p, new RegExp(`Your listing at ${map.ports[dest].name} sold 20 grain for [\\d,]+ after tax; 30 still listed`));
+    assert.ok(/listed for sale/.test(await p.textContent(".trips-log")), "still listed: no profit yet");
+    assert.ok((await b.cmd({ type: "placeOrder", port: dest, good: "grain", qty: 30, price: 39 })).ok);
+    await toast(p, /sold 30 grain for [\d,]+ after tax\.$/);
+    await p.waitForFunction(() => !/listed for sale/.test(document.querySelector(".trips-log")!.textContent!));
+    const m = await me(p), trip = m.trips[0];
+    assert.ok(Math.abs(m.cash - cashListed - 50 * 39 * (1 - (await worldOf(p)).rules.tax)) < 1, "paid after tax");
+    assert.ok(trip.earned > 0 && !trip.open && !trip.listed, "the trip now has its sale");
+    const shown = Number((await p.textContent(".trips-log tr:nth-child(2) td:last-child"))!.replace(/[^\d]/g, ""));
+    assert.equal(shown, Math.abs(Math.round(trip.earned - trip.spent)), "the log shows the trip's real profit");
+    b.close(); await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });

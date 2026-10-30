@@ -40,7 +40,7 @@ function connect() {
       const firstLogin = !me && msg.me;
       const before = me;
       world = msg.world; me = msg.me;
-      if (before && me && before.id === me.id) { noteDockings(before); noteForcedSales(before); }
+      if (before && me && before.id === me.id) { noteDockings(before); noteForcedSales(before); noteOrderFills(before); }
       noteprices();
       if ((selectedPort === null || firstLogin) && me?.ships?.length) selectedPort = me.ships[0].dest ?? me.ships[0].port;
       if (selectedPort === null) selectedPort = 0;
@@ -90,6 +90,23 @@ function noteForcedSales(before) {
     toast(forcedSaleText(f), "warn");
     if (store.get("notify") && "Notification" in window && Notification.permission === "granted" && document.hidden) {
       try { new Notification("Manifest", { body: forcedSaleText(f), tag: `sold-${f.ship}` }); } catch {}
+    }
+  }
+}
+/** Orders of yours another company filled since the last update. A listing's money arrives on its
+ *  own (often while the player is elsewhere), so without this cash just jumped with no reason given. */
+function orderFillText(f) {
+  const where = world.ports[f.port].name, what = `${f.qty} ${GOOD_NAMES[f.good]}`;
+  return f.side === "sell"
+    ? `Your listing at ${where} sold ${what} for ${fmt(f.amount)} after tax${f.left > 0 ? `; ${f.left} still listed` : ""}.`
+    : `Your buy order at ${where} was filled: ${what} delivered for ${fmt(f.amount)}${f.left > 0 ? `; ${f.left} still wanted` : ""}.`;
+}
+function noteOrderFills(before) {
+  const seen = Math.max(0, ...(before.orderFills ?? []).map(f => f.id));
+  for (const f of (me.orderFills ?? []).filter(f => f.id > seen)) {
+    toast(orderFillText(f));
+    if (store.get("notify") && "Notification" in window && Notification.permission === "granted" && document.hidden) {
+      try { new Notification("Manifest", { body: orderFillText(f), tag: `order-${f.order}` }); } catch {}
     }
   }
 }
@@ -1171,14 +1188,15 @@ function tripLog() {
     const profit = t.earned - t.spent;
     const result = t.open
       ? `<span class="quiet">${me.ships.some(x => x.id === t.ship && x.dest !== null) ? "at sea" : t.good === null ? "docked" : "not sold yet"}</span>`
+      : t.listed ? `<span class="quiet" title="Some of this cargo is listed for sale. The profit shows once it has all sold (or you take it back).">listed for sale</span>`
       : t.good === null ? `<span class="neg">−${fmt(t.spent)}</span>`
-      : `<b class="${profit >= 0 ? "pos" : "neg"}">${profit >= 0 ? "+" : "−"}${fmt(Math.abs(profit))}</b>${t.listed ? ` <span class="quiet" title="Part of the cargo was listed for sale, so it isn't counted">*</span>` : ""}`;
+      : `<b class="${profit >= 0 ? "pos" : "neg"}">${profit >= 0 ? "+" : "−"}${fmt(Math.abs(profit))}</b>`;
     return `<tr><td class="num">${Math.floor(t.departTick / 24) + 1}</td><td>${esc(world.ports[t.from].name)} → ${esc(world.ports[t.to].name)}</td><td>${what}</td><td class="num">${result}</td></tr>`;
   }).join("");
-  const done = trips.filter(t => !t.open), total = done.reduce((a, t) => a + t.earned - t.spent, 0);
+  const done = trips.filter(t => !t.open && !t.listed), total = done.reduce((a, t) => a + t.earned - t.spent, 0);
   return `<h3>Trip log</h3>
     <table class="trips-log"><tr><th class="num">Day</th><th>Route</th><th>Cargo</th><th class="num">Profit</th></tr>${rows}</table>
-    ${done.length ? `<div class="est">Last ${done.length} finished trip${done.length === 1 ? "" : "s"}: <b class="${total >= 0 ? "pos" : "neg"}">${total >= 0 ? "+" : "−"}${fmt(Math.abs(total))}</b> after cargo, fuel, fees and tax.${trips.some(t => t.listed) ? " * Listed cargo isn't counted until it sells." : ""}</div>` : ""}`;
+    ${done.length ? `<div class="est">Last ${done.length} finished trip${done.length === 1 ? "" : "s"}: <b class="${total >= 0 ? "pos" : "neg"}">${total >= 0 ? "+" : "−"}${fmt(Math.abs(total))}</b> after cargo, fuel, fees and tax.${trips.some(t => t.listed) ? " Trips with cargo listed for sale are added once it has all sold." : ""}</div>` : ""}`;
 }
 
 /** What a buy order costs if it fills completely: the goods don't come back to you. The server
