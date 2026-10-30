@@ -439,6 +439,14 @@ test("two players play through every feature in the browser", { skip: SKIP, time
       assert.ok(await a.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "no sideways scrolling");
     }
   }
+  // At 390 px (most iPhones) the header's top row needed 401 px with the longest difficulty pill, so
+  // Log out wrapped onto a row of its own and pushed everything down.
+  await a.setViewportSize({ width: 390, height: 800 });
+  const headTops = await a.evaluate(() => {
+    const d = document.getElementById("diff")!; d.className = "pill diff normal"; d.textContent = "Normal world";
+    return ["#diff", "#help", "#logout"].map(q => Math.round(document.querySelector(q)!.getBoundingClientRect().top / 10));
+  });
+  assert.ok(headTops.every(r => r === headTops[0]), `difficulty, Help and Log out share one row at 390 px (tops ${headTops})`);
 
   assert.deepEqual(errors, []);
 });
@@ -859,6 +867,14 @@ test("a company whose cash is too low to load is told so, not that every company
     assert.match(low.advice, /with 150 cash you can't buy a load worth sailing/);
     assert.equal(low.red, false);
     assert.equal((await at(16000)).advice, "", "no cash note for a company with money");
+    // The sail form under that advice said "Waiting is free: prices move every hour, so check back
+    // soon. Or pick a port above if you want to move anyway", which a company stuck below zero can't use.
+    const formNote = async (cash: number) => { await at(cash); return p.evaluate(() => { const w = window as any; return w.eval("noDestText")(w.eval("me").ships[0]); }); };
+    const debtNote = await formNote(-2513);
+    assert.match(debtNote, /Sailing empty puts its fuel on credit, adding to the debt/);
+    assert.ok(!/check back soon|move anyway/.test(debtNote), debtNote);
+    assert.match(await formNote(150), /load what you can afford/);
+    assert.match(await formNote(16000), /^Waiting is free/);
     // Picking a load by hand while below zero: no "Sail empty instead" (that only deepens the debt).
     await at(-2513);
     const card = p.locator(".shipCard[data-ship]").first();

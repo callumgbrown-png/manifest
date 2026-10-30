@@ -1087,11 +1087,17 @@ function loadProblem(s, g, qty) {
   return null;
 }
 /** What the sail form says before a destination is picked. A loaded ship has cargo to sell, so
- *  "waiting is free" (meant for an empty ship with nothing worth doing) would point the wrong way. */
+ *  "waiting is free" (meant for an empty ship with nothing worth doing) would point the wrong way.
+ *  Nor does "prices move every hour, check back soon" help a ship held back by cash (cashAdvice):
+ *  a company below zero sat under "this company can't trade again this season" and was told to
+ *  check back soon or move anyway, though moving only adds fuel to the debt. */
 function noDestText(s) {
-  return s.qty > 0
-    ? `Selling here pays best right now: use the Sell button above. Or pick a port above to carry your ${GOOD_NAMES[s.good]} there instead.`
-    : "Waiting is free: prices move every hour, so check back soon. Or pick a port above if you want to move anyway.";
+  if (s.qty > 0) return `Selling here pays best right now: use the Sell button above. Or pick a port above to carry your ${GOOD_NAMES[s.good]} there instead.`;
+  if (cashAdvice(s)) return me.cash > 0
+    ? "Pick a port above and load what you can afford; the estimate shows whether it pays."
+    : me.ships.length > 1 ? "This ship can't sail until your cash is back above zero."
+    : "Waiting costs nothing. Sailing empty puts its fuel on credit, adding to the debt, and earns nothing back.";
+  return "Waiting is free: prices move every hour, so check back soon. Or pick a port above if you want to move anyway.";
 }
 function estimate(card) {
   const s = me.ships.find(x => x.id === Number(card.dataset.ship));

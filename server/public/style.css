@@ -68,7 +68,7 @@ header { position: relative; display: flex; align-items: center; gap: 18px; padd
 .stat { position: relative; }
 .stat span { display: block; font-size: 11px; color: var(--quiet); text-transform: uppercase; letter-spacing: .07em; }
 .stat b { font: 600 15px var(--mono); font-variant-numeric: tabular-nums; }
-.delta { position: absolute; left: 0; top: 100%; margin-top: -1px; font: 600 12px var(--mono); font-style: normal; white-space: nowrap; opacity: 0; transition: opacity .3s; pointer-events: none; }
+.delta { position: absolute; z-index: 2; left: 0; top: 100%; margin-top: -3px; font: 600 12px var(--mono); font-style: normal; white-space: nowrap; opacity: 0; transition: opacity .3s; pointer-events: none; }
 .delta.show { opacity: 1; }
 .spacer { flex: 1; }
 .pill { font-size: 12px; padding: 3px 10px 3px 20px; border-radius: 99px; border: 1px solid var(--line); color: var(--quiet); position: relative; }
@@ -197,6 +197,13 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
 .youRank .quiet { width: 100%; font-size: 12px; }
 .legendShip { width: 22px; height: auto; image-rendering: pixelated; vertical-align: middle; margin-right: 4px; }
 .trip { flex-wrap: wrap; } .trip .then { width: 100%; font-size: 11px; font-weight: 400; color: var(--quiet); margin-top: -2px; }
+/* 381-420 px phones (iPhone 12-16 are 390): the brand, difficulty pill, live pill, Help and Log out
+   needed 401 px, so Log out wrapped onto a row of its own. Tighter gaps and pill keep them on one row. */
+@media (max-width: 420px) {
+  header { column-gap: 6px; }
+  header .pill.diff { padding-left: 7px; padding-right: 7px; }
+  .brand span { letter-spacing: .08em; }
+}
 /* Small phones (iPhone SE and similar): stats two by two, tighter tabs, no sideways scrolling. */
 @media (max-width: 380px) {
   .stats { grid-template-columns: 1fr 1fr; }
