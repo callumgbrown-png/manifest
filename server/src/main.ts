@@ -104,7 +104,10 @@ function hashPassword(password: string, salt: string) {
 
 function register(name: string, password: string): { token: string } | { error: string } {
   name = String(name ?? "").trim();
-  if (!/^[A-Za-z0-9 _.-]{3,24}$/.test(name)) return { error: "Company name must be 3-24 letters, numbers or spaces" };
+  if (!/^[A-Za-z0-9 _.-]{3,24}$/.test(name)) return { error: "Company name must be 3-24 letters, numbers, spaces, dots, dashes or underscores" };
+  if (!/[A-Za-z0-9]/.test(name)) return { error: "Company name needs at least one letter or number" };
+  // Pages collapse runs of spaces, so "Acme  Freight" would look exactly like "Acme Freight".
+  if (/  /.test(name)) return { error: "Company name can't have two spaces in a row" };
   if (String(password ?? "").length < 8) return { error: "Password must be at least 8 characters" };
   if (db.prepare("SELECT 1 FROM accounts WHERE name = ?").get(name)) return { error: "That name is taken" };
   const res = commit({ type: "register", name, startPort: pickStartPort(engine, randomInt) });
@@ -115,7 +118,8 @@ function register(name: string, password: string): { token: string } | { error: 
 }
 
 function login(name: string, password: string): { token: string } | { error: string } {
-  const row = db.prepare("SELECT salt, hash, company FROM accounts WHERE name = ?").get(String(name ?? "")) as
+  // Sign-up trims the name, so log-in must too (phone keyboards often add a trailing space).
+  const row = db.prepare("SELECT salt, hash, company FROM accounts WHERE name = ?").get(String(name ?? "").trim()) as
     { salt: string; hash: string; company: number } | undefined;
   if (!row) return { error: "Wrong name or password" };
   const a = Buffer.from(hashPassword(String(password ?? ""), row.salt), "hex"), b = Buffer.from(row.hash, "hex");

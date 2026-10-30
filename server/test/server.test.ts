@@ -168,7 +168,8 @@ describe("accounts", () => {
   test("sign-up rules", async () => {
     const c = new Client(s);
     for (const [name, pw, err] of [["ab", "password123", /3-24/], ["bad<name>", "password123", /3-24/], ["Way too long a company name here", "password123", /3-24/],
-      ["Bot · Freight", "password123", /3-24/], ["Good Name", "short", /8 characters/], [null, "password123", /3-24/]] as const) {
+      ["Bot · Freight", "password123", /3-24/], ["Good Name", "short", /8 characters/], [null, "password123", /3-24/],
+      ["...", "password123", /letter or number/], ["- _ -", "password123", /letter or number/], ["Acme  Freight", "password123", /two spaces/]] as const) {
       const r = await c.auth("register", name as any, pw);
       assert.equal(r.type, "authError"); assert.match(r.error, err);
     }
@@ -186,6 +187,8 @@ describe("accounts", () => {
     assert.equal((await b.auth("register", "acme freight")).error, "That name is taken");
     assert.equal((await b.auth("login", "Acme Freight", "wrong-password")).error, "Wrong name or password");
     assert.equal((await b.auth("login", "Nobody Here")).error, "Wrong name or password");
+    // Sign-up trims the name, so a trailing space typed at log-in still matches.
+    assert.equal((await b.auth("login", "  Acme Freight ")).type, "auth");
     const l = await b.auth("login", "ACME FREIGHT");
     assert.equal(l.type, "auth");
     assert.equal((await b.state(m => m.me)).me.id, st.me.id);
