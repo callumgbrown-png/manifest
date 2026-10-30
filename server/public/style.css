@@ -202,6 +202,7 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
   .stats { grid-template-columns: 1fr 1fr; }
   nav button { padding-left: 4px; padding-right: 4px; font-size: 12px; }
   header .pill.diff { display: none; }
+  .delta { position: static; margin-left: 6px; }   /* beside the cash: below it, it covered the clock's label */
   .market .sparkCell { padding-left: 4px; }
   .spark { width: 52px; }
   .bar { min-width: 36px; }

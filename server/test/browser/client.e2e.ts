@@ -774,3 +774,44 @@ test("buying a ship warns about the debt sale, and a ship sold for debt is expla
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });
+
+test("after setting sail the port panel says where your ship went; best trips explain a hop and the ranking", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "5000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`where ships are: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Gone Sailing"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const out = await p.evaluate(() => {
+      const w = window as any, m = w.eval("me"), world = w.eval("world"), s = m.ships[0];
+      const from = s.port, to = world.ports.find((q: any) => q.id !== from).id;
+      // The ship has just left: the panel is still on the port it left.
+      Object.assign(s, { dest: to, departTick: world.tick, arriveTick: world.tick + 7 });
+      w.eval("selectedPort = " + from); w.eval("render")();
+      const empty = document.querySelector("#panel .empty")?.textContent ?? "";
+      Object.assign(s, { dest: null });
+      // A trip whose destination has nothing paying, but a short empty hop does.
+      const trip = { dest: to, g: 0, qty: 100, profit: 300, hours: 4, fuel: 100, next: null,
+        onward: { dest: from, cost: 120, hours: 2, next: { profit: 520 } } };
+      const html = w.eval("tripsHtml")(s, [trip, { ...trip, onward: null, profit: 200 }]);
+      return { empty, html, to: world.ports[to].name, from: world.ports[from].name, id: s.id };
+    });
+    assert.match(out.empty, new RegExp(`None of your ships are docked here\\. Ship ${out.id} is sailing to ${out.to}, arriving in 7 h\\.`));
+    assert.doesNotMatch(out.empty, /Pick a port with your ship/);
+    assert.match(out.html, new RegExp(`then \\+400 after a 2 h empty hop to ${out.from}`));
+    assert.doesNotMatch(out.html, /short hop to more trips/);
+    assert.match(out.html, /Ranked by what each trip earns an hour, counting the next trip from where it ends/);
+    // On a 320 px phone the cash change shown after a trade sits beside the cash, not over the clock's label.
+    await p.setViewportSize({ width: 320, height: 700 });
+    const overlap = await p.evaluate(() => {
+      const d = document.getElementById("hDelta")!; d.textContent = "-5,818"; d.classList.add("show");
+      const a = d.getBoundingClientRect(), b = document.getElementById("hClock")!.parentElement!.querySelector("span")!.getBoundingClientRect();
+      return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+    });
+    assert.equal(overlap, false, "cash change overlaps the season clock label at 320 px");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});

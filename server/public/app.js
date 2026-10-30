@@ -713,7 +713,7 @@ function portPanel() {
   // On a phone your ship's buttons come first, above the market, so you can act without scrolling.
   const shipsFirst = docked.length > 0 && window.matchMedia("(max-width: 860px)").matches;
   const shipsHtml = `<h3>Your ships here</h3>
-    ${docked.length ? docked.map(shipCard).join("") : `<div class="empty">None of your ships are docked here.${coming.length ? ` ${coming.length === 1 ? "One is" : coming.length + " are"} on the way.` : me ? " Pick a port with your ship from the map or the Fleet tab." : ""}</div>`}
+    ${docked.length ? docked.map(shipCard).join("") : `<div class="empty">None of your ships are docked here.${me ? ` ${whereShipsAre()}` : ""}</div>`}
     ${me && docked.length && !world.seasonOver && me.ships.length < world.rules.maxShips ? buyShipHtml() : ""}`;
   return `
     <h2>${esc(p.name)}</h2><div class="chips">${chips.join("") || `<span class="quiet">A quiet port</span>`}</div>
@@ -724,6 +724,16 @@ function portPanel() {
     <h3>Player orders here</h3>
     ${orders.length ? `<table><tr><th>Player</th><th>Wants to</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${orders.map(o => `<tr${me && o.owner === me.id ? ' class="me"' : ""}><td>${esc(o.ownerName)}</td><td>${o.side === "sell" ? "sell" : "buy"}</td><td><span class="tag ${GOOD_NAMES[o.good]}">${GOOD_NAMES[o.good]}</span></td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="quiet">None yet.</div>`}
     ${shipsFirst ? "" : shipsHtml}`;
+}
+
+/** For a port where none of your ships are docked: where they are instead, so a player who has just
+ *  set sail (the panel stays on the port they left) isn't told to go and find a ship. */
+function whereShipsAre() {
+  const lines = me.ships.slice(0, 3).map(s => s.dest !== null
+    ? `Ship ${s.id} is sailing to ${esc(world.ports[s.dest].name)}, ${hoursLeft(s) > 0 ? `arriving in ${hoursLeft(s)} h` : "arriving now"}.`
+    : `Ship ${s.id} is docked at ${esc(world.ports[s.port].name)}.`);
+  if (me.ships.length > 3) lines.push(`${me.ships.length - 3} more on the Fleet tab.`);
+  return `${lines.join(" ")} Tap its port on the map or use the Fleet tab to see it.`;
 }
 
 function shipCard(s) {
@@ -911,7 +921,8 @@ function tripsHtml(s, trips = bestTrips(s), move = null) {
   return `<h3>Best trips from here</h3><div class="trips">${trips.map(t => `<button class="trip secondary" data-act="plan" data-ship="${s.id}" data-dest="${t.dest}" data-good="${s.qty > 0 ? "" : GOOD_NAMES[t.g]}" data-qty="${t.qty}">
       <span>${s.qty > 0 ? "Sell" : `Load ${t.qty}`} <span class="tag ${GOOD_NAMES[t.g]}">${GOOD_NAMES[t.g]}</span> → ${esc(world.ports[t.dest].name)}</span>
       <span class="num"><b class="pos">+${fmt(t.profit)}</b> · ${t.hours} h</span>
-      ${t.next ? `<span class="then">then +${fmt(t.next.profit)} from there</span>` : t.onward ? `<span class="then">then a short hop to more trips</span>` : `<span class="then">nothing pays from there yet</span>`}</button>`).join("")}</div>`;
+      ${t.next ? `<span class="then">then +${fmt(t.next.profit)} from there</span>` : t.onward ? `<span class="then">then +${fmt(t.onward.next.profit - t.onward.cost)} after a ${t.onward.hours} h empty hop to ${esc(world.ports[t.onward.dest].name)}</span>` : `<span class="then">nothing pays from there yet</span>`}</button>`).join("")}</div>
+    ${trips.length > 1 ? `<div class="est quiet" data-field="tripsNote">Ranked by what each trip earns an hour, counting the next trip from where it ends, so a smaller trip to a busy port can come first.</div>` : ""}`;
 }
 
 /** Why the server would refuse this trip for lack of cash (engine.ts sail), or null if it's affordable.
