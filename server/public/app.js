@@ -870,11 +870,26 @@ function bestTrips(s, n = 3) {
   return scored.sort((a, b) => b.score - a.score).slice(0, n);
 }
 
+/** Another of your ships already sailing empty to this port to load there, if any. Empty moves to
+ *  it are left out: with two ships docked together, both were told the same move (sail empty to X,
+ *  then load grain for Y), and the second one to follow it paid more for the load and sold it for
+ *  less. A playthrough with two ships did this time and again (two -579 empty trips side by side). */
+function ownEmptyHeading(s, port) {
+  return me.ships.find(o => o.id !== s.id && o.dest === port && o.qty === 0) ?? null;
+}
+/** Says which ports the move advice left out because another of your empty ships is going there. */
+function takenNote(s) {
+  const taken = me.ships.filter(o => o.id !== s.id && o.dest !== null && o.qty === 0 && o.dest !== s.port);
+  if (s.qty > 0 || !taken.length) return "";
+  const list = taken.map(o => `${esc(world.ports[o.dest].name)} (Ship ${o.id})`).join(", ");
+  return `<div class="est quiet" data-field="takenNote">Not suggesting a move to ${list}: ${taken.length === 1 ? "that ship is" : "those ships are"} already sailing there empty to load, and a second load from the same port costs more and sells for less.</div>`;
+}
+
 /** When no trip pays from here: the port whose best trip, minus the cost of sailing there empty, pays most per hour. */
 function bestMove(s, delay = 0) {
   let best = null;
   for (const p of world.ports) {
-    if (p.id === s.port) continue;
+    if (p.id === s.port || ownEmptyHeading(s, p.id)) continue;
     const go = tripProfit(s, p.id, -1, 0);
     const [next] = rawTrips({ ...s, port: p.id, qty: 0 }, 1, delay + go.hours);
     if (!next) continue;
@@ -893,7 +908,7 @@ function bestMove(s, delay = 0) {
 function chainMove(s) {
   let best = null;
   for (const p of world.ports) {
-    if (p.id === s.port) continue;
+    if (p.id === s.port || ownEmptyHeading(s, p.id)) continue;
     const go = tripProfit(s, p.id, -1, 0);
     const [next] = rawTrips({ ...s, port: p.id, qty: 0 }, 1, go.hours, me.cash + go.profit);
     if (!next) continue;
@@ -911,7 +926,7 @@ function chainMove(s) {
 function closestMove(s) {
   let best = null;
   for (const p of world.ports) {
-    if (p.id === s.port) continue;
+    if (p.id === s.port || ownEmptyHeading(s, p.id)) continue;
     const go = tripProfit(s, p.id, -1, 0);
     const [next] = rawTrips({ ...s, port: p.id, qty: 0 }, 1, go.hours);
     if (next && (!best || next.profit + go.profit > best.net)) best = { dest: p.id, net: next.profit + go.profit, cost: -go.profit, hours: go.hours, next };
@@ -984,12 +999,12 @@ function tripsHtml(s, trips = bestTrips(s), move = null) {
     <div class="trips"><button class="trip move secondary" data-act="plan" data-ship="${s.id}" data-dest="${move.dest}" data-good="">
       <span>Sail empty → ${esc(world.ports[move.dest].name)}, then load ${GOOD_NAMES[move.next.g]} for ${esc(world.ports[move.next.dest].name)}, then ${GOOD_NAMES[move.then.g]} for ${esc(world.ports[move.then.dest].name)}</span>
       <span class="num"><b class="pos">+${fmt(move.next.profit + move.then.profit - move.cost)}</b> · ${move.hours + move.next.hours + move.then.hours} h</span></button></div>
-    <div class="est" data-field="chainNote">Getting there costs about ${fmt(move.cost)} in fuel and fees. The first trip from there pays about +${fmt(move.next.profit)}, which doesn't cover that on its own, and the one after about +${fmt(move.then.profit)} (today's prices). No empty move pays back with just one trip, and waiting here for prices to change can take days.</div>`;
+    <div class="est" data-field="chainNote">Getting there costs about ${fmt(move.cost)} in fuel and fees. The first trip from there pays about +${fmt(move.next.profit)}, which doesn't cover that on its own, and the one after about +${fmt(move.then.profit)} (today's prices). No empty move pays back with just one trip, and waiting here for prices to change can take days.</div>${takenNote(s)}`;
   if (!trips.length && move) return `<h3>Best trips from here</h3><div class="est">No trip pays from here right now. Your best move:</div>
     <div class="trips"><button class="trip move secondary" data-act="plan" data-ship="${s.id}" data-dest="${move.dest}" data-good="">
       <span>Sail empty → ${esc(world.ports[move.dest].name)}, then load ${GOOD_NAMES[move.next.g]} for ${esc(world.ports[move.next.dest].name)}</span>
       <span class="num"><b class="pos">+${fmt(move.next.profit - move.cost)}</b> · ${move.hours + move.next.hours} h</span></button></div>
-    <div class="est">Getting there costs about ${fmt(move.cost)} in fuel and fees; the trip from there pays about +${fmt(move.next.profit)} at today's prices.</div>`;
+    <div class="est">Getting there costs about ${fmt(move.cost)} in fuel and fees; the trip from there pays about +${fmt(move.next.profit)} at today's prices.</div>${takenNote(s)}`;
   const left = world.seasonHours - world.tick;
   const soonest = Math.min(...world.ports.filter(p => p.id !== s.port).map(p => Math.max(1, Math.ceil(distance(s.port, p.id) / world.rules.speed))));
   if (!trips.length && !landsInSeason(soonest)) return `<h3>Best trips from here</h3><div class="est">The season ends in ${left} h, too soon for any voyage from here to dock in time. ${s.qty > 0 ? endCargoAdvice(s) : "Your ship can stay where it is."}</div>`;
@@ -997,7 +1012,7 @@ function tripsHtml(s, trips = bestTrips(s), move = null) {
   if (broke) return `<h3>Best trips from here</h3><div class="est warn" data-field="cashAdvice">${broke}</div>`;
   if (!trips.length) return `<h3>Best trips from here</h3><div class="est">${s.qty > 0 ? "Nowhere pays more than selling here right now."
     : paysAnywhere(s) ? `No trip pays from here right now, and no empty move to another port earns at least +50 after its fuel and fees.${closestMoveText(s)} Waiting costs nothing; prices move every hour.`
-    : "No trip pays anywhere on the map right now, so every company is waiting. Prices drift apart as ports make and use goods; waiting costs nothing, so check back in a few hours."}</div>`;
+    : "No trip pays anywhere on the map right now, so every company is waiting. Prices drift apart as ports make and use goods; waiting costs nothing, so check back in a few hours."}</div>${takenNote(s)}`;
   return `<h3>Best trips from here</h3><div class="trips">${trips.map(t => `<button class="trip secondary" data-act="plan" data-ship="${s.id}" data-dest="${t.dest}" data-good="${s.qty > 0 ? "" : GOOD_NAMES[t.g]}" data-qty="${t.qty}">
       <span>${s.qty > 0 ? "Sell" : `Load ${t.qty}`} <span class="tag ${GOOD_NAMES[t.g]}">${GOOD_NAMES[t.g]}</span> → ${esc(world.ports[t.dest].name)}</span>
       <span class="num"><b class="pos">+${fmt(t.profit)}</b> · ${t.hours} h</span>

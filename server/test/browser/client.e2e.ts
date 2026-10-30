@@ -1055,3 +1055,44 @@ test("a ship at a dead end is told to move out when two trips from the nearest b
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });
+
+test("two ships docked together aren't both sent on the same empty move", { skip: SKIP, timeout: 60000 }, async () => {
+  // With two ships docked at one port, both were told "sail empty to X, then load grain for Y". A
+  // playthrough followed it with both (two -579 empty trips side by side); the second paid more for
+  // its load and sold it for less. A move to a port your own empty ship is already heading to is left out.
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`twin: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Twin Hulls"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    await p.click('#tabs button[data-tab="fleet"]');
+    // Empty the port so nothing can be loaded here and the card falls back to a move (client side only).
+    const first = await p.evaluate(() => {
+      const w = window as any, world = w.eval("world"), s = w.eval("me").ships[0];
+      world.ports[s.port].stock[0] = 0; world.ports[s.port].stock[1] = 0;
+      const mv = w.eval("bestMove")(s);
+      w.eval("render")();
+      return mv?.dest ?? null;
+    });
+    assert.notEqual(first, null, "a move pays from an empty port at the start of a Normal season");
+    const card = p.locator('.shipCard[data-ship]').first();
+    assert.equal(await card.locator("select[data-field=dest]").inputValue(), String(first), "one ship: the form starts on the move");
+    // A second ship of ours, sailing empty to that port now.
+    const second = await p.evaluate((dest: number) => {
+      const w = window as any, m = w.eval("me"), world = w.eval("world"), s0 = m.ships[0];
+      m.ships.push({ ...s0, id: 999, dest, departTick: world.tick, arriveTick: world.tick + 5, qty: 0 });
+      w.eval("render")();
+      return w.eval("bestMove")(s0)?.dest ?? null;
+    }, first);
+    assert.notEqual(second, first, "the move another ship is already making isn't offered again");
+    const text = (await card.textContent())!.replace(/\s+/g, " ");
+    assert.match(text, new RegExp(`Not suggesting a move to ${map.ports[first].name} \\(Ship 999\\): that ship is already sailing there empty to load`));
+    if (second !== null) assert.equal(await card.locator("select[data-field=dest]").inputValue(), String(second));
+    else assert.ok(!text.includes(`→ ${map.ports[first].name},`));
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
