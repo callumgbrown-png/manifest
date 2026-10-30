@@ -201,7 +201,7 @@ test("two players play through every feature in the browser", { skip: SKIP, time
     return { oneShip, inDebt, emptyOne, emptyTwo, rich };
   });
   assert.match(broke.oneShip, /^Not enough cash: the cargo costs about [\d,]+ and you have 500\. You can afford about \d+ grain\./);
-  assert.match(broke.inDebt, /^Not enough cash: the cargo costs about [\d,]+ and you have -500\. Sail empty instead: your last ship's fuel can go on credit\./);
+  assert.match(broke.inDebt, /^Not enough cash: the cargo costs about [\d,]+ and you have -500\. Cargo must be paid for in cash; only fuel goes on credit\./);
   assert.doesNotMatch(broke.emptyOne, /Not enough cash/, "a last ship can always sail empty");
   assert.match(broke.emptyOne, /goes on credit/);
   assert.match(broke.emptyTwo, /^Not enough cash: the fuel costs about [\d,]+ and you have -500\. Only a company's last ship can sail on credit/);
@@ -812,6 +812,56 @@ test("after setting sail the port panel says where your ship went; best trips ex
       return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
     });
     assert.equal(overlap, false, "cash change overlaps the season clock label at 320 px");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("a company whose cash is too low to load is told so, not that every company is waiting", { skip: SKIP, timeout: 60000 }, async () => {
+  // Cargo must be paid for in cash and only a last ship's fuel goes on credit, so a one-ship company
+  // below zero can never load again. The panel said "No trip pays anywhere on the map right now, so
+  // every company is waiting ... check back in a few hours", and the sail form said "Sail empty instead".
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`broke: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Deep Red"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const at = (cash: number, listed = false) => p.evaluate(([c, l]: [number, boolean]) => {
+      const w = window as any, m = w.eval("me"), world = w.eval("world"), s = m.ships[0];
+      m.cash = c;
+      world.orders = l ? [{ id: 9, owner: m.id, ownerName: m.name, side: "sell", port: (s.port + 1) % world.ports.length, good: 0, qty: 50, price: 30 }] : [];
+      w.eval("selectedPort = " + s.port); w.eval("tab = 'port'"); w.eval("render")();
+      return { advice: document.querySelector("[data-field=cashAdvice]")?.textContent ?? "", panel: document.getElementById("panel")!.textContent!,
+        rich: w.eval("paysAnywhere")(s, 1e9), red: document.getElementById("hCash")!.classList.contains("neg") };
+    }, [cash, listed] as [number, boolean]);
+    const broke = await at(-2513);
+    assert.ok(broke.rich, "test assumes some trip pays for a company with money");
+    assert.match(broke.advice, /Your cash is -2,513, so you can't buy cargo.*can't trade again this season/);
+    assert.ok(!broke.panel.includes("every company is waiting"));
+    assert.ok(broke.red, "negative cash shows in red");
+    assert.match((await at(-2513, true)).advice, /goods you listed for sale are your way back/);
+    const low = await at(150);
+    assert.match(low.advice, /with 150 cash you can't buy a load worth sailing/);
+    assert.equal(low.red, false);
+    assert.equal((await at(16000)).advice, "", "no cash note for a company with money");
+    // Picking a load by hand while below zero: no "Sail empty instead" (that only deepens the debt).
+    await at(-2513);
+    const card = p.locator(".shipCard[data-ship]").first();
+    await card.locator("[data-field=dest] option:not([disabled])").first().evaluate((o: any) => { o.selected = true; o.parentElement.dispatchEvent(new Event("change", { bubbles: true })); });
+    await card.locator("[data-field=good]").selectOption("grain");
+    const est = await card.locator("[data-field=estimate]").textContent();
+    assert.match(est!, /Not enough cash.*Cargo must be paid for in cash; only fuel goes on credit/);
+    assert.ok(!est!.includes("Sail empty instead"));
+    // The Orders tab: a buy order the cash can't cover is refused by the server, so Post is off.
+    await p.click('#tabs button[data-tab="orders"]');
+    assert.match((await p.textContent("#oCost"))!, /Not enough cash: this order needs 3,000 to cover it and you have -2,513/);
+    assert.ok(await p.locator("button[data-act=placeOrder]").isDisabled());
+    await p.evaluate(() => { const w = window as any; w.eval("me").cash = 16000; w.eval("render")(); });
+    assert.match((await p.textContent("#oCost"))!, /If it fills, this costs you 3,000/);
+    assert.equal(await p.locator("button[data-act=placeOrder]").isDisabled(), false);
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });

@@ -609,6 +609,7 @@ function render() {
   document.querySelectorAll("#tabs button").forEach(b => { b.classList.toggle("on", b.dataset.tab === tab); b.setAttribute("aria-selected", String(b.dataset.tab === tab)); });
   $("hName").textContent = me?.name ?? "–";
   $("hCash").textContent = me ? fmt(me.cash) : "–";
+  $("hCash").classList.toggle("neg", !!me && me.cash < 0);
   showDelta();
   const level = world.rules.difficulty;
   $("diff").className = `pill diff ${level ?? "hidden"}`;
@@ -822,11 +823,11 @@ function cashReserve() {
   const n = me.ships.length;
   return 300 + (n > 1 ? world.rules.upkeep * (n - 1) + world.rules.portFee * n : 0);
 }
-function rawTrips(s, n = 3, delay = 0) {
+function rawTrips(s, n = 3, delay = 0, cash = me.cash) {
   const cap = world.rules.capacity, here = world.ports[s.port], out = [];
   const goods = s.qty > 0 ? [s.good] : [0, 1];
   for (const g of goods) {
-    const qty = s.qty > 0 ? s.qty : Math.floor(Math.min(cap, here.stock[g], Math.max(0, me.cash - cashReserve()) / (here.prices[g] * (1 + world.rules.tax) * 1.1)));
+    const qty = s.qty > 0 ? s.qty : Math.floor(Math.min(cap, here.stock[g], Math.max(0, cash - cashReserve()) / (here.prices[g] * (1 + world.rules.tax) * 1.1)));
     if (qty < 10) continue;
     for (const p of world.ports) {
       if (p.id === s.port) continue;
@@ -865,10 +866,23 @@ function bestMove(s, delay = 0) {
   return best;
 }
 
-/** Whether an empty ship with this company's cash could make a paying trip from any port at all.
- *  Early in a Hard season none does, and saying so beats implying the problem is where you are. */
-function paysAnywhere(s) {
-  return world.ports.some(p => rawTrips({ ...s, port: p.id, qty: 0 }, 1).length > 0);
+/** Whether an empty ship with this company's cash (or `cash`) could make a paying trip from any port
+ *  at all. Early in a Hard season none does, and saying so beats implying the problem is where you are. */
+function paysAnywhere(s, cash = me.cash) {
+  return world.ports.some(p => rawTrips({ ...s, port: p.id, qty: 0 }, 1, 0, cash).length > 0);
+}
+/** Why an empty ship has no trip when trips do pay for a company with money: its cash is too low.
+ *  Cargo must be paid for in cash (only a last ship's fuel goes on credit, engine.ts sail), so a
+ *  one-ship company below zero can never load again this season; it used to be told "every company
+ *  is waiting, check back in a few hours", and would have waited forever. Null if cash isn't why. */
+function cashAdvice(s) {
+  if (s.qty > 0 || paysAnywhere(s) || !paysAnywhere(s, 1e9)) return null;
+  const listed = world.orders.some(o => o.owner === me.id && o.side === "sell");
+  if (me.cash > 0) return `Trips are paying, but with ${fmt(me.cash)} cash you can't buy a load worth sailing (the advice keeps ${fmt(cashReserve())} in hand for fees and fuel). You can still load a few by hand below; the estimate says whether it pays.`;
+  if (me.ships.length > 1) return `Your cash is ${fmt(me.cash)}, so this ship can't buy cargo or fuel: only a company's last ship can sail on credit. Scrap a spare ship (${fmt(world.rules.shipPrice / 2)}) to raise cash${listed ? ", or wait for the goods you listed to sell" : ""}.`;
+  return `Your cash is ${fmt(me.cash)}, so you can't buy cargo: it must be paid for in cash, and only fuel goes on credit. ${listed
+    ? "The goods you listed for sale are your way back: when someone buys them, the money comes to you."
+    : "Nothing earns money without cargo, and sailing empty only adds to the debt, so this company can't trade again this season. Every company starts fresh next season."}`;
 }
 
 /** One listing in "For sale here": what it costs in total, how many you can take (room and cash),
@@ -915,6 +929,8 @@ function tripsHtml(s, trips = bestTrips(s), move = null) {
   const left = world.seasonHours - world.tick;
   const soonest = Math.min(...world.ports.filter(p => p.id !== s.port).map(p => Math.max(1, Math.ceil(distance(s.port, p.id) / world.rules.speed))));
   if (!trips.length && !landsInSeason(soonest)) return `<h3>Best trips from here</h3><div class="est">The season ends in ${left} h, too soon for any voyage from here to dock in time. ${s.qty > 0 ? endCargoAdvice(s) : "Your ship can stay where it is."}</div>`;
+  const broke = !trips.length && cashAdvice(s);
+  if (broke) return `<h3>Best trips from here</h3><div class="est warn" data-field="cashAdvice">${broke}</div>`;
   if (!trips.length) return `<h3>Best trips from here</h3><div class="est">${s.qty > 0 ? "Nowhere pays more than selling here right now."
     : paysAnywhere(s) ? "No trip pays right now at these prices, from here or one hop away. Waiting costs nothing; prices move every hour."
     : "No trip pays anywhere on the map right now, so every company is waiting. Prices drift apart as ports make and use goods; waiting costs nothing, so check back in a few hours."}</div>`;
@@ -939,7 +955,7 @@ function cashShortfall(s, dest, g, qty, fuel) {
   let n = 0;
   if (loading) { let lo = 0, hi = qty; while (lo < hi) { const m = Math.ceil((lo + hi) / 2); if (cost(m) <= have) lo = m; else hi = m - 1; } n = lo; }
   if (n > 0) text += ` You can afford about ${n} ${GOOD_NAMES[g]}.`;
-  else if (last) text += " Sail empty instead: your last ship's fuel can go on credit.";
+  else if (last) text += me.cash > 0 ? " Sail empty instead: your last ship's fuel can go on credit." : " Cargo must be paid for in cash; only fuel goes on credit.";
   else text += ` Only a company's last ship can sail on credit: sell cargo or scrap a spare ship (${fmt(world.rules.shipPrice / 2)}) first.`;
   return text;
 }
@@ -1052,9 +1068,11 @@ function tripLog() {
     ${done.length ? `<div class="est">Last ${done.length} finished trip${done.length === 1 ? "" : "s"}: <b class="${total >= 0 ? "pos" : "neg"}">${total >= 0 ? "+" : "−"}${fmt(Math.abs(total))}</b> after cargo, fuel, fees and tax.${trips.some(t => t.listed) ? " * Listed cargo isn't counted until it sells." : ""}</div>` : ""}`;
 }
 
-/** What a buy order costs if it fills completely: the goods don't come back to you. */
+/** What a buy order costs if it fills completely: the goods don't come back to you. The server
+ *  refuses an order your cash doesn't cover (engine.ts placeOrder), so say that before the click. */
 function orderCostText(qty, price) {
   const total = Math.floor(qty) * price;
+  if (total > 0 && me && total > me.cash) return `Not enough cash: this order needs ${fmt(total)} to cover it and you have ${fmt(me.cash)}.`;
   return total > 0 ? `If it fills, this costs you ${fmt(total)}.` : "";
 }
 function ordersPanel() {
@@ -1123,7 +1141,12 @@ function bindPanel() {
     estimate(card);
   });
   if ($("oCost")) {   // after restoreForm, so it matches what the player typed
-    const cost = () => { $("oCost").textContent = orderCostText(Number($("oQty").value), Number($("oPrice").value)); };
+    const cost = () => {
+      const qty = Number($("oQty").value), price = Number($("oPrice").value), short = Math.floor(qty) * price > me.cash;
+      $("oCost").textContent = orderCostText(qty, price);
+      $("oCost").classList.toggle("neg", short);
+      document.querySelector("[data-act=placeOrder]").disabled = short;
+    };
     for (const id of ["oQty", "oPrice"]) $(id).addEventListener("input", cost);
     cost();
   }
