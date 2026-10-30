@@ -47,6 +47,8 @@ test("a new sell order fills against a higher buy order straight away", () => {
   const cashA = A.cash;
   const r = e.apply({ type: "placeSell", company: A.id, ship: sa.id, qty: 100, price: 75 });
   assert.ok(near(A.cash, cashA + 50 * 80 * (1 - tax)), "filled at the buyer's price");
+  assert.equal((r as any).sold, 50, "the result says how much sold at once");
+  assert.ok(near((r as any).earned, 50 * 80 * (1 - tax)), "and what it earned after tax");
   const rest = e.orders.get((r as any).id)!;
   assert.equal(rest.qty, 50, "remaining 50 listed");
   assert.equal([...e.orders.values()].filter(o => o.side === "buy").length, 0);

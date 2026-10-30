@@ -248,6 +248,17 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await shipCard.locator("button[data-act=listSell]").click();
   await toast(a, /Listed for sale/);
   await a.waitForFunction(() => (window as any).eval("me").ships[0].qty === 40);
+  // A listing that meets a waiting buy order sells at once, and the toast says so instead of "Listed".
+  const listed = (res: object) => a.evaluate((r: object) => (window as any).eval("listedText")(r), res);
+  assert.equal(await listed({ ok: true, id: 9 }), "Listed for sale");
+  assert.equal(await listed({ ok: true, sold: 15, earned: 1116 }), "Sold 15 at once to a waiting buy order for 1,116 after tax");
+  assert.equal(await listed({ ok: true, id: 9, sold: 5, earned: 372 }), "Sold 5 at once to a waiting buy order for 372 after tax; the rest is listed for sale");
+  // The net-worth chart starts on the day the company was founded (Day 1 only for companies there from the start).
+  const startDay = (len: number, tick: number) => a.evaluate(([l, t]) => (window as any).eval("worthStartDay")(l, t), [len, tick]);
+  assert.equal(await startDay(1, 5), 1, "founded today, day 1");
+  assert.equal(await startDay(3, 48), 1, "founded on day 1, now day 3");
+  assert.equal(await startDay(1, 17 * 24 + 22), 18, "founded at day 18, 22:00");
+  assert.equal(await startDay(40, 1344), 18, "same company at season end (day 57 start logged)");
   // The sell button says what the whole cargo fetches after tax; the note says what that makes.
   const sellText = (await a.locator('.shipCard button[data-act="sell"]').textContent())!;
   assert.match(sellText, /^Sell 40 grain here for [\d,]+$/);

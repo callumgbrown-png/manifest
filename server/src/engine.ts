@@ -74,7 +74,8 @@ export type Command =
   | { type: "adminSet"; tax?: number; upkeep?: number; portFee?: number }
   | { type: "setDifficulty"; level: string };
 
-export type Result = { ok: true; id?: number } | { ok: false; error: string };
+/** sold/earned: on a listing, how much sold at once to buy orders already waiting, and for how much after tax. */
+export type Result = { ok: true; id?: number; sold?: number; earned?: number } | { ok: false; error: string };
 
 export class Engine {
   readonly rules: Rules;
@@ -396,21 +397,23 @@ export class Engine {
     const trip = this.openTrip(c.id, s.id);
     if (trip && s.qty === 0) trip.open = false;
     // Fill first against higher buy orders at this port (best price first).
-    let left = qty;
+    let left = qty, earned = 0;
     for (const o of this.matching(s.port, g, "buy", c.id).filter(o => o.price >= price)) {
       if (left <= 0) break;
       const fill = Math.min(left, o.qty);
       c.cash += fill * o.price * (1 - tax);   // buyer's cash is already in escrow
+      earned += fill * o.price * (1 - tax);
       if (trip) trip.earned += fill * o.price * (1 - tax);
       this.noteFill(o, fill, fill * o.price);
       this.shrink(o, fill);
       left -= fill;
     }
-    if (left === 0) return { ok: true };
+    const sold = qty - left, now = sold ? { sold, earned: Math.round(earned * 100) / 100 } : {};
+    if (left === 0) return { ok: true, ...now };
     const id = this.nextId++;
     this.orders.set(id, { id, owner: c.id, port: s.port, good: g, qty: left, price, side: "sell", cost: unitCost * left });
     if (trip) { trip.listed = true; this.listingTrip.set(id, trip); }
-    return { ok: true, id };
+    return { ok: true, id, ...now };
   }
 
   /** Buy goods from another player's sell order straight onto a docked ship. */

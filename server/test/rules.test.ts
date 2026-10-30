@@ -341,7 +341,7 @@ describe("sell listings", () => {
     e.apply({ type: "placeOrder", company: C.id, port: 0, good: "fuel", qty: 10, price: 80 });
     const s = ship(A); s.good = 1; s.qty = 15; s.cost = 750;
     const cash = A.cash;
-    assert.deepEqual(e.apply({ type: "placeSell", company: A.id, ship: s.id, qty: 15, price: 65 }), { ok: true });
+    assert.deepEqual(e.apply({ type: "placeSell", company: A.id, ship: s.id, qty: 15, price: 65 }), { ok: true, sold: 15, earned: Math.round((10 * 80 + 5 * 70) * (1 - tax) * 100) / 100 }, "all sold at once, nothing listed");
     assert.ok(near(A.cash - cash, (10 * 80 + 5 * 70) * (1 - tax)));
     const left = [...e.orders.values()];
     assert.equal(left.length, 1); assert.equal(left[0].owner, B.id); assert.equal(left[0].qty, 5);

@@ -53,7 +53,7 @@ function connect() {
       store.set("token", null); showAuth(true); $("authError").textContent = msg.error;
     } else if (msg.type === "result") {
       const cb = pendingReq.get(msg.reqId); pendingReq.delete(msg.reqId);
-      if (!msg.ok) toast(msg.error, true); else if (cb) cb();
+      if (!msg.ok) toast(msg.error, true); else if (cb) cb(msg);
     } else if (msg.type === "loggedOut") location.reload();
     else if (msg.type === "error") toast(msg.error, true);
   };
@@ -130,7 +130,14 @@ function send(msg) {
 
 function command(cmd, onOk) {
   const id = ++reqId;
-  if (send({ type: "cmd", reqId: id, cmd })) pendingReq.set(id, () => { if (cmd.ship !== undefined) clearForm(cmd.ship); onOk?.(); render(); });
+  if (send({ type: "cmd", reqId: id, cmd })) pendingReq.set(id, res => { if (cmd.ship !== undefined) clearForm(cmd.ship); onOk?.(res); render(); });
+}
+
+/** What happened to a new listing: goods can sell at once to buy orders already waiting at the port. */
+function listedText(res) {
+  if (!res?.sold) return "Listed for sale";
+  const sold = `Sold ${res.sold} at once to a waiting buy order for ${fmt(res.earned)} after tax`;
+  return res.id ? `${sold}; the rest is listed for sale` : sold;
 }
 
 /** kind: falsy for done (tick), true or "bad" for an error, "warn" for done-but-careful. */
@@ -1165,6 +1172,12 @@ function worthSum(cargo) {
     + ` + cargo at cost ${fmt(cargo)}${orders ? ` + open orders ${fmt(orders)}` : ""}.`;
 }
 
+/** The day a net-worth log starts on: it has the founding value, then one value at the start of each
+ * day since, so a company founded mid-season starts on its own day, not Day 1. */
+function worthStartDay(logLength, tick) {
+  return Math.max(1, Math.floor(tick / 24) + 1 - (logLength - 1));
+}
+
 /** Net worth at the start of each day this season, with today's value as the last point. */
 function worthChart() {
   const pts = [...(me.worthLog ?? []), me.worth];
@@ -1177,7 +1190,7 @@ function worthChart() {
     <div class="quiet">${fmt(pts[0])} → <b>${fmt(me.worth)}</b> <span class="${change >= 0 ? "pos" : "neg"}">(${change >= 0 ? "+" : "−"}${fmt(Math.abs(change))})</span></div>
     <svg class="worthChart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Net worth by day">
       <path d="${line}L${w},${h}L0,${h}Z" class="area"/><path d="${line}" class="line"/></svg>
-    <div class="axis"><span>Day 1</span><span>${world.seasonOver ? `Day ${Math.round(world.seasonHours / 24)}` : "Today"}</span></div>`;
+    <div class="axis"><span>Day ${worthStartDay(pts.length - 1, world.tick)}</span><span>${world.seasonOver ? `Day ${Math.round(world.seasonHours / 24)}` : "Today"}</span></div>`;
 }
 
 function tripLog() {
@@ -1187,7 +1200,7 @@ function tripLog() {
     const what = t.good === null ? "empty" : `${t.qty} ${GOOD_NAMES[t.good]}`;
     const profit = t.earned - t.spent;
     const result = t.open
-      ? `<span class="quiet">${me.ships.some(x => x.id === t.ship && x.dest !== null) ? "at sea" : t.good === null ? "docked" : "not sold yet"}</span>`
+      ? `<span class="quiet">${me.ships.some(x => x.id === t.ship && x.dest !== null) ? "at sea" : t.good === null ? "docked" : world.seasonOver ? "unsold at season end" : "not sold yet"}</span>`
       : t.listed ? `<span class="quiet" title="Some of this cargo is listed for sale. The profit shows once it has all sold (or you take it back).">listed for sale</span>`
       : t.good === null ? `<span class="neg">−${fmt(t.spent)}</span>`
       : `<b class="${profit >= 0 ? "pos" : "neg"}">${profit >= 0 ? "+" : "−"}${fmt(Math.abs(profit))}</b>`;
@@ -1308,7 +1321,7 @@ function bindPanel() {
     if (act === "listSell") {
       const card = btn.closest(".shipCard");
       command({ type: "placeSell", ship, qty: Number(card.querySelector("[data-field=sellQty]").value),
-        price: Number(card.querySelector("[data-field=sellPrice]").value) }, () => toast("Listed for sale"));
+        price: Number(card.querySelector("[data-field=sellPrice]").value) }, res => toast(listedText(res)));
     }
     if (act === "buyOrder") command({ type: "buyFromOrder", ship, order: Number(btn.dataset.order), qty: Number(btn.dataset.qty) }, () => toast("Bought"));
     if (act === "placeOrder") command({ type: "placeOrder", port: Number($("oPort").value), good: $("oGood").value,
