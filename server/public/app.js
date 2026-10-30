@@ -766,7 +766,7 @@ function shipCard(s) {
   const dests = world.ports.filter(p => p.id !== s.port).sort((a, b) => a.name.localeCompare(b.name));
   // The form starts on the best trip, or the best port to sail to when nothing pays here,
   // never on whichever port happens to come first alphabetically.
-  const trips = bestTrips(s), move = trips.length || s.qty > 0 ? null : bestMove(s);
+  const trips = bestTrips(s), move = trips.length || s.qty > 0 ? null : bestMove(s) ?? chainMove(s);
   const plan = trips[0] ? { dest: trips[0].dest, good: s.qty > 0 ? "" : GOOD_NAMES[trips[0].g], qty: trips[0].qty }
     : move ? { dest: move.dest, good: "", qty: world.rules.capacity }
     : { dest: null, good: "", qty: world.rules.capacity };   // nothing worth doing: don't pick a trip for them
@@ -885,6 +885,26 @@ function bestMove(s, delay = 0) {
   return best;
 }
 
+/** When no single empty move pays: an empty move whose next two trips together clear +50. A ship at
+ *  a dead-end port (Dunness, say) can sit there for weeks with no one-step move paying, because the
+ *  first trip from the nearest busy port doesn't cover the long sail out; the second one does. A test
+ *  ship waited from day 25 to the end of the season that way. Season playtest (normal, 4 h check-ins,
+ *  players taking the best trips): median 19,660 without this, 28,357 with it; lowest 16,429 vs 20,066. */
+function chainMove(s) {
+  let best = null;
+  for (const p of world.ports) {
+    if (p.id === s.port) continue;
+    const go = tripProfit(s, p.id, -1, 0);
+    const [next] = rawTrips({ ...s, port: p.id, qty: 0 }, 1, go.hours, me.cash + go.profit);
+    if (!next) continue;
+    const [then] = rawTrips({ ...s, port: next.dest, qty: 0 }, 1, go.hours + next.hours, me.cash + go.profit + next.profit);
+    if (!then) continue;
+    const net = go.profit + next.profit + then.profit, score = net / (go.hours + next.hours + then.hours);
+    if (net >= 50 && (!best || score > best.score)) best = { dest: p.id, score, cost: -go.profit, hours: go.hours, next, then };
+  }
+  return best;
+}
+
 /** The empty move that comes closest to paying (largest net, even below zero), for when bestMove
  *  finds none. A test player sat 8 game days at one port told only "waiting costs nothing", with
  *  no idea how far off the nearest paying trip was or why moving there didn't count. */
@@ -960,6 +980,11 @@ function endCargoAdvice(s) {
     : `Selling here now would lower your net worth by about ${fmt(s.cost - sell)}: unsold cargo counts at what you paid for it, so keeping it is fine.`;
 }
 function tripsHtml(s, trips = bestTrips(s), move = null) {
+  if (!trips.length && move?.then) return `<h3>Best trips from here</h3><div class="est">No trip pays from here right now. Your best move:</div>
+    <div class="trips"><button class="trip move secondary" data-act="plan" data-ship="${s.id}" data-dest="${move.dest}" data-good="">
+      <span>Sail empty → ${esc(world.ports[move.dest].name)}, then load ${GOOD_NAMES[move.next.g]} for ${esc(world.ports[move.next.dest].name)}, then ${GOOD_NAMES[move.then.g]} for ${esc(world.ports[move.then.dest].name)}</span>
+      <span class="num"><b class="pos">+${fmt(move.next.profit + move.then.profit - move.cost)}</b> · ${move.hours + move.next.hours + move.then.hours} h</span></button></div>
+    <div class="est" data-field="chainNote">Getting there costs about ${fmt(move.cost)} in fuel and fees. The first trip from there pays about +${fmt(move.next.profit)}, which doesn't cover that on its own, and the one after about +${fmt(move.then.profit)} (today's prices). No empty move pays back with just one trip, and waiting here for prices to change can take days.</div>`;
   if (!trips.length && move) return `<h3>Best trips from here</h3><div class="est">No trip pays from here right now. Your best move:</div>
     <div class="trips"><button class="trip move secondary" data-act="plan" data-ship="${s.id}" data-dest="${move.dest}" data-good="">
       <span>Sail empty → ${esc(world.ports[move.dest].name)}, then load ${GOOD_NAMES[move.next.g]} for ${esc(world.ports[move.next.dest].name)}</span>
@@ -1112,7 +1137,7 @@ function worthChart() {
     <div class="quiet">${fmt(pts[0])} → <b>${fmt(me.worth)}</b> <span class="${change >= 0 ? "pos" : "neg"}">(${change >= 0 ? "+" : "−"}${fmt(Math.abs(change))})</span></div>
     <svg class="worthChart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Net worth by day">
       <path d="${line}L${w},${h}L0,${h}Z" class="area"/><path d="${line}" class="line"/></svg>
-    <div class="axis"><span>Day 1</span><span>Today</span></div>`;
+    <div class="axis"><span>Day 1</span><span>${world.seasonOver ? `Day ${Math.round(world.seasonHours / 24)}` : "Today"}</span></div>`;
 }
 
 function tripLog() {

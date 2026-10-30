@@ -1007,3 +1007,51 @@ test("the Port tab follows a ship from the port it left to where it docks, and l
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });
+
+test("a ship at a dead end is told to move out when two trips from the nearest busy port pay", { skip: SKIP, timeout: 60000 }, async () => {
+  // A test ship sat at Dunness from day 25 to the end of the season told "waiting costs nothing":
+  // no empty move paid back with ONE trip, though the second trip from there would have.
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0", DIFFICULTY: "hard" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`chain: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Dead End"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    // Nothing pays anywhere at hour 0 on Hard. Stock a grain port until a trip from it just pays,
+    // then stock the other good at that trip's destination until the trip after pays well, stopping
+    // before any one-step move pays.
+    const found = await p.evaluate(() => {
+      const w = window as any, world = w.eval("world"), s = w.eval("me").ships[0];
+      const raw = w.eval("rawTrips"), bestMove = w.eval("bestMove"), chainMove = w.eval("chainMove");
+      for (const q of world.ports.filter((x: any) => x.id !== s.port && x.produces.includes("grain"))) {
+        const save = world.ports.map((x: any) => [...x.stock]);
+        let t1 = null;
+        for (let f = 1, qs = q.stock[0]; f <= 5 && !t1; f += 0.01) { q.stock[0] = qs * f; [t1] = raw({ ...s, port: q.id, qty: 0 }, 1); }
+        if (t1 && !bestMove(s)) {
+          const r = world.ports[t1.dest], g = 1 - t1.g;
+          for (let f = 1, rs = r.stock[g]; f <= 8; f += 0.02) {
+            r.stock[g] = rs * f;
+            if (raw(s, 1).length || bestMove(s)) break;
+            const c = chainMove(s);
+            if (c) { w.eval("render")(); return { dest: c.dest, net: Math.round(c.next.profit + c.then.profit - c.cost), first: c.next.profit - c.cost }; }
+          }
+        }
+        world.ports.forEach((x: any, i: number) => { x.stock = save[i]; });
+      }
+      return null;
+    });
+    assert.ok(found, "found a world where only a two-trip move pays");
+    assert.ok(found.net >= 50 && found.first < 50, "the first trip alone doesn't pay for the move");
+    await p.click('#tabs button[data-tab="fleet"]');
+    const card = p.locator(".shipCard[data-ship]").first();
+    const text = (await card.textContent())!.replace(/\s+/g, " ");
+    assert.match(text, /Sail empty → .+, then load (grain|fuel) for .+, then (grain|fuel) for .+ \+[\d,]+ · \d+ h/);
+    assert.match(text, /Getting there costs about [\d,]+ in fuel and fees\. The first trip from there pays about \+[\d,]+, which doesn't cover that on its own, and the one after about \+[\d,]+/);
+    assert.ok(!text.includes("Waiting costs nothing"));
+    assert.equal(await card.locator("select[data-field=dest]").inputValue(), String(found.dest), "the form starts on the move");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
