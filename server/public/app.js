@@ -777,9 +777,9 @@ function shipCard(s) {
       ${matching.map(o => `<button class="secondary" data-act="fill" data-ship="${s.id}" data-order="${o.id}">Fill ${esc(o.ownerName)}'s order: ${Math.min(o.qty, s.qty)} for ${fmt(Math.min(o.qty, s.qty) * o.price * (1 - world.rules.tax))}</button>`).join("")}</div>
       <div class="est" data-field="saleNote">${saleNote(s)}</div>
       <div class="row labelled"><label class="mini">Quantity<input data-field="sellQty" type="number" min="1" max="${s.qty}" value="${s.qty}" style="width:80px"></label>
-        <label class="mini">Price each<input data-field="sellPrice" type="number" step="0.5" value="${(port.prices[s.good] * 1.15).toFixed(1)}" style="width:90px"></label>
+        <label class="mini">Price each<input data-field="sellPrice" type="number" step="0.5" value="${listPrice(s).toFixed(1)}" style="width:90px"></label>
         <button class="secondary" data-act="listSell" data-ship="${s.id}">List for sale here</button></div>
-      <div class="est" data-field="listNote">Listing leaves the goods at this port for other players to buy, and frees your ship. Players can buy ${GOOD_NAMES[s.good]} from the market here for about ${(buyCost(s.port, s.good, s.qty) * (1 + world.rules.tax) / s.qty).toFixed(2)} each with tax, so a listing above that rarely sells. You get your price less ${Math.round(world.rules.tax * 1000) / 10}% tax.</div>` : ""}
+      <div class="est" data-field="listNote">Listing leaves the goods at this port for other players to buy, and frees your ship. Players can buy ${GOOD_NAMES[s.good]} from the market here for about ${marketBuyUnit(s).toFixed(2)} each with tax, so a listing above that rarely sells; the price box starts just under it. You get your price less ${Math.round(world.rules.tax * 1000) / 10}% tax.</div>` : ""}
     ${forSale.length ? `<h3>For sale here</h3>${forSale.map(o => listingHtml(s, o)).join("")}` : ""}
     ${tripsHtml(s, trips, move)}
     <label>Destination <span class="quiet">(or tap a port on the map)</span><select data-field="dest">${plan.dest === null ? `<option value="" selected disabled>Choose where to sail…</option>` : ""}${dests.map(p => `<option value="${p.id}"${p.id === plan.dest ? " selected" : ""}>${esc(p.name)} (≈${Math.ceil(distance(s.port, p.id) / world.rules.speed)} h)</option>`).join("")}</select></label>
@@ -793,6 +793,12 @@ function shipCard(s) {
   </div>`;
 }
 
+/** Price each the market here charges a buyer for this load, with tax. */
+function marketBuyUnit(s) { return buyCost(s.port, s.good, s.qty) * (1 + world.rules.tax) / s.qty; }
+/** Starting price for "List for sale": the highest half step below what buying the same load from the
+ *  market here costs, so the listing undercuts the market. It used to start at 1.15× the price, above
+ *  that, at a price the note beside it said "rarely sells". */
+function listPrice(s) { return Math.max(0.5, Math.ceil(marketBuyUnit(s) * 2 - 1) / 2); }
 /** Scrapping can't be undone, so the first tap only asks (a stray tap on a phone cost a 12,000 ship). */
 let scrapAsk = null;
 function scrapConfirmHtml(s) {
@@ -1180,6 +1186,12 @@ function orderCostText(qty, price) {
   if (total > 0 && me && total > me.cash) return `Not enough cash: this order needs ${fmt(total)} to cover it and you have ${fmt(me.cash)}.`;
   return total > 0 ? `If it fills, this costs you ${fmt(total)}.` : "";
 }
+/** A buy order can always be cancelled; a listing only when one of your ships is docked at its port
+ *  with room to take the goods back (engine cancelOrder), otherwise the Cancel button only errors. */
+function canTakeBack(o) {
+  return o.side === "buy" || me.ships.some(s => s.dest === null && s.port === o.port
+    && (s.qty === 0 || s.good === o.good) && s.qty + o.qty <= world.rules.capacity);
+}
 function ordersPanel() {
   const mine = me ? world.orders.filter(o => o.owner === me.id) : [];
   const others = world.orders.filter(o => !me || o.owner !== me.id);
@@ -1196,7 +1208,8 @@ function ordersPanel() {
       <button data-act="placeOrder">Post</button></div>
     <div class="est">Grain ${b.grain.floor}–${b.grain.ceiling}, fuel ${b.fuel.floor}–${b.fuel.ceiling} per unit. <span id="oCost">${orderCostText(100, 30)}</span></div>` : ""}
     <h3>Your orders</h3>
-    ${mine.length ? `<table><tr><th>Port</th><th>Order</th><th class="num">Qty</th><th class="num">Price</th><th></th></tr>${mine.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td><span class="tag ${GOOD_NAMES[o.good]}">${o.side === "sell" ? "selling" : "buying"} ${GOOD_NAMES[o.good]}</span></td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td><td>${world.seasonOver ? "" : `<button class="link" data-act="cancelOrder" data-order="${o.id}">Cancel</button>`}</td></tr>`).join("")}</table>` : `<div class="empty">You have no open orders.</div>`}
+    ${mine.length ? `<table><tr><th>Port</th><th>Order</th><th class="num">Qty</th><th class="num">Price</th><th></th></tr>${mine.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td><span class="tag ${GOOD_NAMES[o.good]}">${o.side === "sell" ? "selling" : "buying"} ${GOOD_NAMES[o.good]}</span></td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td><td>${world.seasonOver ? "" : canTakeBack(o) ? `<button class="link" data-act="cancelOrder" data-order="${o.id}">Cancel</button>`
+      : `<span class="quiet" data-field="takeBack">Dock a ship with room here to cancel</span>`}</td></tr>`).join("")}</table>` : `<div class="empty">You have no open orders.</div>`}
     <h3>All open orders</h3>
     ${others.length ? `<table><tr><th>Port</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${others.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${o.side === "sell" ? "for sale" : "wanted"}: ${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="empty">No other open orders.</div>`}`;
 }

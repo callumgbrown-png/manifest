@@ -241,7 +241,7 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await selectPort(a, dest);
   // List 20 for sale, then sell the rest to the market.
   const shipCard = a.locator(".shipCard[data-ship]").first();
-  assert.match((await shipCard.locator("[data-field=listNote]").textContent())!, /buy grain from the market here for about \d+\.\d\d each with tax, so a listing above that rarely sells\. You get your price less \d+(\.\d)?% tax\./);
+  assert.match((await shipCard.locator("[data-field=listNote]").textContent())!, /buy grain from the market here for about \d+\.\d\d each with tax, so a listing above that rarely sells; the price box starts just under it\. You get your price less \d+(\.\d)?% tax\./);
   await shipCard.locator("input[data-field=sellQty]").fill("20");
   await shipCard.locator("input[data-field=sellPrice]").fill("39");
   await a.locator("body").click({ position: { x: 5, y: 5 } });
@@ -1093,6 +1093,51 @@ test("two ships docked together aren't both sent on the same empty move", { skip
     assert.match(text, new RegExp(`Not suggesting a move to ${map.ports[first].name} \\(Ship 999\\): that ship is already sailing there empty to load`));
     if (second !== null) assert.equal(await card.locator("select[data-field=dest]").inputValue(), String(second));
     else assert.ok(!text.includes(`→ ${map.ports[first].name},`));
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("listings start under the market price, and a listing can only be cancelled with a ship there to take it back", { skip: SKIP, timeout: 60000 }, async () => {
+  // "List for sale" started at 1.15x the price, above what the market charges a buyer, beside a note
+  // saying such a listing "rarely sells". The Orders tab offered Cancel on every listing, though the
+  // server refuses unless one of your ships is docked there with room ("dock a ship with room...").
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`listing: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Quay Sellers"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    for (const good of [0, 1]) {
+      const r = await p.evaluate((g: number) => {
+        const w = window as any, s = w.eval("me").ships[0];
+        Object.assign(s, { good: g, qty: 100, cost: 3000 });
+        w.eval("selectedPort = " + s.port); w.eval("tab = 'port'"); w.eval("render")();
+        return { box: Number((document.querySelector("[data-field=sellPrice]") as HTMLInputElement).value), market: w.eval("marketBuyUnit")(s) };
+      }, good);
+      assert.ok(r.box < r.market && r.box >= r.market - 0.5, `good ${good}: box ${r.box}, market charges ${r.market}`);
+    }
+    const orders = (state: string) => p.evaluate((st: string) => {
+      const w = window as any, m = w.eval("me"), world = w.eval("world"), s = m.ships[0];
+      Object.assign(s, st === "sailing" ? { dest: (s.port + 1) % world.ports.length, qty: 0 } : st === "full" ? { dest: null, good: 0, qty: 100 } : { dest: null, qty: 0 });
+      world.orders = [{ id: 9, owner: m.id, ownerName: m.name, side: "sell", port: s.port, good: 1, qty: 50, price: 60 },
+        { id: 10, owner: m.id, ownerName: m.name, side: "buy", port: s.port, good: 0, qty: 10, price: 20 }];
+      w.eval("tab = 'orders'"); w.eval("render")();
+      const rows = [...document.querySelectorAll("#panel tr")];
+      const sell = rows.find(tr => tr.textContent!.includes("selling fuel"))!, buy = rows.find(tr => tr.textContent!.includes("buying grain"))!;
+      return { sell: sell.textContent, sellBtn: !!sell.querySelector("[data-act=cancelOrder]"), buyBtn: !!buy.querySelector("[data-act=cancelOrder]") };
+    }, state);
+    const docked = await orders("docked");
+    assert.ok(docked.sellBtn && docked.buyBtn, "an empty ship docked there can take the goods back");
+    for (const st of ["sailing", "full"]) {
+      const r = await orders(st);
+      assert.equal(r.sellBtn, false, `no Cancel on a listing when the ship is ${st}`);
+      assert.match(r.sell!, /Dock a ship with room here to cancel/);
+      assert.ok(r.buyBtn, "buy orders can always be cancelled");
+    }
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth) <= 390, "no sideways scroll at 390 px");
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });
