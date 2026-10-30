@@ -1185,6 +1185,12 @@ test("a seller is told when their listing sells, and the trip log counts the sal
     const dest = dist[from].findIndex((d: number, i: number) => i !== from && Number.isFinite(d) && d > 0);
     await run({ type: "sail", ship: ship.id, dest, buy: { good: "grain", qty: 50 } });
     await waitDocked(p, dest);
+    // With cargo aboard and no trip worth more than selling here, the empty form pointed at the Sell
+    // button's opposite: "Waiting is free". It should say to sell (or carry the cargo elsewhere).
+    const noDest = (sh: any) => p.evaluate((x: any) => (window as any).eval("noDestText")(x), sh);
+    const loaded = (await me(p)).ships[0];
+    assert.match(await noDest(loaded), /^Selling here pays best right now: use the Sell button above\. Or pick a port above to carry your grain there instead\.$/);
+    assert.match(await noDest({ ...loaded, qty: 0 }), /^Waiting is free/);
     await run({ type: "placeSell", ship: ship.id, qty: 50, price: 39 });
     await p.click('#tabs button[data-tab="fleet"]');
     await p.waitForFunction(() => /listed for sale/.test(document.querySelector(".trips-log")?.textContent ?? ""));

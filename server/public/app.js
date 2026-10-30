@@ -1078,13 +1078,20 @@ function loadProblem(s, g, qty) {
   if (qty > stock) return `This port only has ${fmt(stock)} ${GOOD_NAMES[g]} in stock.`;
   return null;
 }
+/** What the sail form says before a destination is picked. A loaded ship has cargo to sell, so
+ *  "waiting is free" (meant for an empty ship with nothing worth doing) would point the wrong way. */
+function noDestText(s) {
+  return s.qty > 0
+    ? `Selling here pays best right now: use the Sell button above. Or pick a port above to carry your ${GOOD_NAMES[s.good]} there instead.`
+    : "Waiting is free: prices move every hour, so check back soon. Or pick a port above if you want to move anyway.";
+}
 function estimate(card) {
   const s = me.ships.find(x => x.id === Number(card.dataset.ship));
   const destVal = card.querySelector("[data-field=dest]").value;
   const sailBtn = card.querySelector("[data-act=sail]");
   if (destVal === "") {
     if (sailBtn) sailBtn.disabled = true;
-    card.querySelector("[data-field=estimate]").innerHTML = "Waiting is free: prices move every hour, so check back soon. Or pick a port above if you want to move anyway.";
+    card.querySelector("[data-field=estimate]").innerHTML = noDestText(s);
     return;
   }
   if (sailBtn) sailBtn.disabled = false;
