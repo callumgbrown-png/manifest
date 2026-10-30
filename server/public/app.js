@@ -648,6 +648,7 @@ function render() {
   $("panel").innerHTML = html;
   restoreForm();
   bindPanel();
+  if (scrollToBuy) { scrollToBuy = false; document.querySelector("[data-field=buyShipRow]")?.scrollIntoView({ block: "center" }); }
   if (refocus) {
     const els = [...$("panel").querySelectorAll("button, input, select, a[href]")];
     const el = els.find(x => focusKey(x) === refocus) ?? els.find(x => focusKey(x, true) === focusKey(focused, true));
@@ -663,7 +664,7 @@ function focusKey(el, loose = false) {
 }
 
 // What the player has typed or picked survives the panel being rebuilt by live updates.
-let renderPending = false, pointerInPanel = false;
+let renderPending = false, pointerInPanel = false, scrollToBuy = false;   // scrollToBuy: "Buy a ship at X" on the Fleet tab
 const formState = new Map();
 const formKey = el => `${el.closest("[data-ship]")?.dataset.ship ?? ""}:${el.dataset.field ?? el.id}`;
 $("panel").addEventListener("pointerdown", () => { pointerInPanel = true; });
@@ -876,6 +877,26 @@ function bestMove(s, delay = 0) {
   return best;
 }
 
+/** The empty move that comes closest to paying (largest net, even below zero), for when bestMove
+ *  finds none. A test player sat 8 game days at one port told only "waiting costs nothing", with
+ *  no idea how far off the nearest paying trip was or why moving there didn't count. */
+function closestMove(s) {
+  let best = null;
+  for (const p of world.ports) {
+    if (p.id === s.port) continue;
+    const go = tripProfit(s, p.id, -1, 0);
+    const [next] = rawTrips({ ...s, port: p.id, qty: 0 }, 1, go.hours);
+    if (next && (!best || next.profit + go.profit > best.net)) best = { dest: p.id, net: next.profit + go.profit, cost: -go.profit, hours: go.hours, next };
+  }
+  return best;
+}
+function closestMoveText(s) {
+  const m = closestMove(s);
+  if (!m) return "";
+  const net = Math.round(m.net), sign = net >= 0 ? `only +${fmt(net)}` : `<b class="neg">−${fmt(-net)}</b>`;
+  return ` Nearest option: sail empty to ${esc(world.ports[m.dest].name)} (${m.hours} h, about ${fmt(m.cost)} in fuel and fees), then load ${GOOD_NAMES[m.next.g]} for ${esc(world.ports[m.next.dest].name)} (+${fmt(m.next.profit)}): ${sign} overall at today's prices.`;
+}
+
 /** Whether an empty ship with this company's cash (or `cash`) could make a paying trip from any port
  *  at all. Early in a Hard season none does, and saying so beats implying the problem is where you are. */
 function paysAnywhere(s, cash = me.cash) {
@@ -942,7 +963,7 @@ function tripsHtml(s, trips = bestTrips(s), move = null) {
   const broke = !trips.length && cashAdvice(s);
   if (broke) return `<h3>Best trips from here</h3><div class="est warn" data-field="cashAdvice">${broke}</div>`;
   if (!trips.length) return `<h3>Best trips from here</h3><div class="est">${s.qty > 0 ? "Nowhere pays more than selling here right now."
-    : paysAnywhere(s) ? "No trip pays right now at these prices, from here or one hop away. Waiting costs nothing; prices move every hour."
+    : paysAnywhere(s) ? `No trip pays from here right now, and no empty move to another port earns at least +50 after its fuel and fees.${closestMoveText(s)} Waiting costs nothing; prices move every hour.`
     : "No trip pays anywhere on the map right now, so every company is waiting. Prices drift apart as ports make and use goods; waiting costs nothing, so check back in a few hours."}</div>`;
   return `<h3>Best trips from here</h3><div class="trips">${trips.map(t => `<button class="trip secondary" data-act="plan" data-ship="${s.id}" data-dest="${t.dest}" data-good="${s.qty > 0 ? "" : GOOD_NAMES[t.g]}" data-qty="${t.qty}">
       <span>${s.qty > 0 ? "Sell" : `Load ${t.qty}`} <span class="tag ${GOOD_NAMES[t.g]}">${GOOD_NAMES[t.g]}</span> → ${esc(world.ports[t.dest].name)}</span>
@@ -1041,9 +1062,24 @@ function fleetPanel() {
     <div class="quiet" data-field="worthSum">${worthSum(cargo)}</div>
     <h3>Ships</h3>${(me.forcedSales ?? []).slice().reverse().map(f => `<div class="est warn" data-field="forcedSale">${forcedSaleText(f)}</div>`).join("")}
     ${me.ships.map(shipCard).join("")}
+    ${fleetBuyHtml()}
     ${notifyHtml()}
     ${worthChart()}
     ${tripLog()}`;
+}
+
+/** Ships are bought at a port where one of yours is docked (engine buyShip), which the Fleet tab
+ *  never said: point to those ports' Port tab, where the buy button and its warnings are. */
+function fleetBuyHtml() {
+  if (world.seasonOver) return "";
+  const price = world.rules.shipPrice, n = me.ships.length, max = world.rules.maxShips;
+  if (n >= max) return `<div class="quiet" data-field="fleetBuy">Your fleet is full: ${max} ships is the most a company can have.</div>`;
+  const ports = [...new Set(me.ships.filter(s => s.dest === null).map(s => s.port))];
+  const why = `A new ship costs ${fmt(price)} and is bought at a port where one of your ships is docked.`;
+  if (!ports.length) return `<div class="quiet" data-field="fleetBuy">${why} All your ships are at sea, so wait until one docks.</div>`;
+  const short = me.cash < price ? ` You need ${fmt(price - me.cash)} more cash.` : "";
+  return `<div class="quiet" data-field="fleetBuy">${why}${short}</div>
+    <div class="row">${ports.map(id => `<button class="link" data-act="goPort" data-port="${id}">Buy a ship at ${esc(world.ports[id].name)} →</button>`).join(" ")}</div>`;
 }
 
 /** How net worth is made up (engine netWorth), so it adds up for a player who sees only cash and cargo. */
@@ -1127,9 +1163,9 @@ function buyShipHtml() {
   const left = me.cash - price, upkeep = world.rules.upkeep * me.ships.length;   // upkeep once the new ship is in
   const load = Math.min(...[0, 1].map(g => buyCost(selectedPort, g, world.rules.capacity) * (1 + world.rules.tax)));
   const tight = left < load + upkeep;
-  if (me.cash >= price) return `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(price)})</button></div>
+  if (me.cash >= price) return `<div class="row" data-field="buyShipRow"><button data-act="buyShip">Buy a ship here (${fmt(price)})</button></div>
     <div class="est${tight ? " warn" : ""}" data-field="buyShipNote">${tight ? `You'd have ${fmt(left)} cash left, less than one full load here (about ${fmt(load)}) plus a day's upkeep (${fmt(upkeep)}). ` : ""}Upkeep for every ship after the first (${fmt(world.rules.upkeep)} a day each) is charged at the start of each day; if your cash is below zero then, an idle spare ship is sold for ${fmt(price / 2)}, half what you paid. Ships count at half their price, so your net worth drops by ${fmt(price / 2)} at first; the extra ship has to earn it back.</div>`;
-  return `<div class="row"><button disabled>Buy a ship here (${fmt(price)})</button><span class="quiet">You need ${fmt(price - me.cash)} more cash.</span></div>`;
+  return `<div class="row" data-field="buyShipRow"><button disabled>Buy a ship here (${fmt(price)})</button><span class="quiet">You need ${fmt(price - me.cash)} more cash.</span></div>`;
 }
 function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
 function boardPanel() {
@@ -1183,6 +1219,7 @@ function bindPanel() {
       if (scrapAsk !== ship) { scrapAsk = ship; render(); }
       else { scrapAsk = null; command({ type: "scrapShip", ship }, () => toast(`Ship ${ship} scrapped for ${fmt(world.rules.shipPrice / 2)}`)); }
     }
+    if (act === "goPort") { selectedPort = Number(btn.dataset.port); tab = "port"; scrollToBuy = true; render(); }
     if (act === "scrapKeep") { scrapAsk = null; render(); }
     if (act === "buyShip") command({ type: "buyShip", port: selectedPort }, () => toast("New ship bought"));
     if (act === "cancelOrder") command({ type: "cancelOrder", order: Number(btn.dataset.order) }, () => toast("Order cancelled"));

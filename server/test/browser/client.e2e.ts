@@ -911,3 +911,57 @@ test("scrapping a ship asks first, and the Fleet tab shows how net worth adds up
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });
+
+test("the Fleet tab says where to buy a ship, and a stuck ship is told how far off the nearest paying trip is", { skip: SKIP, timeout: 60000 }, async () => {
+  // "Buy a ship" was only on the Port tab of a port with your ship docked, and the Fleet tab never
+  // said so. And a test player sat 8 game days at one port told only "waiting costs nothing".
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0", DIFFICULTY: "hard" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`fleetBuy: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Yard Visit"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const port = (await me(p)).ships[0].port, name = map.ports[port].name;
+    await p.click('#tabs button[data-tab="fleet"]');
+    assert.equal(await p.textContent("[data-field=fleetBuy]"),
+      "A new ship costs 12,000 and is bought at a port where one of your ships is docked. You need 2,000 more cash.");
+    await p.click('[data-act="goPort"]');
+    await p.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, name);
+    assert.match((await p.textContent("[data-field=buyShipRow]"))!, /Buy a ship here \(12,000\).*You need 2,000 more cash/s);
+    assert.ok(await p.locator("[data-field=buyShipRow]").isVisible());
+    const inView = await p.evaluate(() => { const r = document.querySelector("[data-field=buyShipRow]")!.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; });
+    assert.ok(inView, "the buy row is scrolled into view");
+    // Client-side states: fleet full, and every ship at sea.
+    await p.click('#tabs button[data-tab="fleet"]');
+    const fleetText = (mut: string) => p.evaluate((src: string) => {
+      const w = window as any, m = w.eval("me"); new Function("m", src)(m); w.eval("render")();
+      return document.querySelector("[data-field=fleetBuy]")?.textContent;
+    }, mut);
+    assert.match((await fleetText("m.ships[0].dest = 3;"))!, /All your ships are at sea, so wait until one docks/);
+    assert.equal(await fleetText("m.ships[0].dest = null; for (let i = 0; i < 4; i++) m.ships.push({ ...m.ships[0], id: 900 + i });"),
+      "Your fleet is full: 5 ships is the most a company can have.");
+    await p.evaluate(() => { const m = (window as any).eval("me"); m.ships.length = 1; });
+
+    // Nothing pays anywhere at hour 0 on Hard. Stock another port up with grain, a little more each
+    // step, until a trip from there just pays: the empty move there then costs more than it earns.
+    const found = await p.evaluate(() => {
+      const w = window as any, world = w.eval("world"), s = w.eval("me").ships[0];
+      const q = world.ports.find((x: any) => x.id !== s.port && x.produces.includes("grain")), qs = q.stock[0];
+      for (let f = 1; f <= 5; f += 0.01) {
+        q.stock[0] = qs * f;
+        const pays = w.eval("rawTrips")({ ...s, port: q.id, qty: 0 }, 1).length > 0;
+        if (pays) { w.eval("render")(); return !w.eval("bestMove")(s) && w.eval("rawTrips")(s, 1).length === 0; }
+      }
+      return false;
+    });
+    assert.ok(found, "found a world where a trip pays elsewhere but no move earns +50");
+    await p.click('#tabs button[data-tab="port"]');
+    const text = (await p.textContent("#panel"))!;
+    assert.match(text, /No trip pays from here right now, and no empty move to another port earns at least \+50 after its fuel and fees\. Nearest option: sail empty to .+ \(\d+ h, about [\d,]+ in fuel and fees\), then load (grain|fuel) for .+ \(\+[\d,]+\): (only \+\d+|−[\d,]+) overall at today's prices\. Waiting costs nothing/);
+    assert.ok(!text.includes("one hop away"));
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
