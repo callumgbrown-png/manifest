@@ -143,8 +143,16 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   const shown = Number(await homeCard.locator("select[data-field=dest]").inputValue());
   const other = map.ports.findIndex((_: any, i: number) => i !== home && i !== shown);
   const company = await a.textContent("#panel h2");
+  // On a phone the map sits above the panel: picking a port must not scroll the map off the screen,
+  // so the toast carries the result of the estimate.
+  await a.setViewportSize({ width: 390, height: 800 });
+  await a.waitForTimeout(200);
+  await a.evaluate(() => window.scrollTo(0, 0));
   await tapPort(a, other);
-  await toast(a, new RegExp(`→ ${map.ports[other].name} \\(≈\\d+ h\\)\\. Tap it again to open the port\\.`));
+  await toast(a, new RegExp(`→ ${map.ports[other].name} \\(≈\\d+ h\\): sailing empty costs about [\\d,]+\\. Tap it again to open the port\\.`));
+  assert.equal(await a.evaluate(() => window.scrollY), 0, "the page stays on the map");
+  await a.setViewportSize({ width: 1280, height: 800 });
+  await a.waitForTimeout(200);
   assert.equal(await a.textContent("#panel h2"), company, "first tap keeps the panel open");
   assert.equal(await homeCard.locator("select[data-field=dest]").inputValue(), String(other), "first tap fills the destination");
   const fuel = await a.evaluate((d: number) => { const w = window as any; return Math.round(w.eval("fuelCost")(w.eval("me").ships[0].port, d)); }, other);

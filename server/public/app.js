@@ -500,9 +500,13 @@ function pickDestination(id) {
   if (!s || s.port === id || sel.value === String(id) || ![...sel.options].some(o => o.value === String(id))) return false;
   sel.value = String(id); formState.set(formKey(sel), sel.value);
   activeShip = s.id;
-  estimate(card);
+  const summary = estimate(card);
+  // Bring the Set sail button into view inside the side panel, but never scroll the page itself:
+  // on a phone that pushed the map (and the route just drawn on it) off the screen after every tap.
+  const y = window.scrollY;
   card.querySelector("[data-act=sail]")?.scrollIntoView({ block: "nearest" });
-  toast(`Ship ${s.id} → ${world.ports[id].name} (≈${Math.ceil(distance(s.port, id) / world.rules.speed)} h). Tap it again to open the port.`);
+  if (window.scrollY !== y) window.scrollTo(window.scrollX, y);
+  toast(`Ship ${s.id} → ${world.ports[id].name} (≈${Math.ceil(distance(s.port, id) / world.rules.speed)} h): ${summary}. Tap it again to open the port.`);
   return true;
 }
 
@@ -878,6 +882,11 @@ function estimate(card) {
   }
   if (late) text = `<b class="neg">This ship would dock after the season ends</b> (≈${t.hours} h; ${Math.max(0, world.seasonHours - world.tick)} h left), so ${g >= 0 && qty > 0 ? "the cargo could never be sold: it only counts at what you paid for it, and the fuel is lost" : "the fuel would be wasted"}. ` + text;
   card.querySelector("[data-field=estimate]").innerHTML = text;
+  // A one-line version for the toast when a destination is tapped on the map.
+  if (late) return "docks after the season ends";
+  if (short) return "not enough cash";
+  if (g < 0 || qty <= 0) return `sailing empty costs about ${fmt(t.fuel + world.rules.portFee)}`;
+  return `${t.profit >= 0 ? "makes" : "loses"} about ${fmt(Math.abs(t.profit))}`;
 }
 
 function fleetPanel() {
