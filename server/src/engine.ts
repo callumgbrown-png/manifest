@@ -46,6 +46,8 @@ export interface Trip {
   listed?: boolean;
 }
 const TRIPS_KEPT = 25;
+/** A spare ship the engine sold because its company's cash was below zero at the daily upkeep. */
+export interface ForcedSale { ship: number; port: number; tick: number; paid: number; cashBefore: number }
 /** A buy order holds cash in escrow; a sell order holds goods at the port. */
 export interface Order {
   id: number; owner: number; port: number; good: number; qty: number; price: number;
@@ -84,6 +86,8 @@ export class Engine {
   trips = new Map<number, Trip[]>();
   /** Net worth per company at the start of each game day (for the progress chart). */
   worthLog = new Map<number, number[]>();
+  /** Spare ships sold automatically because cash was below zero when upkeep was charged (newest last). */
+  forcedSales = new Map<number, ForcedSale[]>();
   /** Cargo bought from a sell order onto a ship with no trip running yet: counted in the next trip's cost. */
   private boughtCost = new Map<number, number>();
   private nextId = 1;
@@ -519,7 +523,13 @@ export class Engine {
         c.cash -= this.rules.ship.upkeep_per_day * Math.max(0, c.ships.length - 1);
         if (c.cash < 0 && c.ships.length > 1) {
           const idle = c.ships.map(id => this.ships.get(id)!).find(s => s.dest === null && s.qty === 0);
-          if (idle) { this.removeShip(c, idle); c.cash += this.rules.ship.price * 0.5; }
+          if (idle) {
+            const cashBefore = c.cash;
+            this.removeShip(c, idle); c.cash += this.rules.ship.price * 0.5;
+            const list = this.forcedSales.get(c.id) ?? [];
+            list.push({ ship: idle.id, port: idle.port, tick: this.tick, paid: this.rules.ship.price * 0.5, cashBefore });
+            this.forcedSales.set(c.id, list.slice(-10));
+          }
         }
       }
     }

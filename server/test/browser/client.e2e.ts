@@ -101,7 +101,7 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   assert.equal(await a.evaluate(() => localStorage.getItem("guideSeen")), "1");
   assert.equal(await a.textContent("#hCash"), "10,000");
   assert.equal(await a.textContent("#conn"), "live");
-  assert.match((await a.textContent("#hClock"))!, /^Day 1 of 56, \d\d:00$/);
+  assert.match((await a.textContent("#hClock"))!, /^Day \d+ of 56, \d\d:00$/);   // day 1, or 2 on a slow machine (150 ms game hours)
 
   const b = await player("B");
   await b.fill("#authName", "Alpha Lines"); await b.fill("#authPass", "password123");
@@ -726,6 +726,45 @@ test("the sail form says why a load won't work before the click, instead of a ba
     assert.ok(await qty.isDisabled(), "quantity box is off when sailing empty");
     assert.match((await est.textContent())!, /Sailing empty costs about/);
     assert.ok(!(await sail.isDisabled()));
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("buying a ship warns about the debt sale, and a ship sold for debt is explained", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "5000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`debt sale: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Two Hulls"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const m = await me(p);
+    assert.deepEqual(m.forcedSales, [], "the server sends the (empty) list of debt sales");
+    // Port tab of the docked ship, with just enough cash to buy: the note warns how little is left.
+    const note = (cash: number) => p.evaluate((c: number) => {
+      const w = window as any; w.eval("me").cash = c; w.eval("render")();
+      return document.querySelector("[data-field=buyShipNote]")?.outerHTML ?? "";
+    }, cash);
+    const tight = await note(12_500);
+    assert.match(tight, /class="est warn"/);
+    assert.match(tight, /You'd have 500 cash left, less than one full load here/);
+    assert.match(tight, /if your cash is below zero then, an idle spare ship is sold for 6,000/);
+    const roomy = await note(40_000);
+    assert.doesNotMatch(roomy, /warn|You'd have/, "no warning with plenty of cash");
+    assert.match(roomy, /idle spare ship is sold/, "the rule is still explained");
+    // The server sold a ship at the day's upkeep: a warning toast, and a note on the Fleet tab.
+    await p.click('#tabs button[data-tab="fleet"]');
+    const out = await p.evaluate(() => {
+      const w = window as any, cur = w.eval("me"), before = { ...cur, forcedSales: [] };
+      cur.forcedSales = [{ ship: 77, port: cur.ships[0].port, tick: 48, paid: 6000, cashBefore: -140 }];
+      w.eval("noteForcedSales")(before); w.eval("render")();
+      return { toast: document.getElementById("toast")!.className + " " + document.getElementById("toast")!.textContent,
+        fleet: document.querySelector("[data-field=forcedSale]")?.textContent ?? "" };
+    });
+    assert.match(out.toast, /warn.*Ship 77 was sold at .+ for 6,000 at the start of day 3: your cash was -140 after the daily upkeep/);
+    assert.match(out.fleet, /Ship 77 was sold/);
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });

@@ -209,6 +209,7 @@ function privateView(company: number) {
     trips: (engine.trips.get(c.id) ?? []).slice(-15).reverse()
       .map(t => ({ ...t, spent: Math.round(t.spent), earned: Math.round(t.earned) })),
     worthLog: engine.worthLog.get(c.id) ?? [],
+    forcedSales: (engine.forcedSales.get(c.id) ?? []).map(f => ({ ...f, cashBefore: Math.round(f.cashBefore) })),
   };
 }
 

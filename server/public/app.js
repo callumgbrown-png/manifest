@@ -40,7 +40,7 @@ function connect() {
       const firstLogin = !me && msg.me;
       const before = me;
       world = msg.world; me = msg.me;
-      if (before && me && before.id === me.id) noteDockings(before);
+      if (before && me && before.id === me.id) { noteDockings(before); noteForcedSales(before); }
       noteprices();
       if ((selectedPort === null || firstLogin) && me?.ships?.length) selectedPort = me.ships[0].dest ?? me.ships[0].port;
       if (selectedPort === null) selectedPort = 0;
@@ -68,6 +68,20 @@ function noteDockings(before) {
     toast(text);
     if (store.get("notify") && "Notification" in window && Notification.permission === "granted" && document.hidden) {
       try { new Notification("Manifest", { body: text, tag: `dock-${s.id}` }); } catch {}
+    }
+  }
+}
+/** Spare ships the game sold because cash was below zero at the daily upkeep. Without this the
+ *  ship just vanished from the fleet with no explanation. */
+function forcedSaleText(f) {
+  return `Ship ${f.ship} was sold at ${world.ports[f.port].name} for ${fmt(f.paid)} at the start of day ${Math.floor(f.tick / 24) + 1}: your cash was ${fmt(f.cashBefore)} after the daily upkeep, and a company below zero sells an idle spare ship.`;
+}
+function noteForcedSales(before) {
+  const seen = Math.max(-1, ...(before.forcedSales ?? []).map(f => f.tick));
+  for (const f of (me.forcedSales ?? []).filter(f => f.tick > seen)) {
+    toast(forcedSaleText(f), "warn");
+    if (store.get("notify") && "Notification" in window && Notification.permission === "granted" && document.hidden) {
+      try { new Notification("Manifest", { body: forcedSaleText(f), tag: `sold-${f.ship}` }); } catch {}
     }
   }
 }
@@ -788,11 +802,19 @@ function tripProfit(s, dest, g, qty) {
 function landsInSeason(hours, delay = 0) { return world.tick + delay + hours < world.seasonHours; }
 /** Trips from where a docked ship is now, by profit per hour (the raw ranking). Trips that would
  *  dock after the season ends are left out: their cargo could never be sold. */
+/** Cash the advice leaves unspent. With spare ships it also keeps a day's upkeep and a port fee per
+ *  ship: if cash is below zero when upkeep is charged, the engine sells an idle spare ship at half
+ *  price, and spending every last credit on cargo walked straight into that (a scripted player who
+ *  bought a second ship at about 14,000 cash lost it that way five times in one season). */
+function cashReserve() {
+  const n = me.ships.length;
+  return 300 + (n > 1 ? world.rules.upkeep * (n - 1) + world.rules.portFee * n : 0);
+}
 function rawTrips(s, n = 3, delay = 0) {
   const cap = world.rules.capacity, here = world.ports[s.port], out = [];
   const goods = s.qty > 0 ? [s.good] : [0, 1];
   for (const g of goods) {
-    const qty = s.qty > 0 ? s.qty : Math.floor(Math.min(cap, here.stock[g], Math.max(0, me.cash - 300) / (here.prices[g] * (1 + world.rules.tax) * 1.1)));
+    const qty = s.qty > 0 ? s.qty : Math.floor(Math.min(cap, here.stock[g], Math.max(0, me.cash - cashReserve()) / (here.prices[g] * (1 + world.rules.tax) * 1.1)));
     if (qty < 10) continue;
     for (const p of world.ports) {
       if (p.id === s.port) continue;
@@ -977,7 +999,8 @@ function fleetPanel() {
       <div><span>At sea</span><b>${atSea}</b></div><div><span>Docked</span><b>${me.ships.length - atSea}</b></div>
       <div><span>Cargo (cost)</span><b>${fmt(cargo)}</b></div><div><span>Net worth</span><b>${fmt(me.worth)}</b></div>
     </div>
-    <h3>Ships</h3>${me.ships.map(shipCard).join("")}
+    <h3>Ships</h3>${(me.forcedSales ?? []).slice().reverse().map(f => `<div class="est warn" data-field="forcedSale">${forcedSaleText(f)}</div>`).join("")}
+    ${me.ships.map(shipCard).join("")}
     ${notifyHtml()}
     ${worthChart()}
     ${tripLog()}`;
@@ -1047,8 +1070,13 @@ function buyShipHtml() {
   const price = world.rules.shipPrice;
   // Ships count at half their price in net worth (engine netWorth), so a new ship drops your net
   // worth at once; without saying so, the net-worth chart's sudden fall looks like a loss.
+  // Upkeep is charged at the start of each day; a company below zero then has an idle spare ship
+  // sold for half its price. Buying with little cash left (cargo soon eats the rest) walks into that.
+  const left = me.cash - price, upkeep = world.rules.upkeep * me.ships.length;   // upkeep once the new ship is in
+  const load = Math.min(...[0, 1].map(g => buyCost(selectedPort, g, world.rules.capacity) * (1 + world.rules.tax)));
+  const tight = left < load + upkeep;
   if (me.cash >= price) return `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(price)})</button></div>
-    <div class="est">Ships count at half their price, so your net worth drops by ${fmt(price / 2)} at first; the extra ship has to earn it back. Every ship after the first costs ${fmt(world.rules.upkeep)} a day.</div>`;
+    <div class="est${tight ? " warn" : ""}" data-field="buyShipNote">${tight ? `You'd have ${fmt(left)} cash left, less than one full load here (about ${fmt(load)}) plus a day's upkeep (${fmt(upkeep)}). ` : ""}Upkeep for every ship after the first (${fmt(world.rules.upkeep)} a day each) is charged at the start of each day; if your cash is below zero then, an idle spare ship is sold for ${fmt(price / 2)}, half what you paid. Ships count at half their price, so your net worth drops by ${fmt(price / 2)} at first; the extra ship has to earn it back.</div>`;
   return `<div class="row"><button disabled>Buy a ship here (${fmt(price)})</button><span class="quiet">You need ${fmt(price - me.cash)} more cash.</span></div>`;
 }
 function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }

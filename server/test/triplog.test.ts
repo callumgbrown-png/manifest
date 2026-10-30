@@ -99,3 +99,24 @@ test("topping up cargo from a listing mid-trip adds to the open trip's cost", ()
   assert.equal(trips.length, 1, "one trip from start to sale");
   assert.ok(Math.abs((trips[0].earned - trips[0].spent) - (buyer.cash - before)) < 1e-6);
 });
+
+test("a spare ship sold for debt at the daily upkeep is recorded, so the player can be told", () => {
+  const { e, c } = setup();
+  c.cash = 20_000;
+  assert.ok(e.apply({ type: "buyShip", company: c.id, port: 0 }).ok);
+  const both = [...c.ships];
+  c.cash = 100;   // less than a day's upkeep for the spare ship
+  while (e.tick < 24) e.advance();
+  assert.equal(c.ships.length, 1, "spare ship sold");
+  const [f] = e.forcedSales.get(c.id)!;
+  // Either ship may go (any idle one is sold); the record names the one that went.
+  assert.ok(both.includes(f.ship) && !c.ships.includes(f.ship));
+  assert.deepEqual({ port: f.port, tick: f.tick, paid: f.paid }, { port: 0, tick: 24, paid: rules.ship.price / 2 });
+  assert.equal(f.cashBefore, 100 - rules.ship.upkeep_per_day, "cash after upkeep, before the sale");
+  assert.equal(e.forcedSales.get(c.id)!.length, 1, "nothing else sold");
+  // A sale the player made themselves is not recorded as forced.
+  c.cash = 20_000;
+  e.apply({ type: "buyShip", company: c.id, port: 0 });
+  e.apply({ type: "scrapShip", company: c.id, ship: c.ships[1] });
+  assert.equal(e.forcedSales.get(c.id)!.length, 1);
+});
