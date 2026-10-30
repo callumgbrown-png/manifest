@@ -353,8 +353,9 @@ test("two players play through every feature in the browser", { skip: SKIP, time
     await toast(a, /New ship bought/);
     await a.click('#tabs button[data-tab="fleet"]');
     await a.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("2 of 5 ships"));
-    await a.locator('button[data-act="scrap"]').last().click();
-    await toast(a, /Ship scrapped/);
+    await a.locator('button[data-act="scrap"]').last().click();   // asks first
+    await a.locator('[data-field=scrapNote] + .row button[data-act="scrap"]').click();
+    await toast(a, /Ship \d+ scrapped for 6,000/);
   } else {
     await selectPort(a, home);
     assert.equal(await a.locator('button[data-act="buyShip"]').count(), 0, "no buy button that would only fail");
@@ -862,6 +863,51 @@ test("a company whose cash is too low to load is told so, not that every company
     await p.evaluate(() => { const w = window as any; w.eval("me").cash = 16000; w.eval("render")(); });
     assert.match((await p.textContent("#oCost"))!, /If it fills, this costs you 3,000/);
     assert.equal(await p.locator("button[data-act=placeOrder]").isDisabled(), false);
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("scrapping a ship asks first, and the Fleet tab shows how net worth adds up", { skip: SKIP, timeout: 60000 }, async () => {
+  // One tap on "Scrap for 6,000" used to scrap a 12,000 ship at once, and the Fleet tab showed
+  // net worth 13,558 beside cash 1,558 and cargo 0 with nothing saying where the 12,000 came from.
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`scrap: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Spare Hull"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    await p.click('#tabs button[data-tab="fleet"]');
+    assert.equal(await p.textContent("[data-field=worthSum]"),
+      "Net worth 16,000 = cash 10,000 + 1 ship at half price 6,000 + cargo at cost 0.");
+    assert.equal(await p.locator('button[data-act="scrap"]').count(), 0, "a last ship can't be scrapped");
+    // A second docked ship (client side only), with every command the client sends recorded.
+    await p.evaluate(() => {
+      const w = window as any, m = w.eval("me"), world = w.eval("world"), s0 = m.ships[0];
+      m.ships.push({ ...s0, id: 999 }); m.cash = 1558; m.worth = 13558;
+      world.orders = [{ id: 5, owner: m.id, ownerName: m.name, side: "sell", port: s0.port, good: 0, qty: 10, price: 30, cost: 250 }];
+      m.worth += 250;
+      w.sent = []; const ws = w.eval("ws"), send = ws.send.bind(ws);
+      ws.send = (d: string) => { w.sent.push(JSON.parse(d)); send(d); };
+      w.eval("render")();
+    });
+    assert.equal(await p.textContent("[data-field=worthSum]"),
+      "Net worth 13,808 = cash 1,558 + 2 ships at half price 12,000 + cargo at cost 0 + open orders 250.");
+    const sent = () => p.evaluate(() => (window as any).sent.filter((m: any) => m.cmd?.type === "scrapShip").map((m: any) => m.cmd));
+    const ask = p.locator('.shipCard[data-ship="999"] button[data-act="scrap"]');
+    await ask.click();
+    assert.deepEqual(await sent(), [], "the first tap only asks");
+    assert.match((await p.textContent("[data-field=scrapNote]"))!, /Scrapping Ship 999 pays 6,000 and can't be undone: a new ship costs 12,000\..*saves 400 a day.*net worth stays the same/s);
+    await p.click('.shipCard[data-ship="999"] button[data-act="scrapKeep"]');
+    await p.waitForSelector("[data-field=scrapNote]", { state: "detached", timeout: 5000 });   // Keep it closes the question
+    assert.deepEqual(await sent(), []);
+    await ask.click();
+    await p.click('.shipCard[data-ship="999"] [data-field=scrapNote] + .row button[data-act="scrap"]');
+    const cmds = await sent();
+    assert.equal(cmds.length, 1);
+    assert.equal(cmds[0].ship, 999, "the confirm button scraps that ship");
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });

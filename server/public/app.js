@@ -779,8 +779,18 @@ function shipCard(s) {
       <input data-field="qty" type="number" min="1" max="${world.rules.capacity}" value="${plan.qty}" style="width:90px"></div>` : ""}
     <div class="est big" data-field="estimate"></div>
     <div class="row"><button data-act="sail" data-ship="${s.id}">Set sail</button>
-      ${me.ships.length > 1 && s.qty === 0 ? `<button class="link" data-act="scrap" data-ship="${s.id}">Scrap for ${fmt(world.rules.shipPrice / 2)}</button>` : ""}</div>
+      ${me.ships.length > 1 && s.qty === 0 ? `<button class="link" data-act="${scrapAsk === s.id ? "scrapKeep" : "scrap"}" data-ship="${s.id}">${scrapAsk === s.id ? "Keep it" : `Scrap for ${fmt(world.rules.shipPrice / 2)}`}</button>` : ""}</div>
+    ${me.ships.length > 1 && s.qty === 0 && scrapAsk === s.id ? scrapConfirmHtml(s) : ""}
   </div>`;
+}
+
+/** Scrapping can't be undone, so the first tap only asks (a stray tap on a phone cost a 12,000 ship). */
+let scrapAsk = null;
+function scrapConfirmHtml(s) {
+  const price = world.rules.shipPrice;
+  return `<div class="est warn" data-field="scrapNote">Scrapping Ship ${s.id} pays ${fmt(price / 2)} and can't be undone: a new ship costs ${fmt(price)}.
+    It saves ${fmt(world.rules.upkeep)} a day in upkeep. Your net worth stays the same, since ships count at half their price.</div>
+    <div class="row"><button class="secondary" data-act="scrap" data-ship="${s.id}">Yes, scrap Ship ${s.id} for ${fmt(price / 2)}</button></div>`;
 }
 
 // ---- trade maths, mirroring the server's sliding prices (engine.ts) so estimates are honest
@@ -1028,11 +1038,22 @@ function fleetPanel() {
       <div><span>At sea</span><b>${atSea}</b></div><div><span>Docked</span><b>${me.ships.length - atSea}</b></div>
       <div><span>Cargo (cost)</span><b>${fmt(cargo)}</b></div><div><span>Net worth</span><b>${fmt(me.worth)}</b></div>
     </div>
+    <div class="quiet" data-field="worthSum">${worthSum(cargo)}</div>
     <h3>Ships</h3>${(me.forcedSales ?? []).slice().reverse().map(f => `<div class="est warn" data-field="forcedSale">${forcedSaleText(f)}</div>`).join("")}
     ${me.ships.map(shipCard).join("")}
     ${notifyHtml()}
     ${worthChart()}
     ${tripLog()}`;
+}
+
+/** How net worth is made up (engine netWorth), so it adds up for a player who sees only cash and cargo. */
+function worthSum(cargo) {
+  const ships = me.ships.length * world.rules.shipPrice / 2;
+  const orders = world.orders.filter(o => o.owner === me.id)
+    .reduce((a, o) => a + (o.side === "buy" ? o.qty * o.price : o.cost ?? 0), 0);
+  const n = me.ships.length;
+  return `Net worth ${fmt(me.worth)} = cash ${fmt(me.cash)} + ${n} ship${n === 1 ? "" : "s"} at half price ${fmt(ships)}`
+    + ` + cargo at cost ${fmt(cargo)}${orders ? ` + open orders ${fmt(orders)}` : ""}.`;
 }
 
 /** Net worth at the start of each day this season, with today's value as the last point. */
@@ -1158,7 +1179,11 @@ function bindPanel() {
     }
     if (act === "sell") command({ type: "sell", ship }, () => toast("Sold"));
     if (act === "fill") command({ type: "sell", ship, order: Number(btn.dataset.order) }, () => toast("Order filled"));
-    if (act === "scrap") command({ type: "scrapShip", ship }, () => toast("Ship scrapped"));
+    if (act === "scrap") {
+      if (scrapAsk !== ship) { scrapAsk = ship; render(); }
+      else { scrapAsk = null; command({ type: "scrapShip", ship }, () => toast(`Ship ${ship} scrapped for ${fmt(world.rules.shipPrice / 2)}`)); }
+    }
+    if (act === "scrapKeep") { scrapAsk = null; render(); }
     if (act === "buyShip") command({ type: "buyShip", port: selectedPort }, () => toast("New ship bought"));
     if (act === "cancelOrder") command({ type: "cancelOrder", order: Number(btn.dataset.order) }, () => toast("Order cancelled"));
     if (act === "listSell") {
