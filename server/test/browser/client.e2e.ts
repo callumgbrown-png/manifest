@@ -235,6 +235,7 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await selectPort(a, dest);
   // List 20 for sale, then sell the rest to the market.
   const shipCard = a.locator(".shipCard[data-ship]").first();
+  assert.match((await shipCard.locator("[data-field=listNote]").textContent())!, /buy grain from the market here for about \d+\.\d\d each with tax, so a listing above that rarely sells\. You get your price less \d+(\.\d)?% tax\./);
   await shipCard.locator("input[data-field=sellQty]").fill("20");
   await shipCard.locator("input[data-field=sellPrice]").fill("39");
   await a.locator("body").click({ position: { x: 5, y: 5 } });
@@ -289,9 +290,28 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await b.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("from Alpha Lines at 39.00"));
   assert.ok((await b.textContent("#panel"))!.includes("Alpha Lines"), "player orders table shows the seller");
   const aCash = (await me(a)).cash;
+  // The listing says what it costs in total and how that compares with the market here,
+  // so a buyer never pays over the odds without knowing (it said only "Buy 20" before).
+  assert.equal(await b.locator('button[data-act="buyOrder"]').textContent(), "Buy 20 for 780");
+  assert.match((await b.locator("[data-field=listingNote]").textContent())!,
+    /(less than buying 20 from the market here \(about [\d,]+ with tax\)|from the market here costs about [\d,]+ with tax, [\d,]+ less than this listing|About the same)/);
+  // With less cash the button offers what you can afford, and with too little it's off.
+  const withCash = (cash: number) => b.evaluate((c: number) => {
+    const w = window as any, real = w.eval("me");
+    w.__real = real; w.eval(`me = Object.assign({}, me, { cash: ${c} })`);
+    const html = w.eval("listingHtml")(real.ships[0], w.eval("world").orders.find((o: any) => o.side === "sell"));
+    w.eval("me = window.__real");
+    return html as string;
+  }, cash);
+  const some = await withCash(100);
+  assert.match(some, /Buy 2 for 78</); assert.match(some, /You can afford 2 of 20\./);
+  const none = await withCash(10);
+  assert.match(none, /<button class="secondary" disabled>Buy<\/button>/); assert.match(none, /Not enough cash: one costs 39\.00 and you have 10\./);
+  const bCash = (await me(b)).cash;
   await b.locator('button[data-act="buyOrder"]').click();
   await toast(b, /^Bought$/);
   await b.waitForFunction(() => (window as any).eval("me").ships[0].qty === 20);
+  assert.ok(Math.abs((await me(b)).cash - (bCash - 780)) < 0.01, "paid what the button said");
   await a.waitForFunction((c: number) => (window as any).eval("me").cash > c, aCash);
   assert.equal((await worldOf(a)).orders.length, 0);
 
@@ -308,8 +328,14 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await sailTo(a, home, "grain", 15);
   await waitDocked(a, home);
   await a.click('#tabs button[data-tab="fleet"]');
+  // The fill button says what the delivery pays after tax.
+  const fillText = (await a.locator('button[data-act="fill"]').textContent())!;
+  assert.match(fillText, /^Fill .+'s order: 15 for [\d,]+$/);
+  const fillCash = (await me(a)).cash;
   await a.locator('button[data-act="fill"]').click();
   await toast(a, /Order filled/);
+  await a.waitForFunction((c: number) => (window as any).eval("me").cash > c, fillCash);
+  assert.ok(Math.abs((await me(a)).cash - fillCash - Number(fillText.split(" for ")[1].replace(/\D/g, ""))) < 1, "fill paid what the button said");
   await a.waitForFunction(() => (window as any).eval("me").ships[0].qty === 0);
 
   // ---- buy a second ship, see upkeep text, scrap it again

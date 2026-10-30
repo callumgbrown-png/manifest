@@ -738,14 +738,13 @@ function shipCard(s) {
     <div class="top"><b>Ship ${s.id}</b>${cargo}</div>
     <div class="quiet">Docked at ${esc(port.name)}</div>
     ${s.qty > 0 ? `<div class="row"><button data-act="sell" data-ship="${s.id}">Sell ${s.qty} ${GOOD_NAMES[s.good]} here for ${fmt(saleNet(s))}</button>
-      ${matching.map(o => `<button class="secondary" data-act="fill" data-ship="${s.id}" data-order="${o.id}">Fill ${esc(o.ownerName)}'s order at ${o.price.toFixed(2)}</button>`).join("")}</div>
+      ${matching.map(o => `<button class="secondary" data-act="fill" data-ship="${s.id}" data-order="${o.id}">Fill ${esc(o.ownerName)}'s order: ${Math.min(o.qty, s.qty)} for ${fmt(Math.min(o.qty, s.qty) * o.price * (1 - world.rules.tax))}</button>`).join("")}</div>
       <div class="est" data-field="saleNote">${saleNote(s)}</div>
       <div class="row labelled"><label class="mini">Quantity<input data-field="sellQty" type="number" min="1" max="${s.qty}" value="${s.qty}" style="width:80px"></label>
         <label class="mini">Price each<input data-field="sellPrice" type="number" step="0.5" value="${(port.prices[s.good] * 1.15).toFixed(1)}" style="width:90px"></label>
         <button class="secondary" data-act="listSell" data-ship="${s.id}">List for sale here</button></div>
-      <div class="est">Listing leaves the goods at this port for other players to buy, and frees your ship.</div>` : ""}
-    ${forSale.length ? `<h3>For sale here</h3>${forSale.map(o => `<div class="row"><span>${o.qty} ${GOOD_NAMES[o.good]} from ${esc(o.ownerName)} at ${o.price.toFixed(2)}</span>
-      <button class="secondary" data-act="buyOrder" data-ship="${s.id}" data-order="${o.id}" data-qty="${Math.min(o.qty, world.rules.capacity - s.qty)}">Buy ${Math.min(o.qty, world.rules.capacity - s.qty)}</button></div>`).join("")}` : ""}
+      <div class="est" data-field="listNote">Listing leaves the goods at this port for other players to buy, and frees your ship. Players can buy ${GOOD_NAMES[s.good]} from the market here for about ${(buyCost(s.port, s.good, s.qty) * (1 + world.rules.tax) / s.qty).toFixed(2)} each with tax, so a listing above that rarely sells. You get your price less ${Math.round(world.rules.tax * 1000) / 10}% tax.</div>` : ""}
+    ${forSale.length ? `<h3>For sale here</h3>${forSale.map(o => listingHtml(s, o)).join("")}` : ""}
     ${tripsHtml(s, trips, move)}
     <label>Destination <span class="quiet">(or tap a port on the map)</span><select data-field="dest">${plan.dest === null ? `<option value="" selected disabled>Choose where to sail…</option>` : ""}${dests.map(p => `<option value="${p.id}"${p.id === plan.dest ? " selected" : ""}>${esc(p.name)} (≈${Math.ceil(distance(s.port, p.id) / world.rules.speed)} h)</option>`).join("")}</select></label>
     ${s.qty === 0 ? `<div class="row" style="margin-top:4px">
@@ -838,6 +837,24 @@ function paysAnywhere(s) {
   return world.ports.some(p => rawTrips({ ...s, port: p.id, qty: 0 }, 1).length > 0);
 }
 
+/** One listing in "For sale here": what it costs in total, how many you can take (room and cash),
+ *  and whether the market here is cheaper, so a player never pays over the odds without knowing. */
+function listingHtml(s, o) {
+  const g = GOOD_NAMES[o.good], tax = world.rules.tax;
+  const room = Math.min(o.qty, world.rules.capacity - s.qty);
+  const qty = Math.min(room, Math.floor(Math.max(0, me.cash) / o.price + 1e-9));
+  const head = `<span>${o.qty} ${g} from ${esc(o.ownerName)} at ${o.price.toFixed(2)} each</span>`;
+  if (qty < 1) return `<div class="row">${head}<button class="secondary" disabled>Buy</button></div>
+    <div class="est">Not enough cash: one costs ${o.price.toFixed(2)} and you have ${fmt(me.cash)}.</div>`;
+  const cost = qty * o.price, market = buyCost(s.port, o.good, qty) * (1 + tax);
+  const diff = Math.round(market - cost);
+  const vs = diff > 0 ? `That's <b class="pos">${fmt(diff)} less</b> than buying ${qty} from the market here (about ${fmt(market)} with tax).`
+    : diff < 0 ? `Buying ${qty} from the market here costs about ${fmt(market)} with tax, <b class="neg">${fmt(-diff)} less</b> than this listing.`
+    : `About the same as buying ${qty} from the market here.`;
+  const part = qty < room ? ` You can afford ${qty} of ${room}.` : "";
+  return `<div class="row">${head}<button class="secondary" data-act="buyOrder" data-ship="${s.id}" data-order="${o.id}" data-qty="${qty}">Buy ${qty} for ${fmt(cost)}</button></div>
+    <div class="est${diff < 0 ? " warn" : ""}" data-field="listingNote">${vs}${part}</div>`;
+}
 /** What selling a ship's whole cargo to this port's market pays, after tax (the server's sliding price). */
 function saleNet(s) { return sellValue(s.port, s.good, s.qty, false) * (1 - world.rules.tax); }
 /** One line under the sell button so the sum adds up: price, tax, and profit against what was paid. */
