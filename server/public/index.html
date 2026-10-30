@@ -83,13 +83,13 @@
     </div>
   </section>
   <aside>
-    <nav id="tabs">
-      <button data-tab="port" class="on">Port</button>
-      <button data-tab="fleet">Fleet</button>
-      <button data-tab="orders">Orders</button>
-      <button data-tab="board">Leaderboard</button>
+    <nav id="tabs" role="tablist" aria-label="Panels">
+      <button role="tab" aria-controls="panel" data-tab="port" class="on">Port</button>
+      <button role="tab" aria-controls="panel" data-tab="fleet">Fleet</button>
+      <button role="tab" aria-controls="panel" data-tab="orders">Orders</button>
+      <button role="tab" aria-controls="panel" data-tab="board">Leaderboard</button>
     </nav>
-    <div id="panel"></div>
+    <div id="panel" role="tabpanel"></div>
   </aside>
 </main>
 <div id="toast" class="toast hidden" role="status"></div>

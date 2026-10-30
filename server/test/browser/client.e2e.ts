@@ -603,3 +603,32 @@ test("admin can switch the world to easy and players see it", { skip: SKIP, time
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });
+
+test("keyboard players: the guide keeps Tab inside it, and focus survives live updates", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "200", BOTS: "5" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`keyboard: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Keys Ltd"); await p.fill("#authPass", "password123");
+    await p.focus('button[data-mode="register"]'); await p.keyboard.press("Enter");
+    await p.waitForSelector("#guide:not(.hidden)");
+    const inGuide = () => p.evaluate(() => document.getElementById("guide")!.contains(document.activeElement));
+    for (let i = 0; i < 4; i++) { await p.keyboard.press("Tab"); assert.ok(await inGuide(), `Tab ${i + 1} stays in the guide`); }
+    await p.keyboard.press("Shift+Tab"); assert.ok(await inGuide(), "Shift+Tab stays in the guide");
+    await p.keyboard.press("Escape");
+    await p.waitForSelector("#guide.hidden", { state: "attached" });
+    // Focus a button in the panel, then let several ticks (and bot trades) rebuild the panel.
+    await p.waitForSelector("#panel button[data-act]");
+    await p.focus("#panel button[data-act]");
+    const act = await p.evaluate(() => (document.activeElement as HTMLElement).dataset.act);
+    const tick = (await worldOf(p)).tick;
+    await p.waitForFunction((t0: number) => (window as any).eval("world").tick >= t0 + 5, tick);
+    assert.equal(await p.evaluate(() => (document.activeElement as HTMLElement).dataset.act), act, "the same button still has focus");
+    await p.focus('#tabs button[data-tab="fleet"]'); await p.keyboard.press("Enter");
+    assert.equal(await p.getAttribute('#tabs button[data-tab="fleet"]', "aria-selected"), "true", "screen readers hear which tab is open");
+    assert.equal(await p.getAttribute('#tabs button[data-tab="port"]', "aria-selected"), "false");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});

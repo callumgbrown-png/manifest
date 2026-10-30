@@ -150,7 +150,16 @@ $("guideNext").addEventListener("click", () => {
 $("guideBack").addEventListener("click", () => { if (guideAt > 0) { guideAt--; showGuideStep(); } });
 $("guideSkip").addEventListener("click", closeGuide);
 $("howToPlay").addEventListener("click", openGuide);
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("guide").classList.contains("hidden")) closeGuide(); });
+document.addEventListener("keydown", e => {
+  if ($("guide").classList.contains("hidden")) return;
+  if (e.key === "Escape") return closeGuide();
+  if (e.key !== "Tab") return;
+  // The guide is a modal: keep Tab and Shift+Tab inside it instead of wandering to the page behind.
+  const els = [...$("guide").querySelectorAll("button")].filter(b => !b.disabled);
+  const i = els.indexOf(document.activeElement);
+  e.preventDefault();
+  els[(i + (e.shiftKey ? -1 : 1) + els.length) % els.length]?.focus();
+});
 
 // ------------------------------------------------------------ routes and voyages (display only; the server decides)
 
@@ -581,7 +590,7 @@ document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click
 
 function render() {
   if (!world) return;
-  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  document.querySelectorAll("#tabs button").forEach(b => { b.classList.toggle("on", b.dataset.tab === tab); b.setAttribute("aria-selected", String(b.dataset.tab === tab)); });
   $("hName").textContent = me?.name ?? "–";
   $("hCash").textContent = me ? fmt(me.cash) : "–";
   showDelta();
@@ -616,10 +625,24 @@ function render() {
     return;
   }
   renderPending = false;
+  // Keyboard players: keep focus on the same button after the rebuild instead of dropping it to the page.
+  const refocus = focused && focused !== document.body && $("panel").contains(focused) ? focusKey(focused) : null;
   const html = { port: portPanel, fleet: fleetPanel, orders: ordersPanel, board: boardPanel }[tab]();
   $("panel").innerHTML = html;
   restoreForm();
   bindPanel();
+  if (refocus) {
+    const els = [...$("panel").querySelectorAll("button, input, select, a[href]")];
+    const el = els.find(x => focusKey(x) === refocus) ?? els.find(x => focusKey(x, true) === focusKey(focused, true));
+    el?.focus({ preventScroll: true });
+  }
+}
+/** Identifies a panel control across rebuilds. loose: only the action and ship, for when a
+ *  suggested trip's details changed (e.g. a new quantity) but it is still the same kind of button. */
+function focusKey(el, loose = false) {
+  const d = el.dataset;
+  if (loose) return `${el.tagName}|${d.act ?? ""}|${d.ship ?? ""}|${d.order ?? ""}`;
+  return `${el.tagName}|${el.id}|${JSON.stringify(Object.entries(d).sort())}|${Object.keys(d).length || el.id ? "" : el.textContent.trim()}`;
 }
 
 // What the player has typed or picked survives the panel being rebuilt by live updates.
