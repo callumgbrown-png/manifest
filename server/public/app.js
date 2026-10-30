@@ -63,6 +63,12 @@ function connect() {
  *  turned those on and the tab isn't in view. */
 function noteDockings(before) {
   const docked = me.ships.filter(s => s.dest === null && before.ships.some(b => b.id === s.id && b.dest !== null));
+  // Watching the port a ship just left (nothing of yours docked there now)? Follow it to where it
+  // docked, so its Sell button is in view instead of "None of your ships are docked here".
+  const watching = tab === "port" && !me.ships.some(s => s.dest === null && s.port === selectedPort)
+    && !(document.activeElement?.matches("input, select") && $("panel").contains(document.activeElement)) && !pointerInPanel;
+  const follow = watching && docked.find(s => before.ships.find(b => b.id === s.id).port === selectedPort);
+  if (follow) selectedPort = follow.port;
   for (const s of docked) {
     const text = `Ship ${s.id} docked at ${world.ports[s.port].name}${s.qty > 0 ? ` with ${s.qty} ${GOOD_NAMES[s.good]}` : ""}`;
     toast(text);
@@ -722,7 +728,7 @@ function portPanel() {
     ${shipsFirst ? shipsHtml : ""}
     <h3>Market</h3>
     <table class="market"><tr><th>Good</th><th class="num">Price</th><th class="sparkCell">Trend</th><th class="num">Stock</th><th class="num">Inbound</th></tr>${rows}</table>
-    <div class="est">${p.emptyInbound ? `${p.emptyInbound} empty ship${p.emptyInbound === 1 ? "" : "s"} heading here to load.` : "No empty ships heading here to load."} Inbound cargo will push prices down when it lands.</div>
+    <div class="est">${p.emptyInbound ? `${p.emptyInbound} empty ship${p.emptyInbound === 1 ? "" : "s"} heading here to load.` : "No empty ships heading here to load."} ${p.inbound.some(q => q > 0) ? `The inbound ${[0, 1].filter(g => p.inbound[g] > 0).map(g => GOOD_NAMES[g]).join(" and ")} will push ${p.inbound.filter(q => q > 0).length > 1 ? "those prices" : "its price"} down when it lands.` : "No cargo is heading here either."}</div>
     <h3>Player orders here</h3>
     ${orders.length ? `<table><tr><th>Player</th><th>Wants to</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${orders.map(o => `<tr${me && o.owner === me.id ? ' class="me"' : ""}><td>${esc(o.ownerName)}</td><td>${o.side === "sell" ? "sell" : "buy"}</td><td><span class="tag ${GOOD_NAMES[o.good]}">${GOOD_NAMES[o.good]}</span></td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="quiet">None yet.</div>`}
     ${shipsFirst ? "" : shipsHtml}`;
@@ -735,7 +741,9 @@ function whereShipsAre() {
     ? `Ship ${s.id} is sailing to ${esc(world.ports[s.dest].name)}, ${hoursLeft(s) > 0 ? `arriving in ${hoursLeft(s)} h` : "arriving now"}.`
     : `Ship ${s.id} is docked at ${esc(world.ports[s.port].name)}.`);
   if (me.ships.length > 3) lines.push(`${me.ships.length - 3} more on the Fleet tab.`);
-  return `${lines.join(" ")} Tap its port on the map or use the Fleet tab to see it.`;
+  const ports = [...new Set(me.ships.filter(s => s.dest === null).map(s => s.port))].slice(0, 3);
+  const links = ports.map(id => `<button class="link" data-act="openPort" data-port="${id}">Open ${esc(world.ports[id].name)} →</button>`).join(" ");
+  return `${lines.join(" ")} ${links ? `<div class="row">${links}</div>` : "Tap its port on the map or use the Fleet tab to see it."}`;
 }
 
 function shipCard(s) {
@@ -940,7 +948,7 @@ function saleNet(s) { return sellValue(s.port, s.good, s.qty, false) * (1 - worl
 function saleNote(s) {
   const net = saleNet(s), gain = net - s.cost, tax = Math.round(world.rules.tax * 1000) / 10;
   return `About ${(net / s.qty).toFixed(2)} each after ${tax}% tax (the price slides as you sell). You paid ${fmt(s.cost)}, so this sale `
-    + (gain >= 0 ? `makes <b class="pos">+${fmt(gain)}</b>.` : `loses <b class="neg">−${fmt(-gain)}</b>.`);
+    + (Math.abs(gain) < 0.5 ? "breaks even." : gain > 0 ? `makes <b class="pos">+${fmt(gain)}</b>.` : `loses <b class="neg">${fmt(-gain)}</b>.`);
 }
 
 /** At the very end of a season: is selling a cargo here worth more than keeping it? Unsold cargo
@@ -1219,6 +1227,7 @@ function bindPanel() {
       if (scrapAsk !== ship) { scrapAsk = ship; render(); }
       else { scrapAsk = null; command({ type: "scrapShip", ship }, () => toast(`Ship ${ship} scrapped for ${fmt(world.rules.shipPrice / 2)}`)); }
     }
+    if (act === "openPort") { selectedPort = Number(btn.dataset.port); tab = "port"; render(); }
     if (act === "goPort") { selectedPort = Number(btn.dataset.port); tab = "port"; scrollToBuy = true; render(); }
     if (act === "scrapKeep") { scrapAsk = null; render(); }
     if (act === "buyShip") command({ type: "buyShip", port: selectedPort }, () => toast("New ship bought"));

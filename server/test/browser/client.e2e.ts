@@ -251,7 +251,7 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   // The sell button says what the whole cargo fetches after tax; the note says what that makes.
   const sellText = (await a.locator('.shipCard button[data-act="sell"]').textContent())!;
   assert.match(sellText, /^Sell 40 grain here for [\d,]+$/);
-  assert.match((await shipCard.locator("[data-field=saleNote]").textContent())!, /after \d+(\.\d)?% tax.*You paid [\d,]+, so this sale (makes \+|loses −)[\d,]+\./);
+  assert.match((await shipCard.locator("[data-field=saleNote]").textContent())!, /after \d+(\.\d)?% tax.*You paid [\d,]+, so this sale (makes \+[\d,]+|loses [\d,]+|breaks even)\./);
   const quoted = Number(sellText.split(" for ")[1].replace(/\D/g, "")), cashPre = (await me(a)).cash;
   await a.locator('.shipCard button[data-act="sell"]').click();
   await toast(a, /^Sold$/);
@@ -962,6 +962,48 @@ test("the Fleet tab says where to buy a ship, and a stuck ship is told how far o
     const text = (await p.textContent("#panel"))!;
     assert.match(text, /No trip pays from here right now, and no empty move to another port earns at least \+50 after its fuel and fees\. Nearest option: sail empty to .+ \(\d+ h, about [\d,]+ in fuel and fees\), then load (grain|fuel) for .+ \(\+[\d,]+\): (only \+\d+|−[\d,]+) overall at today's prices\. Waiting costs nothing/);
     assert.ok(!text.includes("one hop away"));
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("the Port tab follows a ship from the port it left to where it docks, and links to docked ships", { skip: SKIP, timeout: 60000 }, async () => {
+  // A player watching the port their only ship left saw "None of your ships are docked here" when it
+  // docked, with its Sell button somewhere else on the map. The market note also said "Inbound cargo
+  // will push prices down" at ports with nothing inbound.
+  const t = await startServer({ TICK_MS: "400", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`follow: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Follow Me"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const home = (await me(p)).ships[0].port;
+    const near = await p.evaluate((h: number) => { const d = (window as any).eval("dist")[h]; return d.map((x: number, i: number) => [x, i]).filter((x: number[]) => x[1] !== h).sort((a: number[], b: number[]) => a[0] - b[0])[0][1]; }, home);
+    if (await p.textContent("#panel h2") !== map.ports[home].name) await selectPort(p, home);
+    const card = p.locator(".shipCard[data-ship]").first();
+    await card.locator("select[data-field=dest]").selectOption(String(near));
+    await card.locator("select[data-field=good]").selectOption("grain");
+    await card.locator("input[data-field=qty]").fill("10");
+    await p.locator("body").click({ position: { x: 5, y: 5 } });
+    await card.locator("button[data-act=sail]").click();
+    await toast(p, new RegExp(`Sailing to ${map.ports[near].name}`));
+    assert.equal(await p.textContent("#panel h2"), map.ports[home].name, "still on the port it left");
+    await p.waitForFunction(() => /None of your ships are docked here\. Ship \d+ is sailing to/.test(document.getElementById("panel")!.textContent!));
+    assert.equal(await p.locator('[data-act="openPort"]').count(), 0, "no link while every ship is at sea");
+    await toast(p, /docked at/);
+    await p.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, map.ports[near].name);
+    const sell = (await p.textContent("#panel"))!;
+    assert.match(sell, /Sell 10 grain here for/);
+    assert.match(sell, /so this sale (makes \+[\d,]+|loses [\d,]+|breaks even)\./, "a loss is 'loses 96', not 'loses −96'");
+    // Looking at another port: a button opens the port where the ship is docked.
+    await p.evaluate((h: number) => { const w = window as any; w.eval(`selectedPort = ${h}`); w.eval("render")(); }, home);
+    assert.match((await p.textContent("#panel"))!, new RegExp(`Ship \\d+ is docked at ${map.ports[near].name}\\.`));
+    await p.click('[data-act="openPort"]');
+    await p.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, map.ports[near].name);
+    // The market note only mentions inbound cargo when there is some (no bots, nothing sailing).
+    assert.match((await p.locator("#panel .est", { hasText: "heading here to load" }).textContent())!, /No empty ships heading here to load\. No cargo is heading here either\./);
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });
