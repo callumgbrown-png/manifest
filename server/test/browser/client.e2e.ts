@@ -604,6 +604,28 @@ test("admin can switch the world to easy and players see it", { skip: SKIP, time
   } finally { await t.stop(); cleanup(t); }
 });
 
+test("a new Hard world, where no trip pays anywhere yet, says so instead of blaming the port", { skip: SKIP, timeout: 60000 }, async () => {
+  // At hour 0 of a Hard season (9% tax, 40 port fee) the pre-stocked ports aren't far enough apart
+  // for any trip to pay. The panel used to say "from here or one hop away", as if moving would help.
+  const t = await startServer({ DIFFICULTY: "hard" });
+  try {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    page.on("pageerror", (e: Error) => errors.push(`hard: ${e.message}`));
+    await page.goto(t.url);
+    await page.fill("#authName", "Hardy Freight"); await page.fill("#authPass", "password123");
+    await page.click("button[data-mode=register]");
+    await closeGuide(page);
+    const nowhere = await page.evaluate(() => { const w = (window as any).eval("world"), m = (window as any).eval("me");
+      return w.ports.every((p: any) => (window as any).eval("rawTrips")({ ...m.ships[0], port: p.id, qty: 0 }, 1).length === 0); });
+    assert.ok(nowhere, "test assumes no trip pays anywhere at hour 0 on Hard");
+    await page.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("No trip pays anywhere on the map right now"));
+    assert.ok(!(await page.textContent("#panel"))!.includes("one hop away"));
+    assert.ok(await page.locator("button[data-act=sail]").first().isDisabled(), "nothing is preselected, so Set sail waits for a choice");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
 test("keyboard players: the guide keeps Tab inside it, and focus survives live updates", { skip: SKIP, timeout: 60000 }, async () => {
   const t = await startServer({ TICK_MS: "200", BOTS: "5" });
   try {

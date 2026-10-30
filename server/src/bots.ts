@@ -133,11 +133,14 @@ export function bestStartTrip(engine: Engine, p: number, cash = engine.rules.com
 }
 
 /** Where a new player starts: a random port from the better half of those where a trip pays now,
- *  so nobody's first screen is "no trip pays". Falls back to any port if none pay. */
+ *  so nobody's first screen is "no trip pays". If none pay, one of the ports nearest to paying. */
 export function pickStartPort(engine: Engine, random: (n: number) => number) {
-  const paying = Array.from({ length: engine.n }, (_, p) => ({ p, v: bestStartTrip(engine, p) }))
-    .filter(x => x.v > 0).sort((a, b) => b.v - a.v);
-  if (!paying.length) return random(engine.n);
-  const pool = paying.slice(0, Math.max(1, Math.ceil(paying.length / 2)));
+  const all = Array.from({ length: engine.n }, (_, p) => ({ p, v: bestStartTrip(engine, p) }))
+    .sort((a, b) => b.v - a.v);
+  const paying = all.filter(x => x.v > 0);
+  // When nothing pays anywhere (the first day of a Hard season), start among the ports closest
+  // to paying, so the first trip is the first to open up, not wherever chance put you.
+  const pool = paying.length ? paying.slice(0, Math.max(1, Math.ceil(paying.length / 2)))
+    : all.slice(0, Math.max(1, Math.ceil(all.length / 8)));
   return pool[random(pool.length)].p;
 }

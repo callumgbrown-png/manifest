@@ -832,6 +832,12 @@ function bestMove(s, delay = 0) {
   return best;
 }
 
+/** Whether an empty ship with this company's cash could make a paying trip from any port at all.
+ *  Early in a Hard season none does, and saying so beats implying the problem is where you are. */
+function paysAnywhere(s) {
+  return world.ports.some(p => rawTrips({ ...s, port: p.id, qty: 0 }, 1).length > 0);
+}
+
 /** What selling a ship's whole cargo to this port's market pays, after tax (the server's sliding price). */
 function saleNet(s) { return sellValue(s.port, s.good, s.qty, false) * (1 - world.rules.tax); }
 /** One line under the sell button so the sum adds up: price, tax, and profit against what was paid. */
@@ -858,7 +864,9 @@ function tripsHtml(s, trips = bestTrips(s), move = null) {
   const left = world.seasonHours - world.tick;
   const soonest = Math.min(...world.ports.filter(p => p.id !== s.port).map(p => Math.max(1, Math.ceil(distance(s.port, p.id) / world.rules.speed))));
   if (!trips.length && !landsInSeason(soonest)) return `<h3>Best trips from here</h3><div class="est">The season ends in ${left} h, too soon for any voyage from here to dock in time. ${s.qty > 0 ? endCargoAdvice(s) : "Your ship can stay where it is."}</div>`;
-  if (!trips.length) return `<h3>Best trips from here</h3><div class="est">${s.qty > 0 ? "Nowhere pays more than selling here right now." : "No trip pays right now at these prices, from here or one hop away. Waiting costs nothing; prices move every hour."}</div>`;
+  if (!trips.length) return `<h3>Best trips from here</h3><div class="est">${s.qty > 0 ? "Nowhere pays more than selling here right now."
+    : paysAnywhere(s) ? "No trip pays right now at these prices, from here or one hop away. Waiting costs nothing; prices move every hour."
+    : "No trip pays anywhere on the map right now, so every company is waiting. Prices drift apart as ports make and use goods; waiting costs nothing, so check back in a few hours."}</div>`;
   return `<h3>Best trips from here</h3><div class="trips">${trips.map(t => `<button class="trip secondary" data-act="plan" data-ship="${s.id}" data-dest="${t.dest}" data-good="${s.qty > 0 ? "" : GOOD_NAMES[t.g]}" data-qty="${t.qty}">
       <span>${s.qty > 0 ? "Sell" : `Load ${t.qty}`} <span class="tag ${GOOD_NAMES[t.g]}">${GOOD_NAMES[t.g]}</span> → ${esc(world.ports[t.dest].name)}</span>
       <span class="num"><b class="pos">+${fmt(t.profit)}</b> · ${t.hours} h</span>
