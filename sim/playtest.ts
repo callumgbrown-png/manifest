@@ -11,6 +11,9 @@ const CHECK = Number(process.env.CHECK || 4);        // hours between a player's
 const PER = Number(process.env.PER || 4);            // players per strategy
 const SEEDS = Number(process.env.SEEDS || 3);
 const DIFF = process.env.DIFF || "normal";
+for (const [k, v] of Object.entries({ CHECK, PER, SEEDS })) {
+  if (!Number.isInteger(v) || v < 1) { console.error(`${k} must be a whole number of 1 or more (SEEDS is how many seeds, e.g. SEEDS=3)`); process.exit(1); }
+}
 
 type Strat = "advice" | "tripsOnly" | "oldDefault" | "newDefault" | "plan";
 interface P { id: number; strat: Strat; emptySpent: number; trips: number; moves: number; waits: number; }

@@ -28,6 +28,7 @@ function connect() {
   };
   ws.onclose = () => {
     $("conn").textContent = "reconnecting"; $("conn").classList.remove("live");
+    pendingReq.clear();   // replies to commands sent on the old connection will never come
     setTimeout(connect, 2000);
   };
   ws.onmessage = ev => {
@@ -78,14 +79,24 @@ function notifyHtml() {
     <span class="quiet">${on ? "On: you'll get a browser notification while this tab is open in the background." : "Works while this tab is open, even in the background."}</span></div>`;
 }
 
-function command(cmd, onOk) {
-  const id = ++reqId;
-  pendingReq.set(id, () => { if (cmd.ship !== undefined) clearForm(cmd.ship); onOk?.(); render(); });
-  ws.send(JSON.stringify({ type: "cmd", reqId: id, cmd }));
+/** Send a message if connected; otherwise say so instead of dropping it silently. */
+function send(msg) {
+  if (ws?.readyState !== WebSocket.OPEN) {
+    toast("Not connected to the server, so nothing was done. Reconnecting; try again in a moment.", "bad");
+    return false;
+  }
+  ws.send(JSON.stringify(msg));
+  return true;
 }
 
-function toast(text, bad = false) {
-  const t = $("toast"); t.textContent = text; t.className = "toast" + (bad ? " bad" : "");
+function command(cmd, onOk) {
+  const id = ++reqId;
+  if (send({ type: "cmd", reqId: id, cmd })) pendingReq.set(id, () => { if (cmd.ship !== undefined) clearForm(cmd.ship); onOk?.(); render(); });
+}
+
+/** kind: falsy for done (tick), true or "bad" for an error, "warn" for done-but-careful. */
+function toast(text, kind = false) {
+  const t = $("toast"); t.textContent = text; t.className = "toast" + (kind === "warn" ? " warn" : kind ? " bad" : "");
   clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.add("hidden"), 3500);
 }
 
@@ -97,7 +108,7 @@ document.querySelectorAll("#authForm button").forEach(b => b.addEventListener("c
 $("authForm").addEventListener("submit", e => {
   e.preventDefault();
   $("authError").textContent = "";
-  ws.send(JSON.stringify({ type: authMode, name: $("authName").value, password: $("authPass").value }));
+  if (!send({ type: authMode, name: $("authName").value, password: $("authPass").value })) $("authError").textContent = "Not connected to the server yet. Try again in a moment.";
 });
 $("logout").addEventListener("click", () => {
   store.set("token", null);
@@ -506,7 +517,7 @@ function pickDestination(id) {
   const y = window.scrollY;
   card.querySelector("[data-act=sail]")?.scrollIntoView({ block: "nearest" });
   if (window.scrollY !== y) window.scrollTo(window.scrollX, y);
-  toast(`Ship ${s.id} → ${world.ports[id].name} (≈${Math.ceil(distance(s.port, id) / world.rules.speed)} h): ${summary}. Tap it again to open the port.`);
+  toast(`Ship ${s.id} → ${world.ports[id].name} (≈${Math.ceil(distance(s.port, id) / world.rules.speed)} h): ${summary}. Tap it again to open the port.`, summary.startsWith("makes") ? false : "warn");
   return true;
 }
 

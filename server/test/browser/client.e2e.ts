@@ -151,6 +151,7 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await tapPort(a, other);
   await toast(a, new RegExp(`→ ${map.ports[other].name} \\(≈\\d+ h\\): sailing empty costs about [\\d,]+\\. Tap it again to open the port\\.`));
   assert.equal(await a.evaluate(() => window.scrollY), 0, "the page stays on the map");
+  assert.ok(await a.locator("#toast.warn").count(), "a trip that costs money gets a warning mark, not a green tick");
   await a.setViewportSize({ width: 1280, height: 800 });
   await a.waitForTimeout(200);
   assert.equal(await a.textContent("#panel h2"), company, "first tap keeps the panel open");
@@ -204,6 +205,18 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await card.locator("button[data-act=sail]").click();
   await toast(a, /over capacity/);
   assert.ok(await a.locator("#toast.bad").count());
+
+  // ---- with the connection down, a click says nothing was done instead of silently doing nothing
+  await a.evaluate(() => { const ws = (window as any).eval("ws"); ws.onclose = null; ws.close(); });
+  await a.waitForFunction(() => (window as any).eval("ws").readyState === WebSocket.CLOSED);
+  await card.locator("input[data-field=qty]").fill("60");
+  await a.locator("body").click({ position: { x: 5, y: 5 } });
+  await card.locator("button[data-act=sail]").click();
+  await toast(a, /Not connected to the server, so nothing was done/);
+  assert.ok(await a.locator("#toast.bad").count());
+  await a.evaluate(() => (window as any).eval("connect")());
+  await a.waitForFunction(() => document.getElementById("conn")!.textContent === "live");
+  await a.waitForFunction(() => (window as any).eval("me")?.ships[0].dest === null);
 
   // ---- sail with grain to a neighbour; ship shows as sailing; sell on arrival
   const nb = map.routes.find((r: any) => r.a === home || r.b === home);
