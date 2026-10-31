@@ -1276,3 +1276,39 @@ test("a buy order that buys at once from a listing says so, and the form checks 
     seller.close(); await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });
+
+test("the planned route doesn't hide the sailing time on its lane", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "60000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`hour labels: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Lane Reader"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    // Plan a trip to a port next door, so the dotted route runs through that lane's "Nh" box.
+    const box = await p.evaluate(() => {
+      const w = window as any, world = w.eval("world"), s = w.eval("me").ships[0];
+      const r = world.routes.find((r: any) => r.a === s.port || r.b === s.port);
+      const dest = r.a === s.port ? r.b : r.a;
+      const sel = document.querySelector(".shipCard[data-ship] select[data-field=dest]") as HTMLSelectElement;
+      sel.value = String(dest); sel.dispatchEvent(new Event("change", { bubbles: true }));
+      const P = w.eval("P"), [x1, y1] = P(world.ports[r.a]), [x2, y2] = P(world.ports[r.b]);
+      const c = (document.getElementById("map") as HTMLCanvasElement).getContext("2d")!;
+      c.font = "600 10px IBM Plex Mono, monospace";
+      const tw = c.measureText(Math.ceil(r.distance / world.rules.speed) + "h").width + 8;
+      return { x: (x1 + x2) / 2 - tw / 2, y: (y1 + y2) / 2 - 8, w: tw, h: 15 };
+    });
+    await p.waitForTimeout(300);   // a few frames
+    const green = await p.evaluate((b: any) => {
+      const cv = document.getElementById("map") as HTMLCanvasElement, dpr = window.devicePixelRatio || 1;
+      const d = cv.getContext("2d")!.getImageData(Math.ceil((b.x + 1) * dpr), Math.ceil((b.y + 1) * dpr), Math.floor((b.w - 2) * dpr), Math.floor((b.h - 2) * dpr)).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i + 1] > 120 && d[i + 1] - d[i + 2] > 20 && d[i + 1] - d[i] > 60) n++;
+      return n;
+    }, box);
+    assert.equal(green, 0, "the planned route's dots are drawn over the lane's sailing time");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});

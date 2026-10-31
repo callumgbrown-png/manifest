@@ -406,20 +406,19 @@ function drawMap() {
   const mine = new Set(myShips.map(s => s.id));
 
   // Lanes out of the focused port, with sailing times. Their boxes keep port labels clear of them.
-  const placed = overlays.slice();
+  // The hour boxes are drawn after your voyages and planned route, so those lines never hide them.
+  const placed = overlays.slice(), hourLabels = [];
   if (focus !== null) {
     ctx.strokeStyle = rgba(C.ink, 0.38); ctx.lineWidth = 1.6;
+    ctx.font = "600 10px IBM Plex Mono, monospace";
     for (const r of world.routes) {
       if (r.a !== focus && r.b !== focus) continue;
       const [x1, y1] = P(world.ports[r.a]), [x2, y2] = P(world.ports[r.b]);
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
       if (view.scale > 0.55) {
         const h = Math.ceil(r.distance / world.rules.speed) + "h", mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-        ctx.font = "600 10px IBM Plex Mono, monospace";
-        const tw = ctx.measureText(h).width + 8;
-        ctx.fillStyle = "rgba(10,22,32,.85)"; ctx.fillRect(mx - tw / 2, my - 8, tw, 15);
-        placed.push({ x: mx - tw / 2, y: my - 8, w: tw, h: 15 });
-        ctx.fillStyle = C.quiet; ctx.textAlign = "center"; ctx.fillText(h, mx, my + 3); ctx.textAlign = "left";
+        const tw = ctx.measureText(h).width + 8, box = { x: mx - tw / 2, y: my - 8, w: tw, h: 15 };
+        placed.push(box); hourLabels.push({ text: h, x: mx, y: my, box });
       }
     }
   }
@@ -445,6 +444,12 @@ function drawMap() {
     ctx.beginPath(); lanePath(planShipObj.port, planDest).forEach((i, k) => ctx[k ? "lineTo" : "moveTo"](...P(world.ports[i]))); ctx.stroke();
     ctx.setLineDash([]); ctx.lineCap = "butt";
   }
+  ctx.font = "600 10px IBM Plex Mono, monospace"; ctx.textAlign = "center";
+  for (const l of hourLabels) {
+    ctx.fillStyle = "rgba(10,22,32,.92)"; ctx.fillRect(l.box.x, l.box.y, l.box.w, l.box.h);
+    ctx.fillStyle = C.quiet; ctx.fillText(l.text, l.x, l.y + 3);
+  }
+  ctx.textAlign = "left";
 
   // Ports.
   const r0 = clamp(4.2 * Math.sqrt(cam.z) * Math.max(0.8, Math.min(1.15, fit * 1.4)), 3.5, 9);
