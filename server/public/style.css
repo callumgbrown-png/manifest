@@ -30,6 +30,7 @@ label input, label select { margin-top: 4px; }
 .row { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 .row.labelled { align-items: flex-end; }
 label.mini { margin: 0; font-size: 11px; display: flex; flex-direction: column; }
+label.mini.grow { flex: 1; }
 .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .pos { color: var(--good); } .neg { color: var(--bad); }
 

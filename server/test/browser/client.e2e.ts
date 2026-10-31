@@ -689,6 +689,9 @@ test("keyboard players: the guide keeps Tab inside it, and focus survives live u
     const p = await ctx.newPage();
     p.on("pageerror", (e: Error) => errors.push(`keyboard: ${e.message}`));
     await p.goto(t.url);
+    // The sign-in card keeps Tab on itself: past "How to play" it doesn't reach the header behind it.
+    await p.focus("#howToPlay"); await p.keyboard.press("Tab");
+    assert.ok(!(await p.evaluate(() => document.querySelector("header")!.contains(document.activeElement))), "Tab doesn't reach the game behind the sign-in card");
     await p.fill("#authName", "Keys Ltd"); await p.fill("#authPass", "password123");
     await p.focus('button[data-mode="register"]'); await p.keyboard.press("Enter");
     await p.waitForSelector("#guide:not(.hidden)");
@@ -697,6 +700,30 @@ test("keyboard players: the guide keeps Tab inside it, and focus survives live u
     await p.keyboard.press("Shift+Tab"); assert.ok(await inGuide(), "Shift+Tab stays in the guide");
     await p.keyboard.press("Escape");
     await p.waitForSelector("#guide.hidden", { state: "attached" });
+    const focused = () => p.evaluate(() => { const a = document.activeElement as HTMLElement; return a.dataset.tab ?? a.id; });
+    assert.equal(await focused(), "port", "closing the guide shown at sign-up puts focus on the open tab, not nowhere");
+    assert.equal(await p.evaluate(() => (document.querySelector("header") as any).inert), false, "the game is usable once signed in");
+    // Tabs: arrow keys, Home and End move between tabs and open them; only the open tab is in the Tab order.
+    await p.keyboard.press("ArrowRight");
+    assert.equal(await focused(), "fleet"); assert.equal(await p.getAttribute('#tabs button[data-tab="fleet"]', "aria-selected"), "true");
+    await p.keyboard.press("End"); assert.equal(await focused(), "board");
+    await p.keyboard.press("ArrowRight"); assert.equal(await focused(), "port", "ArrowRight wraps round");
+    await p.keyboard.press("ArrowLeft"); assert.equal(await focused(), "board");
+    await p.keyboard.press("Home"); assert.equal(await focused(), "port");
+    assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll("#tabs button")].map(b => (b as HTMLElement).tabIndex)), [0, -1, -1, -1]);
+    // Help opens the guide; closing it goes back to Help.
+    await p.focus("#help"); await p.keyboard.press("Enter");
+    await p.waitForSelector("#guide:not(.hidden)");
+    await p.keyboard.press("Escape");
+    assert.equal(await focused(), "help", "focus goes back to the Help button");
+    // Every form control says what it is to a screen reader.
+    await p.waitForSelector("#panel select[data-field=good]");
+    const unlabelled = () => p.evaluate(() => [...document.querySelectorAll("#panel input, #panel select")]
+      .filter(e => !(e as HTMLInputElement).labels?.length && !e.getAttribute("aria-label")).map(e => e.outerHTML.slice(0, 60)));
+    assert.deepEqual(await unlabelled(), [], "sail form controls are labelled");
+    await p.click('#tabs button[data-tab="orders"]');
+    assert.deepEqual(await unlabelled(), [], "order form controls are labelled (Port too)");
+    await p.click('#tabs button[data-tab="port"]');
     // Focus a button in the panel, then let several ticks (and bot trades) rebuild the panel.
     await p.waitForSelector("#panel button[data-act]");
     await p.focus("#panel button[data-act]");
@@ -1267,6 +1294,8 @@ test("a buy order that buys at once from a listing says so, and the form checks 
     const cash = (await me(p)).cash;
     await p.click("button[data-act=placeOrder]");
     await toast(p, new RegExp(`^Bought 10 grain at once from a listing at ${map.ports[dest].name} for 300 \\(used up there\\)$`));
+    // The new cash comes with the next state message, a moment after the command's reply (and toast).
+    await p.waitForFunction((c: number) => (window as any).eval("me").cash !== c, cash, { timeout: 5000 });
     assert.equal((await me(p)).cash, cash - 300, "paid the listing's price");
     // More than is listed: the rest waits as a buy order.
     await p.fill("#oQty", "30"); await p.fill("#oPrice", "31");

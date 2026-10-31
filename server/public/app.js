@@ -156,7 +156,11 @@ function toast(text, kind = false) {
 
 // ------------------------------------------------------------ auth
 
-function showAuth(on) { $("auth").classList.toggle("hidden", !on); }
+function showAuth(on) {
+  $("auth").classList.toggle("hidden", !on);
+  // Keep keyboard and screen-reader users on the sign-in card, not the game behind it.
+  for (const el of document.querySelectorAll("header, #seasonBanner, main")) el.inert = on;
+}
 let authMode = "login";
 document.querySelectorAll("#authForm button").forEach(b => b.addEventListener("click", () => { authMode = b.dataset.mode; }));
 $("authForm").addEventListener("submit", e => {
@@ -187,8 +191,18 @@ function guideSteps() {
     ["Sell, and grow", "When your ship docks, sell to the market or fill another player's order. Use the profit to buy more ships. The company with the highest net worth when the season ends wins."],
   ];
 }
-function openGuide() { guideAt = 0; showGuideStep(); $("guide").classList.remove("hidden"); $("guideNext").focus(); }
-function closeGuide() { $("guide").classList.add("hidden"); store.set("guideSeen", "1"); }
+let guideOpener = null;   // where focus goes back to when the guide closes
+function openGuide() {
+  const a = document.activeElement;
+  guideOpener = a && a !== document.body && !$("guide").contains(a) ? a : null;
+  guideAt = 0; showGuideStep(); $("guide").classList.remove("hidden"); $("guideNext").focus();
+}
+function closeGuide() {
+  $("guide").classList.add("hidden"); store.set("guideSeen", "1");
+  // Back to the button that opened it, or (shown at sign-up, or that button is now hidden) to the open tab.
+  const back = guideOpener?.isConnected && guideOpener.offsetParent ? guideOpener : document.querySelector("#tabs button.on");
+  guideOpener = null; back?.focus();
+}
 function showGuideStep() {
   const steps = guideSteps(), [title, text] = steps[guideAt];
   $("guideStep").textContent = `Step ${guideAt + 1} of ${steps.length}`;
@@ -648,10 +662,20 @@ $("zoomReset").addEventListener("click", () => { cam.z = 1; layout(); });
 // ------------------------------------------------------------ panels
 
 document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => { tab = b.dataset.tab; render(); }));
+// Tabs pattern: arrow keys (and Home/End) move between tabs and open them; Tab goes on to the panel.
+$("tabs").addEventListener("keydown", e => {
+  const btns = [...document.querySelectorAll("#tabs button")], i = btns.indexOf(document.activeElement);
+  if (i < 0) return;
+  const j = e.key === "ArrowRight" ? (i + 1) % btns.length : e.key === "ArrowLeft" ? (i - 1 + btns.length) % btns.length
+    : e.key === "Home" ? 0 : e.key === "End" ? btns.length - 1 : -1;
+  if (j < 0) return;
+  e.preventDefault();
+  tab = btns[j].dataset.tab; render(); btns[j].focus();
+});
 
 function render() {
   if (!world) return;
-  document.querySelectorAll("#tabs button").forEach(b => { b.classList.toggle("on", b.dataset.tab === tab); b.setAttribute("aria-selected", String(b.dataset.tab === tab)); });
+  document.querySelectorAll("#tabs button").forEach(b => { b.classList.toggle("on", b.dataset.tab === tab); b.setAttribute("aria-selected", String(b.dataset.tab === tab)); b.tabIndex = b.dataset.tab === tab ? 0 : -1; });
   $("hName").textContent = me?.name ?? "–";
   $("hCash").textContent = me ? fmt(me.cash) : "–";
   $("hCash").classList.toggle("neg", !!me && me.cash < 0);
@@ -823,8 +847,8 @@ function shipCard(s) {
     ${tripsHtml(s, trips, move)}
     <label>Destination <span class="quiet">(or tap a port on the map)</span><select data-field="dest">${plan.dest === null ? `<option value="" selected disabled>Choose where to sail…</option>` : ""}${dests.map(p => `<option value="${p.id}"${p.id === plan.dest ? " selected" : ""}>${esc(p.name)} (≈${Math.ceil(distance(s.port, p.id) / world.rules.speed)} h)</option>`).join("")}</select></label>
     ${s.qty === 0 ? `<div class="row" style="margin-top:4px">
-      <select data-field="good" style="width:auto"><option value="">Sail empty</option>${GOOD_NAMES.map((g, i) => `<option value="${g}"${g === plan.good ? " selected" : ""}>Load ${g} at ${port.prices[i].toFixed(2)}</option>`).join("")}</select>
-      <input data-field="qty" type="number" min="1" max="${world.rules.capacity}" value="${plan.qty}" style="width:90px"></div>` : ""}
+      <select data-field="good" aria-label="Cargo to load" style="width:auto"><option value="">Sail empty</option>${GOOD_NAMES.map((g, i) => `<option value="${g}"${g === plan.good ? " selected" : ""}>Load ${g} at ${port.prices[i].toFixed(2)}</option>`).join("")}</select>
+      <input data-field="qty" type="number" aria-label="Quantity to load" min="1" max="${world.rules.capacity}" value="${plan.qty}" style="width:90px"></div>` : ""}
     <div class="est big" data-field="estimate"></div>
     <div class="row"><button data-act="sail" data-ship="${s.id}">Set sail</button>
       ${me.ships.length > 1 && s.qty === 0 ? `<button class="link" data-act="${scrapAsk === s.id ? "scrapKeep" : "scrap"}" data-ship="${s.id}">${scrapAsk === s.id ? "Keep it" : `Scrap for ${fmt(world.rules.shipPrice / 2)}`}</button>` : ""}</div>
@@ -1263,7 +1287,7 @@ function ordersPanel() {
     <div class="est warn">Goods delivered to your buy order are used up at that port. They don't come to you, so a filled order costs you its full price and doesn't add to your net worth.</div>
     ${me && world.seasonOver ? `<div class="est">Trading is closed until the next season starts.</div>` : ""}
     ${me && !world.seasonOver ? `<h3>Post an order</h3>
-    <div class="row"><select id="oPort">${world.ports.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}" ${p.id === selectedPort ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+    <div class="row"><label class="mini grow">Port<select id="oPort">${world.ports.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}" ${p.id === selectedPort ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label></div>
     <div class="row labelled"><label class="mini">Good<select id="oGood" style="width:auto">${GOOD_NAMES.map(g => `<option>${g}</option>`).join("")}</select></label>
       <label class="mini">Quantity<input id="oQty" type="number" min="1" max="1000" value="100" style="width:90px"></label>
       <label class="mini">Price each<input id="oPrice" type="number" step="0.5" value="30" style="width:90px"></label>
