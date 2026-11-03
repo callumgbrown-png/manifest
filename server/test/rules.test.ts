@@ -24,7 +24,7 @@ describe("companies", () => {
     const { e, cs, ship } = world(1, 7);
     assert.equal(cs[0].cash, rules.company.start_cash);
     assert.equal(cs[0].ships.length, rules.company.start_ships);
-    assert.deepEqual({ ...ship(cs[0]) }, { id: ship(cs[0]).id, owner: cs[0].id, port: 7, dest: null, departTick: 0, arriveTick: 0, good: null, qty: 0, cost: 0 });
+    assert.deepEqual({ ...ship(cs[0]) }, { id: ship(cs[0]).id, owner: cs[0].id, port: 7, type: "freighter", dest: null, departTick: 0, arriveTick: 0, good: null, qty: 0, cost: 0 });
     assert.equal(e.netWorth(cs[0]), rules.company.start_cash + rules.ship.price / 2);
   });
 
@@ -436,7 +436,7 @@ describe("markets", () => {
     }));
     // Some full load bought at a producer and sold at a consumer makes money in hour one.
     let best = -Infinity;
-    for (let a = 0; a < e.n; a++) for (let b = 0; b < e.n; b++) for (const g of [0, 1]) {
+    for (let a = 0; a < e.n; a++) for (let b = 0; b < e.n; b++) for (const g of [0, 1, 2, 3]) {
       if (a === b) continue;
       const q = rules.ship.capacity;
       const profit = e.sellValue(b, g, q) * (1 - tax) - e.buyCost(a, g, q).cost * (1 + tax)
@@ -474,7 +474,7 @@ describe("public information and metrics", () => {
     e.apply({ type: "sail", company: cs[0].id, ship: ship(cs[0]).id, dest: d, buy: { good: "fuel", qty: 40 } });
     e.apply({ type: "sail", company: cs[1].id, ship: ship(cs[1]).id, dest: d });
     const ib = e.inbound();
-    assert.deepEqual(ib.cargo[d], [0, 40]);
+    assert.deepEqual(ib.cargo[d], [0, 40, 0, 0]);
     assert.equal(ib.emptyShips[d], 1);
     assert.equal(ib.emptyShips[0], 0);
   });

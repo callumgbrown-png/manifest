@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { join, dirname, extname, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
-import { Engine, GOODS, type Command } from "./engine.js";
+import { Engine, GOODS, SHIP_TYPES, type Command } from "./engine.js";
 import { runBots, botName, isBot, pickStartPort } from "./bots.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -51,7 +51,7 @@ let engine = new Engine(rules, map, EXPECTED);
 const HISTORY_HOURS = 72;
 let history: { tick: number; prices: number[][] }[] = [];
 function recordPrices() {
-  const prices = engine.stock.map((_, p) => [0, 1].map(g => Math.round(engine.price(p, g) * 100) / 100));
+  const prices = engine.stock.map((_, p) => GOODS.map((_, g) => Math.round(engine.price(p, g) * 100) / 100));
   if (history.at(-1)?.tick === engine.tick) history.pop();
   history.push({ tick: engine.tick, prices });
   if (history.length > HISTORY_HOURS) history.shift();
@@ -174,18 +174,19 @@ function publicView() {
       fuelPer100: engine.rules.ship.fuel_per_100_distance, upkeep: engine.rules.ship.upkeep_per_day,
       tax: engine.rules.fees.trade_tax_rate, portFee: engine.rules.fees.port_fee_per_docking,
       maxShips: engine.rules.company.max_ships, bands: engine.rules.commodities,
-      target: engine.target, difficulty: engine.difficulty,
+      target: engine.target, targets: engine.targets, difficulty: engine.difficulty,
+      shipTypes: Object.fromEntries(SHIP_TYPES.map(t => [t, engine.spec(t)])),
     },
     ports: map.ports.map((p: any, i: number) => ({
       id: p.id, name: p.name, x: p.x, y: p.y, produces: p.produces, consumes: p.consumes,
-      prices: [0, 1].map(g => round2(engine.price(i, g))),
+      prices: GOODS.map((_, g) => round2(engine.price(i, g))),
       stock: engine.stock[i].map(Math.round),
       inbound: inbound.cargo[i].map(Math.round),
       emptyInbound: inbound.emptyShips[i],
     })),
     routes: map.routes,
     ships: [...engine.ships.values()].map(s => ({
-      id: s.id, owner: s.owner, port: s.port, dest: s.dest, departTick: s.departTick, arriveTick: s.arriveTick,
+      id: s.id, owner: s.owner, port: s.port, type: s.type, dest: s.dest, departTick: s.departTick, arriveTick: s.arriveTick,
       good: s.good, qty: Math.round(s.qty),
     })),
     orders: [...engine.orders.values()].map(o => ({ ...o, ownerName: engine.companies.get(o.owner)?.name })),

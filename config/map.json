@@ -18,7 +18,8 @@
       "y": 76.4,
       "produces": [],
       "consumes": [
-        "fuel"
+        "fuel",
+        "machinery"
       ]
     },
     {
@@ -29,7 +30,9 @@
       "produces": [
         "grain"
       ],
-      "consumes": []
+      "consumes": [
+        "machinery"
+      ]
     },
     {
       "id": 3,
@@ -39,7 +42,9 @@
       "produces": [
         "fuel"
       ],
-      "consumes": []
+      "consumes": [
+        "machinery"
+      ]
     },
     {
       "id": 4,
@@ -48,7 +53,8 @@
       "y": 88.1,
       "produces": [],
       "consumes": [
-        "grain"
+        "grain",
+        "machinery"
       ]
     },
     {
@@ -59,7 +65,8 @@
       "produces": [],
       "consumes": [
         "grain",
-        "fuel"
+        "fuel",
+        "ore"
       ]
     },
     {
@@ -78,7 +85,8 @@
       "x": 619.8,
       "y": 636.5,
       "produces": [
-        "grain"
+        "grain",
+        "ore"
       ],
       "consumes": [
         "fuel"
@@ -89,7 +97,10 @@
       "name": "Dunness",
       "x": 947.7,
       "y": 59.8,
-      "produces": [],
+      "produces": [
+        "ore",
+        "machinery"
+      ],
       "consumes": [
         "grain"
       ]
@@ -111,7 +122,8 @@
       "x": 165.6,
       "y": 105.4,
       "produces": [
-        "fuel"
+        "fuel",
+        "ore"
       ],
       "consumes": [
         "grain"
@@ -123,7 +135,8 @@
       "x": 320.0,
       "y": 552.3,
       "produces": [
-        "grain"
+        "grain",
+        "ore"
       ],
       "consumes": []
     },
@@ -152,9 +165,12 @@
       "name": "Galhaven",
       "x": 544.9,
       "y": 70.2,
-      "produces": [],
+      "produces": [
+        "machinery"
+      ],
       "consumes": [
-        "grain"
+        "grain",
+        "ore"
       ]
     },
     {
@@ -173,7 +189,8 @@
       "x": 456.0,
       "y": 221.9,
       "produces": [
-        "grain"
+        "grain",
+        "ore"
       ],
       "consumes": []
     },
@@ -193,7 +210,8 @@
       "x": 523.7,
       "y": 590.1,
       "produces": [
-        "grain"
+        "grain",
+        "machinery"
       ],
       "consumes": []
     },
@@ -202,9 +220,12 @@
       "name": "Kelbay",
       "x": 715.7,
       "y": 214.3,
-      "produces": [],
+      "produces": [
+        "ore"
+      ],
       "consumes": [
-        "grain"
+        "grain",
+        "machinery"
       ]
     },
     {
@@ -215,7 +236,9 @@
       "produces": [
         "fuel"
       ],
-      "consumes": []
+      "consumes": [
+        "ore"
+      ]
     },
     {
       "id": 21,
@@ -226,7 +249,8 @@
         "grain"
       ],
       "consumes": [
-        "fuel"
+        "fuel",
+        "ore"
       ]
     },
     {
@@ -237,7 +261,9 @@
       "produces": [
         "grain"
       ],
-      "consumes": []
+      "consumes": [
+        "ore"
+      ]
     },
     {
       "id": 23,
@@ -247,7 +273,8 @@
       "produces": [],
       "consumes": [
         "grain",
-        "fuel"
+        "fuel",
+        "ore"
       ]
     },
     {
@@ -257,7 +284,8 @@
       "y": 455.1,
       "produces": [],
       "consumes": [
-        "fuel"
+        "fuel",
+        "machinery"
       ]
     },
     {
@@ -279,7 +307,8 @@
       "y": 295.8,
       "produces": [],
       "consumes": [
-        "fuel"
+        "fuel",
+        "machinery"
       ]
     },
     {
@@ -298,7 +327,9 @@
       "name": "Pelport",
       "x": 33.8,
       "y": 298.1,
-      "produces": [],
+      "produces": [
+        "ore"
+      ],
       "consumes": [
         "grain",
         "fuel"
@@ -310,7 +341,9 @@
       "x": 925.9,
       "y": 471.9,
       "produces": [
-        "grain"
+        "grain",
+        "ore",
+        "machinery"
       ],
       "consumes": []
     },
@@ -321,7 +354,8 @@
       "y": 529.2,
       "produces": [],
       "consumes": [
-        "fuel"
+        "fuel",
+        "machinery"
       ]
     },
     {
@@ -341,10 +375,13 @@
       "name": "Salport",
       "x": 30.2,
       "y": 126.8,
-      "produces": [],
+      "produces": [
+        "machinery"
+      ],
       "consumes": [
         "grain",
-        "fuel"
+        "fuel",
+        "ore"
       ]
     },
     {
@@ -362,7 +399,10 @@
       "name": "Torquay",
       "x": 54.0,
       "y": 589.6,
-      "produces": [],
+      "produces": [
+        "ore",
+        "machinery"
+      ],
       "consumes": [
         "fuel"
       ]
@@ -384,7 +424,8 @@
       "y": 199.4,
       "produces": [],
       "consumes": [
-        "grain"
+        "grain",
+        "ore"
       ]
     },
     {
@@ -395,7 +436,8 @@
       "produces": [],
       "consumes": [
         "grain",
-        "fuel"
+        "fuel",
+        "ore"
       ]
     },
     {
@@ -406,7 +448,9 @@
       "produces": [
         "grain"
       ],
-      "consumes": []
+      "consumes": [
+        "machinery"
+      ]
     },
     {
       "id": 39,
@@ -414,9 +458,12 @@
       "x": 364.2,
       "y": 48.5,
       "produces": [
-        "fuel"
+        "fuel",
+        "ore"
       ],
-      "consumes": []
+      "consumes": [
+        "machinery"
+      ]
     }
   ],
   "routes": [

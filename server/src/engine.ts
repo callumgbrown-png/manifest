@@ -2,13 +2,17 @@
 // Every change goes through apply() or tick(), so the whole game can be rebuilt by
 // replaying the event log. Nothing here uses randomness or the clock.
 
-export const GOODS = ["grain", "fuel"] as const;
+export const GOODS = ["grain", "fuel", "ore", "machinery"] as const;
 export type Good = (typeof GOODS)[number];
 const FUEL = 1;
+export const SHIP_TYPES = ["coaster", "freighter", "bulker"] as const;
+export type ShipType = (typeof SHIP_TYPES)[number];
+/** What one ship class can do. upkeep is the daily cost at today's difficulty. */
+export interface ShipSpec { capacity: number; speed_per_hour: number; fuel_per_100_distance: number; price: number; upkeep: number }
 
 export interface Rules {
   season: { days: number; hours_per_tick: number };
-  commodities: Record<Good, { floor: number; ceiling: number }>;
+  commodities: Record<Good, { floor: number; ceiling: number; depth?: number }>;
   markets: {
     target_stock: number;
     max_stock_multiple: number;
@@ -23,6 +27,8 @@ export interface Rules {
   difficulty?: { default: string; presets: Record<string, { tax: number; portFee: number; upkeep: number; botMinProfit?: number; botError?: number }> };
   company: { start_cash: number; start_ships: number; max_ships: number };
   ship: { price: number; capacity: number; speed_per_hour: number; fuel_per_100_distance: number; upkeep_per_day: number };
+  /** Classes a company can buy; `ship` is the freighter. Optional so older rule files still load. */
+  ship_types?: Record<ShipType, { capacity: number; speed_per_hour: number; fuel_per_100_distance: number; price: number; upkeep: number }>;
 }
 
 export interface MapData {
@@ -32,6 +38,7 @@ export interface MapData {
 
 export interface Ship {
   id: number; owner: number; port: number; dest: number | null;
+  type: ShipType;
   departTick: number; arriveTick: number;
   good: number | null; qty: number; cost: number;
 }
@@ -65,7 +72,7 @@ export type Command =
   | { type: "register"; name: string; startPort: number }
   | { type: "sail"; company: number; ship: number; dest: number; buy?: { good: Good; qty: number } }
   | { type: "sell"; company: number; ship: number; order?: number }
-  | { type: "buyShip"; company: number; port: number }
+  | { type: "buyShip"; company: number; port: number; shipType?: ShipType }
   | { type: "scrapShip"; company: number; ship: number }
   | { type: "placeOrder"; company: number; port: number; good: Good; qty: number; price: number }
   | { type: "placeSell"; company: number; ship: number; qty: number; price: number }
@@ -111,8 +118,12 @@ export class Engine {
   botError = 0;
   /** Market size multiplier, fixed for the season. */
   readonly scale: number;
-  /** Stock at which a port's price sits mid-band (sent to clients for honest estimates). */
+  /** Stock at which a port's price sits mid-band for a good of depth 1 (grain). */
   readonly target: number;
+  /** The same per good: target x the good's market depth (sent to clients for honest estimates). */
+  readonly targets: number[];
+  /** Freighter upkeep the ship_types figures are quoted against (the Normal-difficulty number). */
+  private readonly baseUpkeep: number;
   private prod: number[][];
   private cons: number[][];
 
@@ -127,8 +138,11 @@ export class Engine {
       ? Math.max(m.min_scale ?? 0, (expectedCompanies / m.reference_companies) ** (m.scale_exponent ?? 1)) : 1;
     const k = this.scale;
     this.target = m.target_stock * k;
-    this.prod = map.ports.map(p => GOODS.map(g => (p.produces.includes(g) ? m.production_per_hour[g] * k : 0)));
-    this.cons = map.ports.map(p => GOODS.map(g => (p.consumes.includes(g) ? m.consumption_per_hour[g] * k : 0)));
+    this.targets = GOODS.map(g => this.target * (rules.commodities[g].depth ?? 1));
+    this.baseUpkeep = rules.ship_types?.freighter.upkeep ?? rules.ship.upkeep_per_day;
+    const depth = (g: Good) => rules.commodities[g].depth ?? 1;
+    this.prod = map.ports.map(p => GOODS.map(g => (p.produces.includes(g) ? m.production_per_hour[g] * k * depth(g) : 0)));
+    this.cons = map.ports.map(p => GOODS.map(g => (p.consumes.includes(g) ? m.consumption_per_hour[g] * k * depth(g) : 0)));
     // Seasons open with producers stocked up and consumers short, so trade pays from the first hour.
     const spread = m.start_spread ?? 0;
     this.difficulty = rules.difficulty?.default ?? "normal";
@@ -136,7 +150,7 @@ export class Engine {
     if (rules.difficulty) this.setDifficulty(this.difficulty);
     this.stock = map.ports.map(p => GOODS.map(g => {
       const makes = p.produces.includes(g), needs = p.consumes.includes(g);
-      return this.target * (1 + (makes && !needs ? spread : 0) - (needs && !makes ? spread : 0));
+      return this.targets[GOODS.indexOf(g)] * (1 + (makes && !needs ? spread : 0) - (needs && !makes ? spread : 0));
     }));
   }
 
@@ -144,7 +158,7 @@ export class Engine {
 
   price(port: number, g: number, stock = this.stock[port][g]): number {
     const c = this.rules.commodities[GOODS[g]];
-    const frac = Math.min(1, Math.max(0, 1 - stock / (2 * this.target)));
+    const frac = Math.min(1, Math.max(0, 1 - stock / (2 * this.targets[g])));
     return c.floor + (c.ceiling - c.floor) * frac;
   }
 
@@ -160,12 +174,29 @@ export class Engine {
     return qty * this.price(port, g, this.stock[port][g] + qty / 2);
   }
 
-  voyageHours(from: number, to: number): number {
-    return Math.max(1, Math.ceil(this.dist[from][to] / this.rules.ship.speed_per_hour));
+  /** Stats of a ship class. The freighter is `rules.ship`, so its upkeep follows the difficulty directly;
+   *  the other classes' upkeep is scaled by the same ratio. An unknown type falls back to the freighter. */
+  spec(type: ShipType = "freighter"): ShipSpec {
+    const r = this.rules, f = r.ship;
+    const t = type !== "freighter" && Object.hasOwn(r.ship_types ?? {}, type) ? r.ship_types![type] : undefined;
+    if (!t) return { capacity: f.capacity, speed_per_hour: f.speed_per_hour, fuel_per_100_distance: f.fuel_per_100_distance, price: f.price, upkeep: f.upkeep_per_day };
+    return { ...t, upkeep: t.upkeep * (f.upkeep_per_day / this.baseUpkeep) };
   }
 
-  fuelNeeded(from: number, to: number): number {
-    return (this.dist[from][to] * this.rules.ship.fuel_per_100_distance) / 100;
+  voyageHours(from: number, to: number, type: ShipType = "freighter"): number {
+    return Math.max(1, Math.ceil(this.dist[from][to] / this.spec(type).speed_per_hour));
+  }
+
+  fuelNeeded(from: number, to: number, type: ShipType = "freighter"): number {
+    return (this.dist[from][to] * this.spec(type).fuel_per_100_distance) / 100;
+  }
+
+  /** What a company pays at each daily upkeep: every ship's upkeep less one freighter's worth, so a
+   *  lone freighter or coaster is free (a company's first ship always was) and a lone bulker is not. */
+  upkeepDue(c: Company): number {
+    let sum = 0;
+    for (const id of c.ships) sum += this.spec(this.ships.get(id)!.type).upkeep;
+    return Math.max(0, sum - this.spec("freighter").upkeep);
   }
 
   // ------------------------------------------------------------ commands
@@ -179,7 +210,7 @@ export class Engine {
       case "register": return this.register(cmd.name, cmd.startPort);
       case "sail": return this.sail(cmd);
       case "sell": return this.sell(cmd.company, cmd.ship, cmd.order);
-      case "buyShip": return this.buyShip(cmd.company, cmd.port);
+      case "buyShip": return this.buyShip(cmd.company, cmd.port, cmd.shipType);
       case "scrapShip": return this.scrapShip(cmd.company, cmd.ship);
       case "placeOrder": return this.placeOrder(cmd);
       case "placeSell": return this.placeSell(cmd);
@@ -211,8 +242,8 @@ export class Engine {
     return { ok: true, id };
   }
 
-  private addShip(c: Company, port: number): Ship {
-    const s: Ship = { id: this.nextId++, owner: c.id, port, dest: null, departTick: 0, arriveTick: 0, good: null, qty: 0, cost: 0 };
+  private addShip(c: Company, port: number, type: ShipType = "freighter"): Ship {
+    const s: Ship = { id: this.nextId++, owner: c.id, port, type, dest: null, departTick: 0, arriveTick: 0, good: null, qty: 0, cost: 0 };
     this.ships.set(s.id, s);
     c.ships.push(s.id);
     return s;
@@ -235,7 +266,7 @@ export class Engine {
     if (s.dest !== null) return fail("ship is at sea");
     if (!this.isPort(cmd.dest) || cmd.dest === s.port) return fail("bad destination");
     if (!Number.isFinite(this.dist[s.port][cmd.dest])) return fail("no route");
-    const tax = this.rules.fees.trade_tax_rate;
+    const tax = this.rules.fees.trade_tax_rate, spec = this.spec(s.type);
 
     let cargoCost = 0, g = -1, qty = 0;
     if (cmd.buy) {
@@ -243,12 +274,12 @@ export class Engine {
       qty = Math.floor(cmd.buy.qty);
       if (g < 0 || !(qty > 0)) return fail("bad cargo");
       if (s.qty > 0) return fail("ship already loaded; sell first");
-      if (qty > this.rules.ship.capacity) return fail("over capacity");
+      if (qty > spec.capacity) return fail("over capacity");
       if (qty > this.stock[s.port][g]) return fail("not enough stock at this port");
       cargoCost = this.buyCost(s.port, g, qty).cost * (1 + tax);
     }
     // Fuel is bought after the cargo, so a fuel cargo raises the fuel price slightly.
-    const fuelQty = this.fuelNeeded(s.port, cmd.dest);
+    const fuelQty = this.fuelNeeded(s.port, cmd.dest, s.type);
     const stockAfter = g === FUEL ? this.stock[s.port][FUEL] - qty : this.stock[s.port][FUEL];
     const fuelHave = Math.min(fuelQty, Math.max(0, stockAfter));
     const fuelCost = fuelHave * this.price(s.port, FUEL, stockAfter - fuelHave / 2)
@@ -265,7 +296,7 @@ export class Engine {
     }
     this.stock[s.port][FUEL] = Math.max(0, this.stock[s.port][FUEL] - fuelHave);
     c.cash -= cargoCost + fuelCost;
-    const arrive = this.tick + this.voyageHours(s.port, cmd.dest);
+    const arrive = this.tick + this.voyageHours(s.port, cmd.dest, s.type);
     const open = this.openTrip(c.id, s.id);
     if (open && !cmd.buy && s.qty > 0) {
       // Carrying the same cargo on: one trip, now ending at the new port.
@@ -318,16 +349,19 @@ export class Engine {
     return { ok: true };
   }
 
-  private buyShip(company: number, port: number): Result {
+  private buyShip(company: number, port: number, type: unknown = "freighter"): Result {
     const c = this.companies.get(company);
     if (!c) return fail("no company");
     if (!this.isPort(port)) return fail("bad port");
+    if (typeof type !== "string" || !(SHIP_TYPES as readonly string[]).includes(type)) return fail("unknown ship class");
+    if (type !== "freighter" && !this.rules.ship_types) return fail("unknown ship class");
+    const price = this.spec(type as ShipType).price;
     if (c.ships.length >= this.rules.company.max_ships) return fail("fleet is at its maximum");
-    if (c.cash < this.rules.ship.price) return fail("not enough cash");
+    if (c.cash < price) return fail("not enough cash");
     const docked = c.ships.some(id => { const s = this.ships.get(id)!; return s.dest === null && s.port === port; });
     if (!docked) return fail("you need a ship docked at that port");
-    c.cash -= this.rules.ship.price;
-    return { ok: true, id: this.addShip(c, port).id };
+    c.cash -= price;
+    return { ok: true, id: this.addShip(c, port, type as ShipType).id };
   }
 
   private scrapShip(company: number, shipId: number): Result {
@@ -337,7 +371,7 @@ export class Engine {
     if (c.ships.length <= 1) return fail("you must keep one ship");
     if (s.dest !== null || s.qty > 0) return fail("ship must be docked and empty");
     this.removeShip(c, s);
-    c.cash += this.rules.ship.price * 0.5;
+    c.cash += this.spec(s.type).price * 0.5;
     return { ok: true };
   }
 
@@ -431,7 +465,7 @@ export class Engine {
     if (s.qty > 0 && s.good !== o.good) return fail("ship is carrying a different good");
     const qty = Math.floor(cmd.qty);
     if (!(qty > 0 && qty <= o.qty)) return fail("quantity must be between 1 and the amount listed");
-    if (s.qty + qty > this.rules.ship.capacity) return fail("over capacity");
+    if (s.qty + qty > this.spec(s.type).capacity) return fail("over capacity");
     const pay = qty * o.price;
     if (pay > c.cash) return fail("not enough cash");
     c.cash -= pay;
@@ -495,7 +529,7 @@ export class Engine {
       // Unsold goods go back onto one of your ships docked at that port.
       const ships = this.companies.get(company)!.ships.map(id => this.ships.get(id)!)
         .filter(s => s.dest === null && s.port === o.port && (s.qty === 0 || s.good === o.good)
-          && s.qty + o.qty <= this.rules.ship.capacity && (shipId === undefined || s.id === shipId));
+          && s.qty + o.qty <= this.spec(s.type).capacity && (shipId === undefined || s.id === shipId));
       const s = ships[0];
       if (!s) return fail("dock a ship with room for the goods at that port to take them back");
       s.good = o.good; s.qty += o.qty; s.cost += o.cost ?? 0;
@@ -548,11 +582,12 @@ export class Engine {
   advance(): void {
     if (this.seasonOver) return;
     this.tick++;
-    const cap = this.target * this.rules.markets.max_stock_multiple;
     const k = this.marketScale();
     for (let p = 0; p < this.n; p++)
-      for (let g = 0; g < 2; g++)
+      for (let g = 0; g < GOODS.length; g++) {
+        const cap = this.targets[g] * this.rules.markets.max_stock_multiple;
         this.stock[p][g] = Math.max(0, Math.min(cap, this.stock[p][g] + this.prod[p][g] * k) - this.cons[p][g] * k);
+      }
 
     for (const s of this.ships.values()) {
       if (s.dest !== null && s.arriveTick <= this.tick) {
@@ -568,14 +603,15 @@ export class Engine {
       for (const c of this.companies.values()) {
         const log = this.worthLog.get(c.id);
         if (log) log.push(Math.round(this.netWorth(c)));
-        c.cash -= this.rules.ship.upkeep_per_day * Math.max(0, c.ships.length - 1);
+        c.cash -= this.upkeepDue(c);
         if (c.cash < 0 && c.ships.length > 1) {
           const idle = c.ships.map(id => this.ships.get(id)!).find(s => s.dest === null && s.qty === 0);
           if (idle) {
             const cashBefore = c.cash;
-            this.removeShip(c, idle); c.cash += this.rules.ship.price * 0.5;
+            const paid = this.spec(idle.type).price * 0.5;
+            this.removeShip(c, idle); c.cash += paid;
             const list = this.forcedSales.get(c.id) ?? [];
-            list.push({ ship: idle.id, port: idle.port, tick: this.tick, paid: this.rules.ship.price * 0.5, cashBefore });
+            list.push({ ship: idle.id, port: idle.port, tick: this.tick, paid, cashBefore });
             this.forcedSales.set(c.id, list.slice(-10));
           }
         }
@@ -594,7 +630,7 @@ export class Engine {
 
   netWorth(c: Company): number {
     let w = c.cash;
-    for (const id of c.ships) w += this.rules.ship.price * 0.5 + this.ships.get(id)!.cost;
+    for (const id of c.ships) { const s = this.ships.get(id)!; w += this.spec(s.type).price * 0.5 + s.cost; }
     for (const o of this.orders.values())
       if (o.owner === c.id) w += o.side === "buy" ? o.qty * o.price : (o.cost ?? 0);
     return w;
@@ -602,7 +638,7 @@ export class Engine {
 
   /** Cargo and empty ships heading to each port: public information. */
   inbound(): { cargo: number[][]; emptyShips: number[] } {
-    const cargo = this.map.ports.map(() => [0, 0]);
+    const cargo = this.map.ports.map(() => GOODS.map(() => 0));
     const emptyShips = this.map.ports.map(() => 0);
     for (const s of this.ships.values()) {
       if (s.dest === null) continue;

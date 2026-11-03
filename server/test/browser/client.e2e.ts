@@ -953,7 +953,7 @@ test("scrapping a ship asks first, and the Fleet tab shows how net worth adds up
     const ask = p.locator('.shipCard[data-ship="999"] button[data-act="scrap"]');
     await ask.click();
     assert.deepEqual(await sent(), [], "the first tap only asks");
-    assert.match((await p.textContent("[data-field=scrapNote]"))!, /Scrapping Ship 999 pays 6,000 and can't be undone: a new ship costs 12,000\..*saves 400 a day.*net worth stays the same/s);
+    assert.match((await p.textContent("[data-field=scrapNote]"))!, /Scrapping Ship 999 pays 6,000 and can't be undone: a new ship like it costs 12,000\..*saves 400 a day.*net worth stays the same/s);
     await p.click('.shipCard[data-ship="999"] button[data-act="scrapKeep"]');
     await p.waitForSelector("[data-field=scrapNote]", { state: "detached", timeout: 5000 });   // Keep it closes the question
     assert.deepEqual(await sent(), []);
@@ -981,7 +981,7 @@ test("the Fleet tab says where to buy a ship, and a stuck ship is told how far o
     const port = (await me(p)).ships[0].port, name = map.ports[port].name;
     await p.click('#tabs button[data-tab="fleet"]');
     assert.equal(await p.textContent("[data-field=fleetBuy]"),
-      "A new ship costs 12,000 and is bought at a port where one of your ships is docked. You need 2,000 more cash.");
+      "A new ship costs 7,000 (coaster), 12,000 (freighter) or 24,000 (bulker) and is bought at a port where one of your ships is docked. You need 2,000 more cash for a freighter.");
     await p.click('[data-act="goPort"]');
     await p.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, name);
     assert.match((await p.textContent("[data-field=buyShipRow]"))!, /Buy a ship here \(12,000\).*You need 2,000 more cash/s);
@@ -1338,6 +1338,50 @@ test("the planned route doesn't hide the sailing time on its lane", { skip: SKIP
       return n;
     }, box);
     assert.equal(green, 0, "the planned route's dots are drawn over the lane's sailing time");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("four goods and three ship classes show up in the client", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`classes: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Four Goods"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    // The market table lists all four goods, each with its own tag and stock bar.
+    const goods = await p.locator("#panel table.market tr td:first-child .tag").allTextContents();
+    assert.deepEqual(goods, ["grain", "fuel", "ore", "machinery"]);
+    assert.equal(await p.locator("#panel table.market .bar").count(), 4);
+    // The ship card says its class, what it holds and its speed, and the sail form offers every good.
+    assert.match((await p.textContent(".shipCard[data-ship]"))!, /freighter.*holds 100, 40 per hour/s);
+    const loadOptions = await p.locator(".shipCard[data-ship] select[data-field=good] option").allTextContents();
+    assert.deepEqual(loadOptions.map((o: string) => o.replace(/ at .*/, "")), ["Sail empty", "Load grain", "Load fuel", "Load ore", "Load machinery"]);
+    // Choosing a class in the buy-ship control shows its price, stats and what it is for.
+    await p.evaluate(() => { const w = window as any; w.eval("me").cash = 40000; w.eval("render")(); });
+    assert.deepEqual(await p.locator("select[data-field=shipClass] option").allTextContents(), ["coaster · 7,000", "freighter · 12,000", "bulker · 24,000"]);
+    await p.selectOption("select[data-field=shipClass]", "bulker");
+    assert.match((await p.textContent("[data-field=buyShipRow]"))!, /Buy a ship here \(24,000\)/);
+    assert.match((await p.textContent("[data-field=classNote]"))!, /Slow and big.*Holds 200, sails 24 a hour/);
+    assert.match((await p.textContent("[data-field=buyShipNote]"))!, /net worth drops by 12,000/);
+    await p.selectOption("select[data-field=shipClass]", "coaster");
+    assert.match((await p.textContent("[data-field=buyShipRow]"))!, /Buy a ship here \(7,000\)/);
+    assert.match((await p.textContent("[data-field=buyShipNote]"))!, /net worth drops by 3,500/);
+    // Ships of every class draw on the map without errors, and the legend names all four producers.
+    await p.evaluate(() => {
+      const w = window as any, m = w.eval("me");
+      m.ships.push({ ...m.ships[0], id: 901, type: "coaster" }, { ...m.ships[0], id: 902, type: "bulker", qty: 120, good: 2 });
+      w.eval("render")(); w.eval("drawMap")();
+    });
+    const legend = await p.textContent(".legend");
+    for (const g of ["grain", "fuel", "ore", "machinery"]) assert.match(legend!, new RegExp(`${g} producer`));
+    if (process.env.SHOTS) {
+      await p.evaluate(() => { const w = window as any; w.eval("me").ships.length = 1; w.eval("render")(); });
+      await p.screenshot({ path: `${process.env.SHOTS}/port-390.png`, fullPage: true });
+    }
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });

@@ -454,6 +454,27 @@ describe("playing over WebSockets", () => {
     a.close();
   });
 
+  test("ship classes and goods reach the client: rules, per-ship type, and buying a class", async () => {
+    const a = new Client(s); await a.auth("register", uniq("Classes"));
+    const st = await a.state(m => m.me);
+    const w = st.world;
+    assert.deepEqual(w.goods, ["grain", "fuel", "ore", "machinery"]);
+    assert.deepEqual(Object.keys(w.rules.shipTypes), ["coaster", "freighter", "bulker"]);
+    assert.equal(w.rules.shipTypes.bulker.capacity, 200);
+    assert.equal(w.rules.targets.length, 4);
+    assert.equal(w.ports[0].prices.length, 4); assert.equal(w.ports[0].stock.length, 4); assert.equal(w.ports[0].inbound.length, 4);
+    assert.equal(st.me.ships[0].type, "freighter");
+    const port = st.me.ships[0].port;
+    assert.equal((await a.cmd({ type: "buyShip", port, shipType: "bulker" })).error, "not enough cash");
+    assert.equal((await a.cmd({ type: "buyShip", port, shipType: "tanker" })).error, "unknown ship class");
+    assert.equal((await a.cmd({ type: "buyShip", port, shipType: "coaster" })).ok, true);
+    const after = await a.fresh(m => m.me?.ships.length === 2);
+    assert.deepEqual(after.me.ships.map((x: any) => x.type), ["freighter", "coaster"]);
+    assert.ok(after.world.ships.some((x: any) => x.type === "coaster"), "other players can see the class");
+    assert.equal(after.me.cash, 10000 - 7000);
+    a.close();
+  });
+
   test("leaderboard lists companies by net worth", async () => {
     const c = new Client(s);
     const st = await c.seen(m => m.type === "state");

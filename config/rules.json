@@ -17,6 +17,17 @@
     "fuel": {
       "floor": 30,
       "ceiling": 90
+    },
+    "ore": {
+      "floor": 6,
+      "ceiling": 24,
+      "depth": 0.5
+    },
+    "machinery": {
+      "_comment": "Valuable and scarce: depth 0.1 means a port's market is a tenth the size of grain's, so a 100-unit load moves the price a lot and the same lane stops paying quickly. 100 units cost more than the 10,000 start cash, so early on cash decides the load.",
+      "floor": 50,
+      "ceiling": 250,
+      "depth": 0.1
     }
   },
   "markets": {
@@ -25,11 +36,15 @@
     "max_stock_multiple": 3,
     "production_per_hour": {
       "grain": 80,
-      "fuel": 65
+      "fuel": 65,
+      "ore": 110,
+      "machinery": 60
     },
     "consumption_per_hour": {
       "grain": 56,
-      "fuel": 28
+      "fuel": 28,
+      "ore": 77,
+      "machinery": 36
     },
     "reference_companies": 300,
     "min_scale": 0.05,
@@ -65,7 +80,13 @@
     "speed_per_hour": 40,
     "fuel_per_100_distance": 3,
     "upkeep_per_day": 400,
-    "_comment": "Upkeep applies to every ship after the first, so a broke company can always keep sailing. Companies in debt scrap an idle spare ship for half its price."
+    "_comment": "This is the freighter (the starting ship); other classes are in ship_types. Upkeep applies to every ship after the first, so a broke company can always keep sailing. Companies in debt scrap an idle spare ship for half its price."
+  },
+  "ship_types": {
+    "_comment": "Ship classes a company can buy. freighter must match `ship` (the starting ship). Coaster: fast, small, cheap, thirsty per unit of cargo. Bulker: slow, big, dear, but moves the most cargo per fuel. Upkeep is the Normal-difficulty figure; it scales with the difficulty preset in the same ratio as the freighter's (Easy x0.75, Hard x1.25). A company's upkeep is the total for its ships minus one freighter's worth (the old 'first ship is free'), so a single coaster or freighter costs nothing to keep.",
+    "coaster": { "capacity": 50, "speed_per_hour": 90, "fuel_per_100_distance": 2, "price": 7000, "upkeep": 250 },
+    "freighter": { "capacity": 100, "speed_per_hour": 40, "fuel_per_100_distance": 3, "price": 12000, "upkeep": 400 },
+    "bulker": { "capacity": 200, "speed_per_hour": 24, "fuel_per_100_distance": 6, "price": 24000, "upkeep": 800 }
   },
   "health_checks": {
     "_comment": "Thresholds the simulator reports against. Breaching one means the economy needs tuning.",

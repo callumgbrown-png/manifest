@@ -2,7 +2,7 @@
 // Season playtest: players who check in every few hours and follow the game's own advice panel,
 // against 30 live bots. Mirrors the client's "best trips" and "best move" maths (app.js) on the engine.
 import { readFileSync } from "node:fs";
-import { Engine } from "../server/src/engine.ts";
+import { Engine, GOODS } from "../server/src/engine.ts";
 import { runBots, botName, pickStartPort } from "../server/src/bots.ts";
 
 const rules = JSON.parse(readFileSync(new URL("../config/rules.json", import.meta.url), "utf8"));
@@ -29,7 +29,7 @@ function makeTools(e: Engine) {
   }
   function bestTrips(port: number, cash: number, cargo: number[][], delay = 0) {
     const out: { dest: number; g: number; qty: number; profit: number; hours: number }[] = [];
-    for (let g = 0; g < 2; g++) {
+    for (let g = 0; g < GOODS.length; g++) {
       const qty = Math.floor(Math.min(cap, e.stock[port][g], Math.max(0, cash - 300) / (e.price(port, g) * (1 + tax()) * 1.1)));
       if (qty < 10) continue;
       for (let d = 0; d < e.n; d++) {
@@ -116,7 +116,7 @@ for (let seed = 1; seed <= SEEDS; seed++) {
       const { cargo } = e.inbound();
       const trip = p.strat === "plan" ? T.planned(s.port, c.cash, cargo) : T.bestTrips(s.port, c.cash, cargo)[0];
       if (trip) {
-        if (e.apply({ type: "sail", company: p.id, ship: s.id, dest: trip.dest, buy: { good: trip.g === 0 ? "grain" : "fuel", qty: trip.qty } }).ok) p.trips++;
+        if (e.apply({ type: "sail", company: p.id, ship: s.id, dest: trip.dest, buy: { good: GOODS[trip.g], qty: trip.qty } }).ok) p.trips++;
         continue;
       }
       const before = c.cash;
