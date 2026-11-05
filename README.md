@@ -30,6 +30,14 @@ On Windows, double-click `server/start.bat`.
 
 ## Repository layout
 
+New worlds now use larger procedural landmasses and water-based A* shipping
+lanes. Terrain and routes are saved per season. Existing seasons retain their
+old map until you start a new season. See `docs/NAVIGATION.md` for details.
+Every fresh world/new season now randomizes all 40 coastal port positions,
+checks ocean connectivity, producer counts and spacing, and validates its full
+A* route graph before activation. See `docs/RANDOM_SEASONS.md` for seed options
+and failure handling.
+
 | Path | What it is |
 | --- | --- |
 | `config/rules.json` | All economy rules, shared by server and simulator |

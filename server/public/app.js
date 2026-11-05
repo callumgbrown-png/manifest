@@ -12,6 +12,7 @@ const store = {
 };
 
 let dist = null;
+let serverNavigation = null;
 let ws, world = null, me = null, tab = "port", selectedPort = null, tickAt = Date.now(), reqId = 0;
 const pendingReq = new Map();
 
@@ -32,13 +33,24 @@ function connect() {
   };
   ws.onmessage = ev => {
     const msg = JSON.parse(ev.data);
-    if (msg.type === "static") { dist = msg.dist; return; }
+    if (msg.type === "static") {
+      dist = msg.dist; serverNavigation = msg.navigation ?? null;
+      lanes = null; voyageCache.clear(); islandKey = ""; bgKey = "";
+      return;
+    }
     if (msg.type === "history") { hist = msg.history.slice(); return; }
     if (msg.type === "state") {
       if (!world || msg.world.tick !== world.tick) tickAt = Date.now();
       const firstLogin = !me && msg.me;
       const before = me;
+      const geometryChanged = !world || world.navigationId !== msg.world.navigationId;
       world = msg.world; me = msg.me;
+      if (serverNavigation && serverNavigation.id === world.navigationId) world.routes = serverNavigation.routes;
+      if (geometryChanged) {
+        lanes = null; voyageCache.clear(); formState.clear();
+        activeShip = null; selectedPort = null;
+      }
+      ensureIslandBuffer(world);
       if (before && me && before.id === me.id) noteDockings(before);
       noteprices();
       if ((selectedPort === null || firstLogin) && me?.ships?.length) selectedPort = me.ships[0].dest ?? me.ships[0].port;
@@ -145,7 +157,11 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("guide"
 
 // Shortest sea paths between ports, so ships follow the real lanes instead of cutting across.
 let lanes = null;   // { d: distance matrix, next: next-hop matrix }
+let routeIndex = new Map();
+const voyageCache = new Map();
 function buildLanes() {
+  routeIndex = ManifestNavigation.routeIndex(world.routes, world.ports);
+  voyageCache.clear();
   const n = world.ports.length;
   const d = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 0 : Infinity)));
   const next = Array.from({ length: n }, () => Array(n).fill(-1));
@@ -156,8 +172,13 @@ function buildLanes() {
 }
 function lanePath(a, b) {
   const path = [a];
-  for (let cur = a, guard = 0; cur !== b && guard < 64; guard++) { cur = lanes.next[cur][b]; if (cur < 0) return [a, b]; path.push(cur); }
+  for (let cur = a, guard = 0; cur !== b && guard < 64; guard++) { cur = lanes.next[cur][b]; if (cur < 0) return []; path.push(cur); }
   return path;
+}
+function voyageGeometry(a,b) {
+  const key = `${a}:${b}`;
+  if (!voyageCache.has(key)) voyageCache.set(key, ManifestNavigation.voyage(lanePath(a,b),routeIndex));
+  return voyageCache.get(key);
 }
 /** Where a ship is now: a point on its lane and the direction it's heading. */
 function shipPos(s) {
@@ -166,18 +187,7 @@ function shipPos(s) {
   const total = Math.max(1, s.arriveTick - s.departTick);
   const elapsed = world.tick - s.departTick + Math.min(1, (Date.now() - tickAt) / world.tickMs);
   const f = Math.max(0, Math.min(1, elapsed / total));
-  const path = lanePath(s.port, s.dest).map(i => world.ports[i]);
-  const segs = path.slice(1).map((q, i) => Math.hypot(q.x - path[i].x, q.y - path[i].y));
-  let left = f * segs.reduce((x, y) => x + y, 0);
-  for (let i = 0; i < segs.length; i++) {
-    const p = path[i], q = path[i + 1];
-    if (left <= segs[i] || i === segs.length - 1) {
-      const t = segs[i] ? Math.min(1, left / segs[i]) : 1;
-      return { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t, angle: Math.atan2(q.y - p.y, q.x - p.x), path, seg: i, f };
-    }
-    left -= segs[i];
-  }
-  return { x: a.x, y: a.y, angle: 0, path, f };
+  return {...ManifestNavigation.position(voyageGeometry(s.port,s.dest),f),f};
 }
 function distance(a, b) {
   // Real sea-route distance from the server; straight line only until it arrives.
@@ -267,6 +277,16 @@ function zoomAt(sx, sy, z) {
 // The sea, coast shading and lanes only change when the view does, so they're drawn once into a cache.
 const bg = document.createElement("canvas"), bgx = bg.getContext("2d");
 let bgKey = "";
+let islandBuffer = null, islandKey = "";
+function ensureIslandBuffer(state) {
+  const terrain = serverNavigation && serverNavigation.id === state.navigationId ? serverNavigation.terrain : null;
+  const key = terrain ? state.navigationId : ManifestIslands.geometryKey(state, MAP_W, MAP_H);
+  if (key === islandKey) return;
+  islandBuffer = terrain ? ManifestNavigation.terrainBuffer(terrain)
+    : ManifestIslands.createLayer(state.ports, state.routes, MAP_W, MAP_H, state.mapSeed ?? 7).canvas;
+  islandKey = key;
+  bgKey = "";
+}
 function drawBackground() {
   const dpr = window.devicePixelRatio || 1;
   const key = [W, H, dpr, view.scale.toFixed(4), view.ox.toFixed(1), view.oy.toFixed(1)].join();
@@ -278,6 +298,11 @@ function drawBackground() {
   const grad = g.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.5, Math.max(W, H) * 0.75);
   grad.addColorStop(0, "#123047"); grad.addColorStop(0.6, C.sea); grad.addColorStop(1, C["sea-deep"]);
   g.fillStyle = grad; g.fillRect(0, 0, W, H);
+  if (islandBuffer) {
+    g.imageSmoothingEnabled = true;
+    g.drawImage(islandBuffer, view.ox, view.oy,
+      MAP_W * view.scale, MAP_H * view.scale);
+  }
   // Chart grid.
   g.lineWidth = 1;
   for (let x = 0; x <= MAP_W; x += 50) {
@@ -297,9 +322,9 @@ function drawBackground() {
   }
   // Shipping lanes.
   g.strokeStyle = "rgba(140,190,220,.20)"; g.lineWidth = 1.2; g.setLineDash([]);
+  g.lineJoin = "round"; g.lineCap = "round";
   for (const r of world.routes) {
-    const [x1, y1] = P(world.ports[r.a]), [x2, y2] = P(world.ports[r.b]);
-    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+    ManifestNavigation.stroke(g, routeIndex.get(`${r.a}:${r.b}`).points, P);
   }
   // Compass (skipped on small screens, where it would sit on top of ports).
   if (W < 600) return;
@@ -333,12 +358,14 @@ function drawMap() {
   const placed = overlays.slice();
   if (focus !== null) {
     ctx.strokeStyle = rgba(C.ink, 0.38); ctx.lineWidth = 1.6;
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
     for (const r of world.routes) {
       if (r.a !== focus && r.b !== focus) continue;
-      const [x1, y1] = P(world.ports[r.a]), [x2, y2] = P(world.ports[r.b]);
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      const geometry = routeIndex.get(`${r.a}:${r.b}`);
+      ManifestNavigation.stroke(ctx, geometry.points, P);
       if (view.scale > 0.55) {
-        const h = Math.ceil(r.distance / world.rules.speed) + "h", mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        const h = Math.ceil(r.distance / world.rules.speed) + "h";
+        const [mx,my] = P(ManifestNavigation.position(geometry,.5));
         ctx.font = "600 10px IBM Plex Mono, monospace";
         const tw = ctx.measureText(h).width + 8;
         ctx.fillStyle = "rgba(10,22,32,.85)"; ctx.fillRect(mx - tw / 2, my - 8, tw, 15);
@@ -366,7 +393,7 @@ function drawMap() {
   const planDest = planVal === "" ? null : Number(planVal);
   if (planShipObj && planDest !== null && planDest !== planShipObj.port && world.ports[planDest]) {
     ctx.setLineDash([2, 5]); ctx.strokeStyle = rgba(C.mine, 0.9); ctx.lineWidth = 2.2; ctx.lineCap = "round";
-    ctx.beginPath(); lanePath(planShipObj.port, planDest).forEach((i, k) => ctx[k ? "lineTo" : "moveTo"](...P(world.ports[i]))); ctx.stroke();
+    ManifestNavigation.stroke(ctx, voyageGeometry(planShipObj.port,planDest).points, P);
     ctx.setLineDash([]); ctx.lineCap = "butt";
   }
 
@@ -436,15 +463,12 @@ function drawMap() {
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - Math.cos(pos.angle) * 22, y - Math.sin(pos.angle) * 22); ctx.stroke(); ctx.lineCap = "butt";
       ctx.shadowColor = C.mine; ctx.shadowBlur = 10;
     }
-    const img = shipSprite(s);
-    if (img) {
-      // Side-view sprite: flipped to face the way the ship is sailing, never upside down.
-      const w = own ? 34 : 24, h = w * img.height / img.width;
-      ctx.save(); ctx.translate(x, y);
-      if (Math.cos(pos.angle) < 0) ctx.scale(-1, 1);
-      ctx.globalAlpha = own ? 1 : 0.7; ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(img, -w / 2, -h * 0.65, w, h);
-      ctx.restore(); ctx.shadowBlur = 0;
+    ctx.save(); ctx.globalAlpha = own ? 1 : 0.7;
+    const drawn = window.ManifestShipSprites.draw(ctx, x, y, 32,
+      pos.angle, s.qty > 0 && s.good !== null ? GOOD_NAMES[s.good] : null);
+    ctx.restore();
+    if (drawn) {
+      ctx.shadowBlur = 0;
       continue;
     }
     ctx.save(); ctx.translate(x, y); ctx.rotate(pos.angle);
@@ -452,13 +476,6 @@ function drawMap() {
     ctx.fillStyle = own ? C.mine : s.qty > 0 ? "rgba(232,238,242,.85)" : "rgba(232,238,242,.5)"; ctx.fill();
     ctx.restore(); ctx.shadowBlur = 0;
   }
-}
-
-// Ship sprites by cargo; until they load, ships draw as arrows.
-const SPRITES = Object.fromEntries(["empty", "grain", "fuel"].map(k => { const im = new Image(); im.src = `img/ship-${k}.png`; return [k, im]; }));
-function shipSprite(s) {
-  const im = SPRITES[s.qty > 0 && s.good !== null ? GOOD_NAMES[s.good] : "empty"];
-  return im.complete && im.naturalWidth ? im : null;
 }
 
 function portAt(sx, sy) {

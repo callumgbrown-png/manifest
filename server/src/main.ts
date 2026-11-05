@@ -9,6 +9,9 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Engine, GOODS, type Command } from "./engine.js";
 import { runBots, botName, isBot, pickStartPort } from "./bots.js";
+import { addCoasts, type CoastDirection } from "./coasts.js";
+import { type NavigationMap } from "./navigation.js";
+import { generateRandomSeason, type RandomSeasonMap } from "./random-season.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..");
@@ -42,10 +45,39 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS seasons (id INTEGER PRIMARY KEY, ended TEXT NOT NULL, results TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS archived_events (season INTEGER NOT NULL, id INTEGER NOT NULL, at TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, company INTEGER NOT NULL, created TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS port_coasts (
+    port_id INTEGER PRIMARY KEY, dx REAL NOT NULL, dy REAL NOT NULL,
+    CHECK (dx*dx + dy*dy > 0.000001)
+  );
+  CREATE TABLE IF NOT EXISTS world_map (id INTEGER PRIMARY KEY CHECK(id=1), map_json TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS archived_maps (season INTEGER PRIMARY KEY, map_json TEXT NOT NULL);
 `);
+const coastRows = db.prepare("SELECT port_id, dx, dy FROM port_coasts").all();
+const coastOverrides = new Map<number, CoastDirection>(coastRows.map(row => [
+  Number(row.port_id), { dx: Number(row.dx), dy: Number(row.dy) }
+]));
+const coastalPorts = addCoasts(map.ports, map.routes, coastOverrides);
+const configuredMap = { ...map, ports: coastalPorts };
+async function createSeasonMap(season:number) {
+  return generateRandomSeason({
+    seed: process.env.MAP_SEED === undefined ? undefined : `${process.env.MAP_SEED}:season:${season}`,
+    settings: { minPortDistance: Number(process.env.MAP_MIN_PORT_DISTANCE ?? 56) },
+    maxAttempts: Number(process.env.MAP_MAX_ATTEMPTS ?? 128),
+    names: map.ports.map((p:any)=>p.name),
+  });
+}
+const savedMap = db.prepare("SELECT map_json FROM world_map WHERE id=1").get() as {map_json:string}|undefined;
+let activeMap:NavigationMap;
+if(savedMap) activeMap=JSON.parse(savedMap.map_json);
+else {
+  const existing = db.prepare("SELECT COUNT(*) AS n FROM events").get() as {n:number};
+  // Existing event logs retain their original distances until a new season.
+  activeMap=existing.n ? {...configuredMap,navigationId:'legacy-v1'} : await createSeasonMap(1);
+  db.prepare("INSERT INTO world_map(id,map_json) VALUES(1,?)").run(JSON.stringify(activeMap));
+}
 const insertEvent = db.prepare("INSERT INTO events (at, kind, payload) VALUES (?, ?, ?)");
 
-let engine = new Engine(rules, map, EXPECTED);
+let engine = new Engine(rules, activeMap, EXPECTED);
 
 // Recent hourly prices for the client's trend lines. Not stored: rebuilt while replaying the log.
 const HISTORY_HOURS = 72;
@@ -65,6 +97,9 @@ for (const row of db.prepare("SELECT kind, payload FROM events ORDER BY id").all
   replayed++;
 }
 console.log(`Replayed ${replayed} events; game is at day ${engine.metrics().day}, hour ${engine.tick % 24}; market scale ${engine.scale.toFixed(2)} for ${EXPECTED} expected companies`);
+if ('generation' in activeMap) {
+  console.log(`Map seed: ${JSON.stringify((activeMap as RandomSeasonMap).generation.seed)}; map ${activeMap.navigationId}`);
+}
 
 // A brand-new world starts at the chosen difficulty (recorded in the log like any admin change).
 if (replayed === 0 && DIFFICULTY) startDifficulty();
@@ -158,6 +193,8 @@ function publicView() {
   return {
     tick: engine.tick,
     tickMs: TICK_MS,
+    mapSeed: activeMap.seed ?? 7,
+    navigationId: activeMap.navigationId,
     goods: GOODS,
     rules: {
       shipPrice: engine.rules.ship.price, capacity: engine.rules.ship.capacity, speed: engine.rules.ship.speed_per_hour,
@@ -166,14 +203,15 @@ function publicView() {
       maxShips: engine.rules.company.max_ships, bands: engine.rules.commodities,
       target: engine.target, difficulty: engine.difficulty,
     },
-    ports: map.ports.map((p: any, i: number) => ({
+    ports: activeMap.ports.map((p: any, i: number) => ({
       id: p.id, name: p.name, x: p.x, y: p.y, produces: p.produces, consumes: p.consumes,
+      coastDirection: p.coastDirection,
       prices: [0, 1].map(g => round2(engine.price(i, g))),
       stock: engine.stock[i].map(Math.round),
       inbound: inbound.cargo[i].map(Math.round),
       emptyInbound: inbound.emptyShips[i],
     })),
-    routes: map.routes,
+    routes: activeMap.routes.map(({a,b,distance})=>({a,b,distance})),
     ships: [...engine.ships.values()].map(s => ({
       id: s.id, owner: s.owner, port: s.port, dest: s.dest, departTick: s.departTick, arriveTick: s.arriveTick,
       good: s.good, qty: Math.round(s.qty),
@@ -273,7 +311,12 @@ function handle(req: IncomingMessage, res: ServerResponse) {
   }
   if (url.pathname === "/api/admin/new-season" && req.method === "POST") {
     if (!isAdmin(req)) return json(res, 403, { error: "admin token required" });
-    return json(res, 200, newSeason());
+    if (seasonTransition) return json(res,409,{error:'A new season is already being prepared'});
+    void newSeason().then(result=>json(res,200,result)).catch(error=>{
+      console.error('New season generation failed:',error);
+      json(res,503,{error:'Map verification failed. The current season has been preserved.'});
+    });
+    return;
   }
   // Static files
   let path = url.pathname === "/" ? "/index.html" : url.pathname === "/admin" ? "/admin.html" : url.pathname === "/seasons" ? "/seasons.html" : url.pathname;
@@ -297,7 +340,7 @@ wss.on("connection", (ws, req) => {
   const forwarded = TRUST_PROXY ? String(req.headers["x-forwarded-for"] ?? "").split(",").pop()!.trim() : "";
   const client: Client = { ws, ip: forwarded || req.socket.remoteAddress || "?", recent: [] };
   clients.add(client);
-  send(client, { type: "static", dist: engine.dist.map(r => r.map(d => Math.round(d))) });
+  sendStatic(client);
   send(client, { type: "history", history });
   send(client, { type: "state", world: publicView(), me: null });
   ws.on("close", () => clients.delete(client));
@@ -364,6 +407,14 @@ function send(c: Client, msg: unknown) {
 function sendState(c: Client, world = publicView()) {
   send(c, { type: "state", world, me: c.company ? privateView(c.company) : null });
 }
+function sendStatic(c:Client) {
+  send(c,{type:'static',dist:engine.dist,navigation:{
+    id:activeMap.navigationId,terrain:activeMap.terrain??null,routes:activeMap.routes,
+    generation: 'generation' in activeMap ? {
+      seed:(activeMap as RandomSeasonMap).generation.seed,version:(activeMap as RandomSeasonMap).generation.generatorVersion
+    } : null
+  }});
+}
 let pending: NodeJS.Timeout | null = null;
 function broadcastSoon() {
   if (pending) return;
@@ -383,14 +434,22 @@ function finalStandings() {
 }
 
 /** Archive this season, then start a fresh world. Accounts carry over with new companies. */
-function newSeason() {
+let seasonTransition = false;
+async function newSeason() {
+  seasonTransition = true;
+  try {
   const seasonId = Number((db.prepare("SELECT COALESCE(MAX(id), 0) + 1 AS n FROM seasons").get() as { n: number }).n);
+  const nextMap=await createSeasonMap(seasonId+1);
+  const previousEngine=engine, previousMap=activeMap, previousHistory=history;
   db.exec("BEGIN");
   try {
     db.prepare("INSERT INTO seasons (id, ended, results) VALUES (?, ?, ?)").run(seasonId, new Date().toISOString(), JSON.stringify(finalStandings()));
     db.prepare("INSERT INTO archived_events SELECT ?, id, at, kind, payload FROM events").run(seasonId);
+    db.prepare("INSERT INTO archived_maps(season,map_json) VALUES(?,?)").run(seasonId,JSON.stringify(activeMap));
+    db.prepare("UPDATE world_map SET map_json=? WHERE id=1").run(JSON.stringify(nextMap));
     db.exec("DELETE FROM events; DELETE FROM sessions;");
-    engine = new Engine(rules, map, EXPECTED);
+    activeMap=nextMap;
+    engine = new Engine(rules, activeMap, EXPECTED);
     startDifficulty();
     history = [];
     recordPrices();
@@ -401,15 +460,20 @@ function newSeason() {
       if (r.ok) update.run(r.id!, a.name);
     }
     db.exec("COMMIT");
-  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  } catch (e) {
+    db.exec("ROLLBACK"); engine=previousEngine; activeMap=previousMap; history=previousHistory;
+    throw e;
+  }
   ensureBots();
   for (const c of clients) {
     c.company = c.token = undefined;
+    sendStatic(c);
     send(c, { type: "history", history });
     send(c, { type: "authError", error: "A new season has started. Log in again." });
   }
   broadcastSoon();
   return { ok: true, season: seasonId + 1 };
+  } finally { seasonTransition=false; }
 }
 
 // ------------------------------------------------------------ clock

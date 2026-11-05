@@ -26,8 +26,8 @@ export interface Rules {
 }
 
 export interface MapData {
-  ports: { id: number; name: string; x: number; y: number; produces: Good[]; consumes: Good[] }[];
-  routes: { a: number; b: number; distance: number }[];
+  ports: { id: number; name: string; x: number; y: number; produces: Good[]; consumes: Good[]; coastDirection?: { dx: number; dy: number } }[];
+  routes: { a: number; b: number; distance: number; waypoints?: { x:number; y:number }[] }[];
 }
 
 export interface Ship {
