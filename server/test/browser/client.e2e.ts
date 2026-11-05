@@ -3,7 +3,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { startServer, ADMIN, cleanup, type Srv } from "../helpers.ts";
+import { startServer, ADMIN, cleanup, Client, type Srv } from "../helpers.ts";
 
 import { createRequire } from "node:module";
 
@@ -60,11 +60,12 @@ async function closeGuide(page: any) {
   await page.keyboard.press("Escape");
   await page.waitForSelector("#guide.hidden", { state: "attached" });
 }
-async function sailTo(page: any, port: number, load?: string) {
+async function sailTo(page: any, port: number, load?: string, qty?: number) {
   await page.click('#tabs button[data-tab="fleet"]');
   const card = page.locator(".shipCard[data-ship]").first();
   await card.locator("select[data-field=dest]").selectOption(String(port));
   await card.locator("select[data-field=good]").selectOption(load ?? "");
+  if (qty) await card.locator("input[data-field=qty]").fill(String(qty));   // the box is off until a good is picked
   await page.locator('body').click({ position: { x: 5, y: 5 } });   // leave the form so the panel can refresh
   await card.locator("button[data-act=sail]").click();
   await toast(page, new RegExp(`Sailing to ${map.ports[port].name}`));
@@ -98,9 +99,15 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await a.click("#guideNext");
   await a.waitForSelector("#guide.hidden", { state: "attached" });
   assert.equal(await a.evaluate(() => localStorage.getItem("guideSeen")), "1");
+  // Once signed in, "How to play" in the header opens the guide again from step 1.
+  await a.click("#help");
+  await a.waitForSelector("#guide:not(.hidden)");
+  assert.equal(await a.textContent("#guideStep"), "Step 1 of 4");
+  await a.keyboard.press("Escape");
+  await a.waitForSelector("#guide.hidden", { state: "attached" });
   assert.equal(await a.textContent("#hCash"), "10,000");
   assert.equal(await a.textContent("#conn"), "live");
-  assert.match((await a.textContent("#hClock"))!, /^Day 1 of 56, \d\d:00$/);
+  assert.match((await a.textContent("#hClock"))!, /^Day \d+ of 56, \d\d:00$/);   // day 1, or 2 on a slow machine (150 ms game hours)
 
   const b = await player("B");
   await b.fill("#authName", "Alpha Lines"); await b.fill("#authPass", "password123");
@@ -143,8 +150,17 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   const shown = Number(await homeCard.locator("select[data-field=dest]").inputValue());
   const other = map.ports.findIndex((_: any, i: number) => i !== home && i !== shown);
   const company = await a.textContent("#panel h2");
+  // On a phone the map sits above the panel: picking a port must not scroll the map off the screen,
+  // so the toast carries the result of the estimate.
+  await a.setViewportSize({ width: 390, height: 800 });
+  await a.waitForTimeout(200);
+  await a.evaluate(() => window.scrollTo(0, 0));
   await tapPort(a, other);
-  await toast(a, new RegExp(`→ ${map.ports[other].name} \\(≈\\d+ h\\)\\. Tap it again to open the port\\.`));
+  await toast(a, new RegExp(`→ ${map.ports[other].name} \\(≈\\d+ h\\): sailing empty costs about [\\d,]+\\. Tap it again to open the port\\.`));
+  assert.equal(await a.evaluate(() => window.scrollY), 0, "the page stays on the map");
+  assert.ok(await a.locator("#toast.warn").count(), "a trip that costs money gets a warning mark, not a green tick");
+  await a.setViewportSize({ width: 1280, height: 800 });
+  await a.waitForTimeout(200);
   assert.equal(await a.textContent("#panel h2"), company, "first tap keeps the panel open");
   assert.equal(await homeCard.locator("select[data-field=dest]").inputValue(), String(other), "first tap fills the destination");
   const fuel = await a.evaluate((d: number) => { const w = window as any; return Math.round(w.eval("fuelCost")(w.eval("me").ships[0].port, d)); }, other);
@@ -185,38 +201,74 @@ test("two players play through every feature in the browser", { skip: SKIP, time
     return { oneShip, inDebt, emptyOne, emptyTwo, rich };
   });
   assert.match(broke.oneShip, /^Not enough cash: the cargo costs about [\d,]+ and you have 500\. You can afford about \d+ grain\./);
-  assert.match(broke.inDebt, /^Not enough cash: the cargo costs about [\d,]+ and you have -500\. Sail empty instead: your last ship's fuel can go on credit\./);
+  assert.match(broke.inDebt, /^Not enough cash: the cargo costs about [\d,]+ and you have -500\. Cargo must be paid for in cash; only fuel goes on credit\./);
   assert.doesNotMatch(broke.emptyOne, /Not enough cash/, "a last ship can always sail empty");
   assert.match(broke.emptyOne, /goes on credit/);
   assert.match(broke.emptyTwo, /^Not enough cash: the fuel costs about [\d,]+ and you have -500\. Only a company's last ship can sail on credit/);
   assert.doesNotMatch(broke.rich, /Not enough cash/);
 
-  // ---- server refusals show as a red toast
+  // ---- server refusals show as a red toast (the form itself won't send an oversized load, so
+  // send one the way an out-of-date page could)
   await card.locator("input[data-field=qty]").fill("500");
-  await card.locator("button[data-act=sail]").click();
+  assert.ok(await card.locator("button[data-act=sail]").isDisabled(), "the form won't send 500 grain");
+  await a.evaluate(() => { const w = window as any, s = w.eval("me").ships[0];
+    w.eval("command")({ type: "sail", ship: s.id, dest: w.eval("world").ports.find((p: any) => p.id !== s.port).id, buy: { good: "grain", qty: 500 } }); });
   await toast(a, /over capacity/);
   assert.ok(await a.locator("#toast.bad").count());
+
+  // ---- with the connection down, a click says nothing was done instead of silently doing nothing
+  await a.evaluate(() => { const ws = (window as any).eval("ws"); ws.onclose = null; ws.close(); });
+  await a.waitForFunction(() => (window as any).eval("ws").readyState === WebSocket.CLOSED);
+  await card.locator("input[data-field=qty]").fill("60");
+  await a.locator("body").click({ position: { x: 5, y: 5 } });
+  await card.locator("button[data-act=sail]").click();
+  await toast(a, /Not connected to the server, so nothing was done/);
+  assert.ok(await a.locator("#toast.bad").count());
+  await a.evaluate(() => (window as any).eval("connect")());
+  await a.waitForFunction(() => document.getElementById("conn")!.textContent === "live");
+  await a.waitForFunction(() => (window as any).eval("me")?.ships[0].dest === null);
 
   // ---- sail with grain to a neighbour; ship shows as sailing; sell on arrival
   const nb = map.routes.find((r: any) => r.a === home || r.b === home);
   const dest = nb.a === home ? nb.b : nb.a;
-  await card.locator("input[data-field=qty]").fill("60");
-  await sailTo(a, dest, "grain");
+  await sailTo(a, dest, "grain", 60);
   await a.waitForFunction(() => /Sailing to .*, arrives in \d+ h/.test(document.getElementById("panel")!.textContent!));
   const cashSailing = (await me(a)).cash;
   assert.ok(cashSailing < 10000);
   await waitDocked(a, dest);
+  await a.click('#tabs button[data-tab="fleet"]');
+  await a.waitForFunction(() => /not sold yet/.test(document.querySelector(".trips-log")?.textContent ?? ""));   // docked, cargo still aboard
   await selectPort(a, dest);
   // List 20 for sale, then sell the rest to the market.
   const shipCard = a.locator(".shipCard[data-ship]").first();
+  assert.match((await shipCard.locator("[data-field=listNote]").textContent())!, /buy grain from the market here for about \d+\.\d\d each with tax, so a listing above that rarely sells; the price box starts just under it\. You get your price less \d+(\.\d)?% tax\./);
   await shipCard.locator("input[data-field=sellQty]").fill("20");
   await shipCard.locator("input[data-field=sellPrice]").fill("39");
   await a.locator("body").click({ position: { x: 5, y: 5 } });
   await shipCard.locator("button[data-act=listSell]").click();
   await toast(a, /Listed for sale/);
   await a.waitForFunction(() => (window as any).eval("me").ships[0].qty === 40);
+  // A listing that meets a waiting buy order sells at once, and the toast says so instead of "Listed".
+  const listed = (res: object) => a.evaluate((r: object) => (window as any).eval("listedText")(r), res);
+  assert.equal(await listed({ ok: true, id: 9 }), "Listed for sale");
+  assert.equal(await listed({ ok: true, sold: 15, earned: 1116 }), "Sold 15 at once to a waiting buy order for 1,116 after tax");
+  assert.equal(await listed({ ok: true, id: 9, sold: 5, earned: 372 }), "Sold 5 at once to a waiting buy order for 372 after tax; the rest is listed for sale");
+  // The net-worth chart starts on the day the company was founded (Day 1 only for companies there from the start).
+  const startDay = (len: number, tick: number) => a.evaluate(([l, t]) => (window as any).eval("worthStartDay")(l, t), [len, tick]);
+  assert.equal(await startDay(1, 5), 1, "founded today, day 1");
+  assert.equal(await startDay(3, 48), 1, "founded on day 1, now day 3");
+  assert.equal(await startDay(1, 17 * 24 + 22), 18, "founded at day 18, 22:00");
+  assert.equal(await startDay(40, 1344), 18, "same company at season end (day 57 start logged)");
+  // The sell button says what the whole cargo fetches after tax; the note says what that makes.
+  const sellText = (await a.locator('.shipCard button[data-act="sell"]').textContent())!;
+  assert.match(sellText, /^Sell 40 grain here for [\d,]+$/);
+  assert.match((await shipCard.locator("[data-field=saleNote]").textContent())!, /after \d+(\.\d)?% tax.*You paid [\d,]+, so this sale (makes \+[\d,]+|loses [\d,]+|breaks even)\./);
+  const quoted = Number(sellText.split(" for ")[1].replace(/\D/g, "")), cashPre = (await me(a)).cash;
   await a.locator('.shipCard button[data-act="sell"]').click();
   await toast(a, /^Sold$/);
+  await a.waitForFunction(() => (window as any).eval("me").ships[0].qty === 0);
+  const got = (await me(a)).cash - cashPre;
+  assert.ok(Math.abs(got - quoted) < Math.max(5, quoted * 0.03), `button said ${quoted}, sale paid ${got.toFixed(0)}`);
   await a.waitForFunction(() => (window as any).eval("me").ships[0].qty === 0);
   assert.ok((await me(a)).cash > cashSailing);
 
@@ -238,11 +290,11 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await a.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("buying fuel"));
   assert.equal((await me(a)).cash, cashBefore - 500);
   assert.ok((await a.textContent("#panel"))!.includes("selling grain"), "the listing shows under your orders");
-  // A price outside the band is refused.
+  // A price outside the band is caught before the click (the server refuses it too).
   await a.fill("#oPrice", "5");
   await a.locator("body").click({ position: { x: 5, y: 5 } });
-  await a.click('button[data-act="placeOrder"]');
-  await toast(a, /price must be between 30 and 90/);
+  assert.equal(await a.textContent("#oCost"), "Price for fuel must be between 30 and 90.");
+  assert.ok(await a.locator('button[data-act="placeOrder"]').isDisabled());
   const buyRow = a.locator("#panel tr", { hasText: "buying fuel" });
   await buyRow.locator('button[data-act="cancelOrder"]').click();
   await toast(a, /Order cancelled/);
@@ -255,9 +307,28 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await b.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("from Alpha Lines at 39.00"));
   assert.ok((await b.textContent("#panel"))!.includes("Alpha Lines"), "player orders table shows the seller");
   const aCash = (await me(a)).cash;
+  // The listing says what it costs in total and how that compares with the market here,
+  // so a buyer never pays over the odds without knowing (it said only "Buy 20" before).
+  assert.equal(await b.locator('button[data-act="buyOrder"]').textContent(), "Buy 20 for 780");
+  assert.match((await b.locator("[data-field=listingNote]").textContent())!,
+    /(less than buying 20 from the market here \(about [\d,]+ with tax\)|from the market here costs about [\d,]+ with tax, [\d,]+ less than this listing|About the same)/);
+  // With less cash the button offers what you can afford, and with too little it's off.
+  const withCash = (cash: number) => b.evaluate((c: number) => {
+    const w = window as any, real = w.eval("me");
+    w.__real = real; w.eval(`me = Object.assign({}, me, { cash: ${c} })`);
+    const html = w.eval("listingHtml")(real.ships[0], w.eval("world").orders.find((o: any) => o.side === "sell"));
+    w.eval("me = window.__real");
+    return html as string;
+  }, cash);
+  const some = await withCash(100);
+  assert.match(some, /Buy 2 for 78</); assert.match(some, /You can afford 2 of 20\./);
+  const none = await withCash(10);
+  assert.match(none, /<button class="secondary" disabled>Buy<\/button>/); assert.match(none, /Not enough cash: one costs 39\.00 and you have 10\./);
+  const bCash = (await me(b)).cash;
   await b.locator('button[data-act="buyOrder"]').click();
   await toast(b, /^Bought$/);
   await b.waitForFunction(() => (window as any).eval("me").ships[0].qty === 20);
+  assert.ok(Math.abs((await me(b)).cash - (bCash - 780)) < 0.01, "paid what the button said");
   await a.waitForFunction((c: number) => (window as any).eval("me").cash > c, aCash);
   assert.equal((await worldOf(a)).orders.length, 0);
 
@@ -271,12 +342,17 @@ test("two players play through every feature in the browser", { skip: SKIP, time
   await b.click('button[data-act="placeOrder"]');
   await toast(b, /Order posted/);
   await a.click('#tabs button[data-tab="fleet"]');
-  await a.locator(".shipCard input[data-field=qty]").first().fill("15");
-  await sailTo(a, home, "grain");
+  await sailTo(a, home, "grain", 15);
   await waitDocked(a, home);
   await a.click('#tabs button[data-tab="fleet"]');
+  // The fill button says what the delivery pays after tax.
+  const fillText = (await a.locator('button[data-act="fill"]').textContent())!;
+  assert.match(fillText, /^Fill .+'s order: 15 for [\d,]+$/);
+  const fillCash = (await me(a)).cash;
   await a.locator('button[data-act="fill"]').click();
   await toast(a, /Order filled/);
+  await a.waitForFunction((c: number) => (window as any).eval("me").cash > c, fillCash);
+  assert.ok(Math.abs((await me(a)).cash - fillCash - Number(fillText.split(" for ")[1].replace(/\D/g, ""))) < 1, "fill paid what the button said");
   await a.waitForFunction(() => (window as any).eval("me").ships[0].qty === 0);
 
   // ---- buy a second ship, see upkeep text, scrap it again
@@ -288,8 +364,9 @@ test("two players play through every feature in the browser", { skip: SKIP, time
     await toast(a, /New ship bought/);
     await a.click('#tabs button[data-tab="fleet"]');
     await a.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("2 of 5 ships"));
-    await a.locator('button[data-act="scrap"]').last().click();
-    await toast(a, /Ship scrapped/);
+    await a.locator('button[data-act="scrap"]').last().click();   // asks first
+    await a.locator('[data-field=scrapNote] + .row button[data-act="scrap"]').click();
+    await toast(a, /Ship \d+ scrapped for 6,000/);
   } else {
     await selectPort(a, home);
     assert.equal(await a.locator('button[data-act="buyShip"]').count(), 0, "no buy button that would only fail");
@@ -362,6 +439,14 @@ test("two players play through every feature in the browser", { skip: SKIP, time
       assert.ok(await a.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "no sideways scrolling");
     }
   }
+  // At 390 px (most iPhones) the header's top row needed 401 px with the longest difficulty pill, so
+  // Log out wrapped onto a row of its own and pushed everything down.
+  await a.setViewportSize({ width: 390, height: 800 });
+  const headTops = await a.evaluate(() => {
+    const d = document.getElementById("diff")!; d.className = "pill diff normal"; d.textContent = "Normal world";
+    return ["#diff", "#help", "#logout"].map(q => Math.round(document.querySelector(q)!.getBoundingClientRect().top / 10));
+  });
+  assert.ok(headTops.every(r => r === headTops[0]), `difficulty, Help and Log out share one row at 390 px (tops ${headTops})`);
 
   assert.deepEqual(errors, []);
 });
@@ -391,6 +476,10 @@ test("admin page shows health and changes live rules", { skip: SKIP, timeout: 60
   await page.waitForFunction(() => document.getElementById("err")!.textContent === "Saved.");
   const m = await (await fetch(s.url + "/api/admin/metrics", { headers: { "x-admin-token": ADMIN } })).json();
   assert.equal(m.tax, 0.06); assert.equal(m.upkeep, 400);
+  // A hand-set value makes the world "custom"; the page says the next season still starts on the server's level.
+  assert.equal(await page.textContent("#diffNow"), "custom");
+  assert.equal(await page.textContent("#nextDiff"), "normal");
+  assert.match((await page.textContent("#nextDiffWhy"))!, /not the current one/);
   await page.fill("#tax", "0.9");
   await page.click("#apply");
   await page.waitForFunction(() => document.getElementById("err")!.textContent === "tax must be 0 to 0.3");
@@ -408,6 +497,13 @@ test("past seasons page lists finished seasons", { skip: SKIP, timeout: 60000 },
   const text = (await page.textContent("#list"))!;
   assert.match(text, /Season 1 · ended/);
   assert.ok(text.includes("Alpha Lines") && text.includes("Beta Shipping"));
+  // Companies on the same net worth share a place, like the in-game leaderboard.
+  const rows = await page.$$eval(".season tr", trs => trs.slice(1).map(tr => [Number(tr.cells[0].textContent), tr.cells[2].textContent, tr.className]));
+  rows.forEach(([place, worth, cls], i) => {
+    const first = rows.findIndex(r => r[1] === worth);
+    assert.equal(place, first + 1, `row ${i + 1} (${worth}) shares the place of the first company on that worth`);
+    assert.equal(cls === "first", place === 1);
+  });
   await page.click("text=Back to the game");
   await page.waitForURL(s.url + "/");
   assert.deepEqual(errors, []);
@@ -560,6 +656,732 @@ test("admin can switch the world to easy and players see it", { skip: SKIP, time
     const game = await ctx.newPage();
     await game.goto(t.url);
     await game.waitForFunction(() => document.getElementById("diff")!.textContent === "Easy world");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("a new Hard world, where no trip pays anywhere yet, says so instead of blaming the port", { skip: SKIP, timeout: 60000 }, async () => {
+  // At hour 0 of a Hard season (9% tax, 40 port fee) the pre-stocked ports aren't far enough apart
+  // for any trip to pay. The panel used to say "from here or one hop away", as if moving would help.
+  const t = await startServer({ DIFFICULTY: "hard" });
+  try {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    page.on("pageerror", (e: Error) => errors.push(`hard: ${e.message}`));
+    await page.goto(t.url);
+    await page.fill("#authName", "Hardy Freight"); await page.fill("#authPass", "password123");
+    await page.click("button[data-mode=register]");
+    await closeGuide(page);
+    const nowhere = await page.evaluate(() => { const w = (window as any).eval("world"), m = (window as any).eval("me");
+      return w.ports.every((p: any) => (window as any).eval("rawTrips")({ ...m.ships[0], port: p.id, qty: 0 }, 1).length === 0); });
+    assert.ok(nowhere, "test assumes no trip pays anywhere at hour 0 on Hard");
+    await page.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("No trip pays anywhere on the map right now"));
+    assert.ok(!(await page.textContent("#panel"))!.includes("one hop away"));
+    assert.ok(await page.locator("button[data-act=sail]").first().isDisabled(), "nothing is preselected, so Set sail waits for a choice");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("keyboard players: the guide keeps Tab inside it, and focus survives live updates", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "200", BOTS: "5" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`keyboard: ${e.message}`));
+    await p.goto(t.url);
+    // The sign-in card keeps Tab on itself: past "How to play" it doesn't reach the header behind it.
+    await p.focus("#howToPlay"); await p.keyboard.press("Tab");
+    assert.ok(!(await p.evaluate(() => document.querySelector("header")!.contains(document.activeElement))), "Tab doesn't reach the game behind the sign-in card");
+    await p.fill("#authName", "Keys Ltd"); await p.fill("#authPass", "password123");
+    await p.focus('button[data-mode="register"]'); await p.keyboard.press("Enter");
+    await p.waitForSelector("#guide:not(.hidden)");
+    const inGuide = () => p.evaluate(() => document.getElementById("guide")!.contains(document.activeElement));
+    for (let i = 0; i < 4; i++) { await p.keyboard.press("Tab"); assert.ok(await inGuide(), `Tab ${i + 1} stays in the guide`); }
+    await p.keyboard.press("Shift+Tab"); assert.ok(await inGuide(), "Shift+Tab stays in the guide");
+    await p.keyboard.press("Escape");
+    await p.waitForSelector("#guide.hidden", { state: "attached" });
+    const focused = () => p.evaluate(() => { const a = document.activeElement as HTMLElement; return a.dataset.tab ?? a.id; });
+    assert.equal(await focused(), "port", "closing the guide shown at sign-up puts focus on the open tab, not nowhere");
+    assert.equal(await p.evaluate(() => (document.querySelector("header") as any).inert), false, "the game is usable once signed in");
+    // Tabs: arrow keys, Home and End move between tabs and open them; only the open tab is in the Tab order.
+    await p.keyboard.press("ArrowRight");
+    assert.equal(await focused(), "fleet"); assert.equal(await p.getAttribute('#tabs button[data-tab="fleet"]', "aria-selected"), "true");
+    await p.keyboard.press("End"); assert.equal(await focused(), "board");
+    await p.keyboard.press("ArrowRight"); assert.equal(await focused(), "port", "ArrowRight wraps round");
+    await p.keyboard.press("ArrowLeft"); assert.equal(await focused(), "board");
+    await p.keyboard.press("Home"); assert.equal(await focused(), "port");
+    assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll("#tabs button")].map(b => (b as HTMLElement).tabIndex)), [0, -1, -1, -1]);
+    // Help opens the guide; closing it goes back to Help.
+    await p.focus("#help"); await p.keyboard.press("Enter");
+    await p.waitForSelector("#guide:not(.hidden)");
+    await p.keyboard.press("Escape");
+    assert.equal(await focused(), "help", "focus goes back to the Help button");
+    // Every form control says what it is to a screen reader.
+    await p.waitForSelector("#panel select[data-field=good]");
+    const unlabelled = () => p.evaluate(() => [...document.querySelectorAll("#panel input, #panel select")]
+      .filter(e => !(e as HTMLInputElement).labels?.length && !e.getAttribute("aria-label")).map(e => e.outerHTML.slice(0, 60)));
+    assert.deepEqual(await unlabelled(), [], "sail form controls are labelled");
+    await p.click('#tabs button[data-tab="orders"]');
+    assert.deepEqual(await unlabelled(), [], "order form controls are labelled (Port too)");
+    await p.click('#tabs button[data-tab="port"]');
+    // Focus a button in the panel, then let several ticks (and bot trades) rebuild the panel.
+    await p.waitForSelector("#panel button[data-act]");
+    await p.focus("#panel button[data-act]");
+    const act = await p.evaluate(() => (document.activeElement as HTMLElement).dataset.act);
+    const tick = (await worldOf(p)).tick;
+    await p.waitForFunction((t0: number) => (window as any).eval("world").tick >= t0 + 5, tick);
+    assert.equal(await p.evaluate(() => (document.activeElement as HTMLElement).dataset.act), act, "the same button still has focus");
+    await p.focus('#tabs button[data-tab="fleet"]'); await p.keyboard.press("Enter");
+    assert.equal(await p.getAttribute('#tabs button[data-tab="fleet"]', "aria-selected"), "true", "screen readers hear which tab is open");
+    assert.equal(await p.getAttribute('#tabs button[data-tab="port"]', "aria-selected"), "false");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("the sail form says why a load won't work before the click, instead of a bare server refusal", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "5000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`load form: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Careful Cargo"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    await p.click('#tabs button[data-tab="fleet"]');
+    const card = p.locator(".shipCard[data-ship]").first();
+    const ship = (await me(p)).ships[0];
+    const dest = map.ports.find((q: any) => q.id !== ship.port).id;
+    await card.locator("select[data-field=dest]").selectOption(String(dest));
+    await card.locator("select[data-field=good]").selectOption("grain");
+    const sail = card.locator("button[data-act=sail]"), est = card.locator("[data-field=estimate]");
+    const qty = card.locator("input[data-field=qty]");
+    for (const [q, msg] of [["150", /holds 100 at most/], ["0", /Enter how many grain to load/], ["", /Enter how many grain to load/], ["-3", /Enter how many/]] as const) {
+      await qty.fill(q);
+      assert.match((await est.textContent())!, msg, `quantity ${JSON.stringify(q)}`);
+      assert.ok(await sail.isDisabled(), `Set sail is off for quantity ${JSON.stringify(q)}`);
+    }
+    await qty.fill("20");
+    assert.match((await est.textContent())!, /This trip (makes|loses) about/);
+    assert.ok(!(await sail.isDisabled()), "a sensible load can sail");
+    // More than the port has in stock.
+    const text = await p.evaluate(() => {
+      const w = window as any, s = w.eval("me").ships[0], port = w.eval("world").ports[s.port];
+      const card = document.querySelector(".shipCard[data-ship]")!, saved = port.stock[0];
+      port.stock[0] = 12; w.eval("estimate")(card);
+      const text = card.querySelector("[data-field=estimate]")!.textContent;
+      port.stock[0] = saved; w.eval("estimate")(card);
+      return text;
+    });
+    assert.match(text, /only has 12 grain in stock/);
+    // Sailing empty: the quantity box has nothing to count and is switched off.
+    await card.locator("select[data-field=good]").selectOption("");
+    assert.ok(await qty.isDisabled(), "quantity box is off when sailing empty");
+    assert.match((await est.textContent())!, /Sailing empty costs about/);
+    assert.ok(!(await sail.isDisabled()));
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("buying a ship warns about the debt sale, and a ship sold for debt is explained", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "5000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`debt sale: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Two Hulls"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const m = await me(p);
+    assert.deepEqual(m.forcedSales, [], "the server sends the (empty) list of debt sales");
+    // Port tab of the docked ship, with just enough cash to buy: the note warns how little is left.
+    const note = (cash: number) => p.evaluate((c: number) => {
+      const w = window as any; w.eval("me").cash = c; w.eval("render")();
+      return document.querySelector("[data-field=buyShipNote]")?.outerHTML ?? "";
+    }, cash);
+    const tight = await note(12_500);
+    assert.match(tight, /class="est warn"/);
+    assert.match(tight, /You'd have 500 cash left, less than one full load here/);
+    assert.match(tight, /if your cash is below zero then, an idle spare ship is sold for 6,000/);
+    const roomy = await note(40_000);
+    assert.doesNotMatch(roomy, /warn|You'd have/, "no warning with plenty of cash");
+    assert.match(roomy, /idle spare ship is sold/, "the rule is still explained");
+    // The server sold a ship at the day's upkeep: a warning toast, and a note on the Fleet tab.
+    await p.click('#tabs button[data-tab="fleet"]');
+    const out = await p.evaluate(() => {
+      const w = window as any, cur = w.eval("me"), before = { ...cur, forcedSales: [] };
+      cur.forcedSales = [{ ship: 77, port: cur.ships[0].port, tick: 48, paid: 6000, cashBefore: -140 }];
+      w.eval("noteForcedSales")(before); w.eval("render")();
+      return { toast: document.getElementById("toast")!.className + " " + document.getElementById("toast")!.textContent,
+        fleet: document.querySelector("[data-field=forcedSale]")?.textContent ?? "" };
+    });
+    assert.match(out.toast, /warn.*Ship 77 was sold at .+ for 6,000 at the start of day 3: your cash was -140 after the daily upkeep/);
+    assert.match(out.fleet, /Ship 77 was sold/);
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("after setting sail the port panel says where your ship went; best trips explain a hop and the ranking", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "5000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`where ships are: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Gone Sailing"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const out = await p.evaluate(() => {
+      const w = window as any, m = w.eval("me"), world = w.eval("world"), s = m.ships[0];
+      const from = s.port, to = world.ports.find((q: any) => q.id !== from).id;
+      // The ship has just left: the panel is still on the port it left.
+      Object.assign(s, { dest: to, departTick: world.tick, arriveTick: world.tick + 7 });
+      w.eval("selectedPort = " + from); w.eval("render")();
+      const empty = document.querySelector("#panel .empty")?.textContent ?? "";
+      Object.assign(s, { dest: null });
+      // A trip whose destination has nothing paying, but a short empty hop does.
+      const trip = { dest: to, g: 0, qty: 100, profit: 300, hours: 4, fuel: 100, next: null,
+        onward: { dest: from, cost: 120, hours: 2, next: { profit: 520 } } };
+      const html = w.eval("tripsHtml")(s, [trip, { ...trip, onward: null, profit: 200 }]);
+      return { empty, html, to: world.ports[to].name, from: world.ports[from].name, id: s.id };
+    });
+    assert.match(out.empty, new RegExp(`None of your ships are docked here\\. Ship ${out.id} is sailing to ${out.to}, arriving in 7 h\\.`));
+    assert.doesNotMatch(out.empty, /Pick a port with your ship/);
+    assert.match(out.html, new RegExp(`then \\+400 after a 2 h empty hop to ${out.from}`));
+    assert.doesNotMatch(out.html, /short hop to more trips/);
+    assert.match(out.html, /Ranked by what each trip earns an hour, counting the next trip from where it ends/);
+    // On a 320 px phone the cash change shown after a trade sits beside the cash, not over the clock's label.
+    await p.setViewportSize({ width: 320, height: 700 });
+    const overlap = await p.evaluate(() => {
+      const d = document.getElementById("hDelta")!; d.textContent = "-5,818"; d.classList.add("show");
+      const a = d.getBoundingClientRect(), b = document.getElementById("hClock")!.parentElement!.querySelector("span")!.getBoundingClientRect();
+      return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+    });
+    assert.equal(overlap, false, "cash change overlaps the season clock label at 320 px");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("a company whose cash is too low to load is told so, not that every company is waiting", { skip: SKIP, timeout: 60000 }, async () => {
+  // Cargo must be paid for in cash and only a last ship's fuel goes on credit, so a one-ship company
+  // below zero can never load again. The panel said "No trip pays anywhere on the map right now, so
+  // every company is waiting ... check back in a few hours", and the sail form said "Sail empty instead".
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`broke: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Deep Red"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const at = (cash: number, listed = false) => p.evaluate(([c, l]: [number, boolean]) => {
+      const w = window as any, m = w.eval("me"), world = w.eval("world"), s = m.ships[0];
+      m.cash = c;
+      world.orders = l ? [{ id: 9, owner: m.id, ownerName: m.name, side: "sell", port: (s.port + 1) % world.ports.length, good: 0, qty: 50, price: 30 }] : [];
+      w.eval("selectedPort = " + s.port); w.eval("tab = 'port'"); w.eval("render")();
+      return { advice: document.querySelector("[data-field=cashAdvice]")?.textContent ?? "", panel: document.getElementById("panel")!.textContent!,
+        rich: w.eval("paysAnywhere")(s, 1e9), red: document.getElementById("hCash")!.classList.contains("neg") };
+    }, [cash, listed] as [number, boolean]);
+    const broke = await at(-2513);
+    assert.ok(broke.rich, "test assumes some trip pays for a company with money");
+    assert.match(broke.advice, /Your cash is -2,513, so you can't buy cargo.*can't trade again this season/);
+    assert.ok(!broke.panel.includes("every company is waiting"));
+    assert.ok(broke.red, "negative cash shows in red");
+    assert.match((await at(-2513, true)).advice, /goods you listed for sale are your way back/);
+    const low = await at(150);
+    assert.match(low.advice, /with 150 cash you can't buy a load worth sailing/);
+    assert.equal(low.red, false);
+    assert.equal((await at(16000)).advice, "", "no cash note for a company with money");
+    // The sail form under that advice said "Waiting is free: prices move every hour, so check back
+    // soon. Or pick a port above if you want to move anyway", which a company stuck below zero can't use.
+    const formNote = async (cash: number) => { await at(cash); return p.evaluate(() => { const w = window as any; return w.eval("noDestText")(w.eval("me").ships[0]); }); };
+    const debtNote = await formNote(-2513);
+    assert.match(debtNote, /Sailing empty puts its fuel on credit, adding to the debt/);
+    assert.ok(!/check back soon|move anyway/.test(debtNote), debtNote);
+    assert.match(await formNote(150), /load what you can afford/);
+    assert.match(await formNote(16000), /^Waiting is free/);
+    // Picking a load by hand while below zero: no "Sail empty instead" (that only deepens the debt).
+    await at(-2513);
+    const card = p.locator(".shipCard[data-ship]").first();
+    await card.locator("[data-field=dest] option:not([disabled])").first().evaluate((o: any) => { o.selected = true; o.parentElement.dispatchEvent(new Event("change", { bubbles: true })); });
+    await card.locator("[data-field=good]").selectOption("grain");
+    const est = await card.locator("[data-field=estimate]").textContent();
+    assert.match(est!, /Not enough cash.*Cargo must be paid for in cash; only fuel goes on credit/);
+    assert.ok(!est!.includes("Sail empty instead"));
+    // The Orders tab: a buy order the cash can't cover is refused by the server, so Post is off.
+    await p.click('#tabs button[data-tab="orders"]');
+    assert.match((await p.textContent("#oCost"))!, /Not enough cash: this order needs 3,000 to cover it and you have -2,513/);
+    assert.ok(await p.locator("button[data-act=placeOrder]").isDisabled());
+    await p.evaluate(() => { const w = window as any; w.eval("me").cash = 16000; w.eval("render")(); });
+    assert.match((await p.textContent("#oCost"))!, /If it fills, this costs you 3,000/);
+    assert.equal(await p.locator("button[data-act=placeOrder]").isDisabled(), false);
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("scrapping a ship asks first, and the Fleet tab shows how net worth adds up", { skip: SKIP, timeout: 60000 }, async () => {
+  // One tap on "Scrap for 6,000" used to scrap a 12,000 ship at once, and the Fleet tab showed
+  // net worth 13,558 beside cash 1,558 and cargo 0 with nothing saying where the 12,000 came from.
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`scrap: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Spare Hull"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    await p.click('#tabs button[data-tab="fleet"]');
+    assert.equal(await p.textContent("[data-field=worthSum]"),
+      "Net worth 16,000 = cash 10,000 + 1 ship at half price 6,000 + cargo at cost 0.");
+    assert.equal(await p.locator('button[data-act="scrap"]').count(), 0, "a last ship can't be scrapped");
+    // A second docked ship (client side only), with every command the client sends recorded.
+    await p.evaluate(() => {
+      const w = window as any, m = w.eval("me"), world = w.eval("world"), s0 = m.ships[0];
+      m.ships.push({ ...s0, id: 999 }); m.cash = 1558; m.worth = 13558;
+      world.orders = [{ id: 5, owner: m.id, ownerName: m.name, side: "sell", port: s0.port, good: 0, qty: 10, price: 30, cost: 250 }];
+      m.worth += 250;
+      w.sent = []; const ws = w.eval("ws"), send = ws.send.bind(ws);
+      ws.send = (d: string) => { w.sent.push(JSON.parse(d)); send(d); };
+      w.eval("render")();
+    });
+    assert.equal(await p.textContent("[data-field=worthSum]"),
+      "Net worth 13,808 = cash 1,558 + 2 ships at half price 12,000 + cargo at cost 0 + open orders 250.");
+    const sent = () => p.evaluate(() => (window as any).sent.filter((m: any) => m.cmd?.type === "scrapShip").map((m: any) => m.cmd));
+    const ask = p.locator('.shipCard[data-ship="999"] button[data-act="scrap"]');
+    await ask.click();
+    assert.deepEqual(await sent(), [], "the first tap only asks");
+    assert.match((await p.textContent("[data-field=scrapNote]"))!, /Scrapping Ship 999 pays 6,000 and can't be undone: a new ship like it costs 12,000\..*saves 400 a day.*net worth stays the same/s);
+    await p.click('.shipCard[data-ship="999"] button[data-act="scrapKeep"]');
+    await p.waitForSelector("[data-field=scrapNote]", { state: "detached", timeout: 5000 });   // Keep it closes the question
+    assert.deepEqual(await sent(), []);
+    await ask.click();
+    await p.click('.shipCard[data-ship="999"] [data-field=scrapNote] + .row button[data-act="scrap"]');
+    const cmds = await sent();
+    assert.equal(cmds.length, 1);
+    assert.equal(cmds[0].ship, 999, "the confirm button scraps that ship");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("the Fleet tab says where to buy a ship, and a stuck ship is told how far off the nearest paying trip is", { skip: SKIP, timeout: 60000 }, async () => {
+  // "Buy a ship" was only on the Port tab of a port with your ship docked, and the Fleet tab never
+  // said so. And a test player sat 8 game days at one port told only "waiting costs nothing".
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0", DIFFICULTY: "hard" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`fleetBuy: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Yard Visit"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const port = (await me(p)).ships[0].port, name = map.ports[port].name;
+    await p.click('#tabs button[data-tab="fleet"]');
+    assert.equal(await p.textContent("[data-field=fleetBuy]"),
+      "A new ship costs 7,000 (coaster), 12,000 (freighter) or 24,000 (bulker) and is bought at a port where one of your ships is docked. You need 2,000 more cash for a freighter.");
+    await p.click('[data-act="goPort"]');
+    await p.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, name);
+    assert.match((await p.textContent("[data-field=buyShipRow]"))!, /Buy a ship here \(12,000\).*You need 2,000 more cash/s);
+    assert.ok(await p.locator("[data-field=buyShipRow]").isVisible());
+    const inView = await p.evaluate(() => { const r = document.querySelector("[data-field=buyShipRow]")!.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; });
+    assert.ok(inView, "the buy row is scrolled into view");
+    // Client-side states: fleet full, and every ship at sea.
+    await p.click('#tabs button[data-tab="fleet"]');
+    const fleetText = (mut: string) => p.evaluate((src: string) => {
+      const w = window as any, m = w.eval("me"); new Function("m", src)(m); w.eval("render")();
+      return document.querySelector("[data-field=fleetBuy]")?.textContent;
+    }, mut);
+    assert.match((await fleetText("m.ships[0].dest = 3;"))!, /All your ships are at sea, so wait until one docks/);
+    assert.equal(await fleetText("m.ships[0].dest = null; for (let i = 0; i < 4; i++) m.ships.push({ ...m.ships[0], id: 900 + i });"),
+      "Your fleet is full: 5 ships is the most a company can have.");
+    await p.evaluate(() => { const m = (window as any).eval("me"); m.ships.length = 1; });
+
+    // Nothing pays anywhere at hour 0 on Hard. Stock another port up with grain, a little more each
+    // step, until a trip from there just pays: the empty move there then costs more than it earns.
+    const found = await p.evaluate(() => {
+      const w = window as any, world = w.eval("world"), s = w.eval("me").ships[0];
+      const q = world.ports.find((x: any) => x.id !== s.port && x.produces.includes("grain")), qs = q.stock[0];
+      for (let f = 1; f <= 5; f += 0.01) {
+        q.stock[0] = qs * f;
+        const pays = w.eval("rawTrips")({ ...s, port: q.id, qty: 0 }, 1).length > 0;
+        if (pays) { w.eval("render")(); return !w.eval("bestMove")(s) && w.eval("rawTrips")(s, 1).length === 0; }
+      }
+      return false;
+    });
+    assert.ok(found, "found a world where a trip pays elsewhere but no move earns +50");
+    await p.click('#tabs button[data-tab="port"]');
+    const text = (await p.textContent("#panel"))!;
+    assert.match(text, /No trip pays from here right now, and no empty move to another port earns at least \+50 after its fuel and fees\. Nearest option: sail empty to .+ \(\d+ h, about [\d,]+ in fuel and fees\), then load (grain|fuel) for .+ \(\+[\d,]+\): (only \+\d+|−[\d,]+) overall at today's prices\. Waiting costs nothing/);
+    assert.ok(!text.includes("one hop away"));
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("the Port tab follows a ship from the port it left to where it docks, and links to docked ships", { skip: SKIP, timeout: 60000 }, async () => {
+  // A player watching the port their only ship left saw "None of your ships are docked here" when it
+  // docked, with its Sell button somewhere else on the map. The market note also said "Inbound cargo
+  // will push prices down" at ports with nothing inbound.
+  const t = await startServer({ TICK_MS: "400", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`follow: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Follow Me"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const home = (await me(p)).ships[0].port;
+    const near = await p.evaluate((h: number) => { const d = (window as any).eval("dist")[h]; return d.map((x: number, i: number) => [x, i]).filter((x: number[]) => x[1] !== h).sort((a: number[], b: number[]) => a[0] - b[0])[0][1]; }, home);
+    if (await p.textContent("#panel h2") !== map.ports[home].name) await selectPort(p, home);
+    const card = p.locator(".shipCard[data-ship]").first();
+    await card.locator("select[data-field=dest]").selectOption(String(near));
+    await card.locator("select[data-field=good]").selectOption("grain");
+    await card.locator("input[data-field=qty]").fill("10");
+    await p.locator("body").click({ position: { x: 5, y: 5 } });
+    await card.locator("button[data-act=sail]").click();
+    await toast(p, new RegExp(`Sailing to ${map.ports[near].name}`));
+    assert.equal(await p.textContent("#panel h2"), map.ports[home].name, "still on the port it left");
+    await p.waitForFunction(() => /None of your ships are docked here\. Ship \d+ is sailing to/.test(document.getElementById("panel")!.textContent!));
+    assert.equal(await p.locator('[data-act="openPort"]').count(), 0, "no link while every ship is at sea");
+    await toast(p, /docked at/);
+    await p.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, map.ports[near].name);
+    const sell = (await p.textContent("#panel"))!;
+    assert.match(sell, /Sell 10 grain here for/);
+    assert.match(sell, /so this sale (makes \+[\d,]+|loses [\d,]+|breaks even)\./, "a loss is 'loses 96', not 'loses −96'");
+    // Looking at another port: a button opens the port where the ship is docked.
+    await p.evaluate((h: number) => { const w = window as any; w.eval(`selectedPort = ${h}`); w.eval("render")(); }, home);
+    assert.match((await p.textContent("#panel"))!, new RegExp(`Ship \\d+ is docked at ${map.ports[near].name}\\.`));
+    await p.click('[data-act="openPort"]');
+    await p.waitForFunction((n: string) => document.querySelector("#panel h2")?.textContent === n, map.ports[near].name);
+    // The market note only mentions inbound cargo when there is some (no bots, nothing sailing).
+    assert.match((await p.locator("#panel .est", { hasText: "heading here to load" }).textContent())!, /No empty ships heading here to load\. No cargo is heading here either\./);
+    // Set sail from the Fleet tab, watch the Leaderboard while it sails, then open Port: it shows the
+    // port the ship docked at, not the one it left (it used to only follow while Port was open).
+    await p.click('#tabs button[data-tab="fleet"]');
+    const fcard = p.locator(".shipCard[data-ship]").first();
+    await fcard.locator("select[data-field=dest]").selectOption(String(home));
+    await p.locator("body").click({ position: { x: 5, y: 5 } });
+    await fcard.locator("button[data-act=sail]").click();
+    await toast(p, new RegExp(`Sailing to ${map.ports[home].name}`));
+    await p.click('#tabs button[data-tab="board"]');
+    await toast(p, new RegExp(`docked at ${map.ports[home].name}`));
+    await p.click('#tabs button[data-tab="port"]');
+    assert.equal(await p.textContent("#panel h2"), map.ports[home].name, "Port tab opens where the ship docked");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("a ship at a dead end is told to move out when two trips from the nearest busy port pay", { skip: SKIP, timeout: 60000 }, async () => {
+  // A test ship sat at Dunness from day 25 to the end of the season told "waiting costs nothing":
+  // no empty move paid back with ONE trip, though the second trip from there would have.
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0", DIFFICULTY: "hard" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`chain: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Dead End"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    // Nothing pays anywhere at hour 0 on Hard. Stock a grain port until a trip from it just pays,
+    // then stock the other good at that trip's destination until the trip after pays well, stopping
+    // before any one-step move pays.
+    const found = await p.evaluate(() => {
+      const w = window as any, world = w.eval("world"), s = w.eval("me").ships[0];
+      const raw = w.eval("rawTrips"), bestMove = w.eval("bestMove"), chainMove = w.eval("chainMove");
+      for (const q of world.ports.filter((x: any) => x.id !== s.port && x.produces.includes("grain"))) {
+        const save = world.ports.map((x: any) => [...x.stock]);
+        let t1 = null;
+        for (let f = 1, qs = q.stock[0]; f <= 5 && !t1; f += 0.01) { q.stock[0] = qs * f; [t1] = raw({ ...s, port: q.id, qty: 0 }, 1); }
+        if (t1 && !bestMove(s)) {
+          const r = world.ports[t1.dest], g = 1 - t1.g;
+          for (let f = 1, rs = r.stock[g]; f <= 8; f += 0.02) {
+            r.stock[g] = rs * f;
+            if (raw(s, 1).length || bestMove(s)) break;
+            const c = chainMove(s);
+            if (c) { w.eval("render")(); return { dest: c.dest, net: Math.round(c.next.profit + c.then.profit - c.cost), first: c.next.profit - c.cost }; }
+          }
+        }
+        world.ports.forEach((x: any, i: number) => { x.stock = save[i]; });
+      }
+      return null;
+    });
+    assert.ok(found, "found a world where only a two-trip move pays");
+    assert.ok(found.net >= 50 && found.first < 50, "the first trip alone doesn't pay for the move");
+    await p.click('#tabs button[data-tab="fleet"]');
+    const card = p.locator(".shipCard[data-ship]").first();
+    const text = (await card.textContent())!.replace(/\s+/g, " ");
+    assert.match(text, /Sail empty → .+, then load (grain|fuel) for .+, then (grain|fuel) for .+ \+[\d,]+ · \d+ h/);
+    assert.match(text, /Getting there costs about [\d,]+ in fuel and fees\. The first trip from there pays about \+[\d,]+, which doesn't cover that on its own, and the one after about \+[\d,]+/);
+    assert.ok(!text.includes("Waiting costs nothing"));
+    assert.equal(await card.locator("select[data-field=dest]").inputValue(), String(found.dest), "the form starts on the move");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("two ships docked together aren't both sent on the same empty move", { skip: SKIP, timeout: 60000 }, async () => {
+  // With two ships docked at one port, both were told "sail empty to X, then load grain for Y". A
+  // playthrough followed it with both (two -579 empty trips side by side); the second paid more for
+  // its load and sold it for less. A move to a port your own empty ship is already heading to is left out.
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`twin: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Twin Hulls"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    await p.click('#tabs button[data-tab="fleet"]');
+    // Empty the port so nothing can be loaded here and the card falls back to a move (client side only).
+    const first = await p.evaluate(() => {
+      const w = window as any, world = w.eval("world"), s = w.eval("me").ships[0];
+      world.ports[s.port].stock[0] = 0; world.ports[s.port].stock[1] = 0;
+      const mv = w.eval("bestMove")(s);
+      w.eval("render")();
+      return mv?.dest ?? null;
+    });
+    assert.notEqual(first, null, "a move pays from an empty port at the start of a Normal season");
+    const card = p.locator('.shipCard[data-ship]').first();
+    assert.equal(await card.locator("select[data-field=dest]").inputValue(), String(first), "one ship: the form starts on the move");
+    // A second ship of ours, sailing empty to that port now.
+    const second = await p.evaluate((dest: number) => {
+      const w = window as any, m = w.eval("me"), world = w.eval("world"), s0 = m.ships[0];
+      m.ships.push({ ...s0, id: 999, dest, departTick: world.tick, arriveTick: world.tick + 5, qty: 0 });
+      w.eval("render")();
+      return w.eval("bestMove")(s0)?.dest ?? null;
+    }, first);
+    assert.notEqual(second, first, "the move another ship is already making isn't offered again");
+    const text = (await card.textContent())!.replace(/\s+/g, " ");
+    assert.match(text, new RegExp(`Not suggesting a move to ${map.ports[first].name} \\(Ship 999\\): that ship is already sailing there empty to load`));
+    if (second !== null) assert.equal(await card.locator("select[data-field=dest]").inputValue(), String(second));
+    else assert.ok(!text.includes(`→ ${map.ports[first].name},`));
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("listings start under the market price, and a listing can only be cancelled with a ship there to take it back", { skip: SKIP, timeout: 60000 }, async () => {
+  // "List for sale" started at 1.15x the price, above what the market charges a buyer, beside a note
+  // saying such a listing "rarely sells". The Orders tab offered Cancel on every listing, though the
+  // server refuses unless one of your ships is docked there with room ("dock a ship with room...").
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`listing: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Quay Sellers"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    for (const good of [0, 1]) {
+      const r = await p.evaluate((g: number) => {
+        const w = window as any, s = w.eval("me").ships[0];
+        Object.assign(s, { good: g, qty: 100, cost: 3000 });
+        w.eval("selectedPort = " + s.port); w.eval("tab = 'port'"); w.eval("render")();
+        return { box: Number((document.querySelector("[data-field=sellPrice]") as HTMLInputElement).value), market: w.eval("marketBuyUnit")(s) };
+      }, good);
+      assert.ok(r.box < r.market && r.box >= r.market - 0.5, `good ${good}: box ${r.box}, market charges ${r.market}`);
+    }
+    const orders = (state: string) => p.evaluate((st: string) => {
+      const w = window as any, m = w.eval("me"), world = w.eval("world"), s = m.ships[0];
+      Object.assign(s, st === "sailing" ? { dest: (s.port + 1) % world.ports.length, qty: 0 } : st === "full" ? { dest: null, good: 0, qty: 100 } : { dest: null, qty: 0 });
+      world.orders = [{ id: 9, owner: m.id, ownerName: m.name, side: "sell", port: s.port, good: 1, qty: 50, price: 60 },
+        { id: 10, owner: m.id, ownerName: m.name, side: "buy", port: s.port, good: 0, qty: 10, price: 20 }];
+      w.eval("tab = 'orders'"); w.eval("render")();
+      const rows = [...document.querySelectorAll("#panel tr")];
+      const sell = rows.find(tr => tr.textContent!.includes("selling fuel"))!, buy = rows.find(tr => tr.textContent!.includes("buying grain"))!;
+      return { sell: sell.textContent, sellBtn: !!sell.querySelector("[data-act=cancelOrder]"), buyBtn: !!buy.querySelector("[data-act=cancelOrder]") };
+    }, state);
+    const docked = await orders("docked");
+    assert.ok(docked.sellBtn && docked.buyBtn, "an empty ship docked there can take the goods back");
+    for (const st of ["sailing", "full"]) {
+      const r = await orders(st);
+      assert.equal(r.sellBtn, false, `no Cancel on a listing when the ship is ${st}`);
+      assert.match(r.sell!, /Dock a ship with room here to cancel/);
+      assert.ok(r.buyBtn, "buy orders can always be cancelled");
+    }
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth) <= 390, "no sideways scroll at 390 px");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("a seller is told when their listing sells, and the trip log counts the sale", { skip: SKIP, timeout: 60000 }, async () => {
+  // A listing's money arrived with no word (cash just jumped), and the trip it came from showed the
+  // whole cargo cost as a loss for good ("* Listed cargo isn't counted until it sells", but it never was).
+  const t = await startServer({ TICK_MS: "150", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`listing sold: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Quay Listers"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    const run = (cmd: any) => p.evaluate((c: any) => new Promise<void>((res, rej) => {
+      (window as any).eval("command")(c, res); setTimeout(() => rej(new Error("no reply to " + c.type)), 5000);
+    }), cmd);
+    const ship = (await me(p)).ships[0], from = ship.port;
+    const dist = await p.evaluate(() => (window as any).eval("dist"));
+    const dest = dist[from].findIndex((d: number, i: number) => i !== from && Number.isFinite(d) && d > 0);
+    await run({ type: "sail", ship: ship.id, dest, buy: { good: "grain", qty: 50 } });
+    await waitDocked(p, dest);
+    // With cargo aboard and no trip worth more than selling here, the empty form pointed at the Sell
+    // button's opposite: "Waiting is free". It should say to sell (or carry the cargo elsewhere).
+    const noDest = (sh: any) => p.evaluate((x: any) => (window as any).eval("noDestText")(x), sh);
+    const loaded = (await me(p)).ships[0];
+    assert.match(await noDest(loaded), /^Selling here pays best right now: use the Sell button above\. Or pick a port above to carry your grain there instead\.$/);
+    assert.match(await noDest({ ...loaded, qty: 0 }), /^Waiting is free/);
+    await run({ type: "placeSell", ship: ship.id, qty: 50, price: 39 });
+    await p.click('#tabs button[data-tab="fleet"]');
+    await p.waitForFunction(() => /listed for sale/.test(document.querySelector(".trips-log")?.textContent ?? ""));
+    const cashListed = (await me(p)).cash;
+
+    const b = new Client(t);
+    await b.auth("register", "Quay Buyers");
+    assert.ok((await b.cmd({ type: "placeOrder", port: dest, good: "grain", qty: 20, price: 39 })).ok);
+    await toast(p, new RegExp(`Your listing at ${map.ports[dest].name} sold 20 grain for [\\d,]+ after tax; 30 still listed`));
+    assert.ok(/listed for sale/.test(await p.textContent(".trips-log")), "still listed: no profit yet");
+    assert.ok((await b.cmd({ type: "placeOrder", port: dest, good: "grain", qty: 30, price: 39 })).ok);
+    await toast(p, /sold 30 grain for [\d,]+ after tax\.$/);
+    await p.waitForFunction(() => !/listed for sale/.test(document.querySelector(".trips-log")!.textContent!));
+    const m = await me(p), trip = m.trips[0];
+    assert.ok(Math.abs(m.cash - cashListed - 50 * 39 * (1 - (await worldOf(p)).rules.tax)) < 1, "paid after tax");
+    assert.ok(trip.earned > 0 && !trip.open && !trip.listed, "the trip now has its sale");
+    const shown = Number((await p.textContent(".trips-log tr:nth-child(2) td:last-child"))!.replace(/[^\d]/g, ""));
+    assert.equal(shown, Math.abs(Math.round(trip.earned - trip.spent)), "the log shows the trip's real profit");
+    b.close(); await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("a buy order that buys at once from a listing says so, and the form checks the price band", { skip: SKIP, timeout: 60000 }, async () => {
+  // Posting a buy order above a listing's price bought the listing at once: the toast still said
+  // "Order posted", yet no order showed under "Your orders" and cash had dropped.
+  const t = await startServer({ TICK_MS: "150", BOTS: "0" });
+  try {
+    const seller = new Client(t);
+    await seller.auth("register", "Quay Sellers");
+    const sm = () => [...seller.msgs].reverse().find((m: any) => m.type === "state" && m.me).me;
+    const from = sm().ships[0].port;
+    const dist = (await seller.seen((m: any) => m.type === "static")).dist;
+    const dest = dist[from].findIndex((d: number, i: number) => i !== from && Number.isFinite(d) && d > 0);
+    assert.ok((await seller.cmd({ type: "sail", ship: sm().ships[0].id, dest, buy: { good: "grain", qty: 30 } })).ok);
+    await seller.next((m: any) => m.type === "state" && m.me?.ships[0].dest === null, 30000);
+    assert.ok((await seller.cmd({ type: "placeSell", ship: sm().ships[0].id, qty: 30, price: 30 })).ok);
+
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`buy order crosses: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Quay Buyers"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    await p.click('#tabs button[data-tab="orders"]');
+    // A price outside the band, or a bad quantity, is caught before the click.
+    await p.selectOption("#oGood", "fuel");
+    await p.fill("#oQty", "10"); await p.fill("#oPrice", "20");
+    assert.equal(await p.textContent("#oCost"), "Price for fuel must be between 30 and 90.");
+    assert.ok(await p.locator("button[data-act=placeOrder]").isDisabled());
+    await p.fill("#oQty", "0"); await p.fill("#oPrice", "40");
+    assert.equal(await p.textContent("#oCost"), "Quantity must be 1 to 1000.");
+    assert.ok(await p.locator("button[data-act=placeOrder]").isDisabled());
+    await p.selectOption("#oGood", "grain");
+    await p.selectOption("#oPort", String(dest));
+    await p.fill("#oQty", "10"); await p.fill("#oPrice", "35");
+    assert.equal(await p.locator("button[data-act=placeOrder]").isDisabled(), false);
+    const cash = (await me(p)).cash;
+    await p.click("button[data-act=placeOrder]");
+    await toast(p, new RegExp(`^Bought 10 grain at once from a listing at ${map.ports[dest].name} for 300 \\(used up there\\)$`));
+    // The new cash comes with the next state message, a moment after the command's reply (and toast).
+    await p.waitForFunction((c: number) => (window as any).eval("me").cash !== c, cash, { timeout: 5000 });
+    assert.equal((await me(p)).cash, cash - 300, "paid the listing's price");
+    // More than is listed: the rest waits as a buy order.
+    await p.fill("#oQty", "30"); await p.fill("#oPrice", "31");
+    await p.click("button[data-act=placeOrder]");
+    await toast(p, /^Bought 20 grain at once from a listing at .+ for 600 \(used up there\); the rest is posted as a buy order$/);
+    await p.waitForFunction(() => document.getElementById("panel")!.textContent!.includes("buying grain"));
+    seller.close(); await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("the planned route doesn't hide the sailing time on its lane", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "60000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`hour labels: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Lane Reader"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    // Plan a trip to a port next door, so the dotted route runs through that lane's "Nh" box.
+    const box = await p.evaluate(() => {
+      const w = window as any, world = w.eval("world"), s = w.eval("me").ships[0];
+      const r = world.routes.find((r: any) => r.a === s.port || r.b === s.port);
+      const dest = r.a === s.port ? r.b : r.a;
+      const sel = document.querySelector(".shipCard[data-ship] select[data-field=dest]") as HTMLSelectElement;
+      sel.value = String(dest); sel.dispatchEvent(new Event("change", { bubbles: true }));
+      const P = w.eval("P"), [x1, y1] = P(world.ports[r.a]), [x2, y2] = P(world.ports[r.b]);
+      const c = (document.getElementById("map") as HTMLCanvasElement).getContext("2d")!;
+      c.font = "600 10px IBM Plex Mono, monospace";
+      const tw = c.measureText(Math.ceil(r.distance / world.rules.speed) + "h").width + 8;
+      return { x: (x1 + x2) / 2 - tw / 2, y: (y1 + y2) / 2 - 8, w: tw, h: 15 };
+    });
+    await p.waitForTimeout(300);   // a few frames
+    const green = await p.evaluate((b: any) => {
+      const cv = document.getElementById("map") as HTMLCanvasElement, dpr = window.devicePixelRatio || 1;
+      const d = cv.getContext("2d")!.getImageData(Math.ceil((b.x + 1) * dpr), Math.ceil((b.y + 1) * dpr), Math.floor((b.w - 2) * dpr), Math.floor((b.h - 2) * dpr)).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i + 1] > 120 && d[i + 1] - d[i + 2] > 20 && d[i + 1] - d[i] > 60) n++;
+      return n;
+    }, box);
+    assert.equal(green, 0, "the planned route's dots are drawn over the lane's sailing time");
+    await ctx.close();
+  } finally { await t.stop(); cleanup(t); }
+});
+
+test("four goods and three ship classes show up in the client", { skip: SKIP, timeout: 60000 }, async () => {
+  const t = await startServer({ TICK_MS: "100000000", BOTS: "0" });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    const p = await ctx.newPage();
+    p.on("pageerror", (e: Error) => errors.push(`classes: ${e.message}`));
+    await p.goto(t.url);
+    await p.fill("#authName", "Four Goods"); await p.fill("#authPass", "password123");
+    await p.click('button[data-mode="register"]');
+    await closeGuide(p);
+    // The market table lists all four goods, each with its own tag and stock bar.
+    const goods = await p.locator("#panel table.market tr td:first-child .tag").allTextContents();
+    assert.deepEqual(goods, ["grain", "fuel", "ore", "machinery"]);
+    assert.equal(await p.locator("#panel table.market .bar").count(), 4);
+    // The ship card says its class, what it holds and its speed, and the sail form offers every good.
+    assert.match((await p.textContent(".shipCard[data-ship]"))!, /freighter.*holds 100, 40 per hour/s);
+    const loadOptions = await p.locator(".shipCard[data-ship] select[data-field=good] option").allTextContents();
+    assert.deepEqual(loadOptions.map((o: string) => o.replace(/ at .*/, "")), ["Sail empty", "Load grain", "Load fuel", "Load ore", "Load machinery"]);
+    // Choosing a class in the buy-ship control shows its price, stats and what it is for.
+    await p.evaluate(() => { const w = window as any; w.eval("me").cash = 40000; w.eval("render")(); });
+    assert.deepEqual(await p.locator("select[data-field=shipClass] option").allTextContents(), ["coaster · 7,000", "freighter · 12,000", "bulker · 24,000"]);
+    await p.selectOption("select[data-field=shipClass]", "bulker");
+    assert.match((await p.textContent("[data-field=buyShipRow]"))!, /Buy a ship here \(24,000\)/);
+    assert.match((await p.textContent("[data-field=classNote]"))!, /Slow and big.*Holds 200, sails 24 a hour/);
+    assert.match((await p.textContent("[data-field=buyShipNote]"))!, /net worth drops by 12,000/);
+    await p.selectOption("select[data-field=shipClass]", "coaster");
+    assert.match((await p.textContent("[data-field=buyShipRow]"))!, /Buy a ship here \(7,000\)/);
+    assert.match((await p.textContent("[data-field=buyShipNote]"))!, /net worth drops by 3,500/);
+    // Ships of every class draw on the map without errors, and the legend names all four producers.
+    await p.evaluate(() => {
+      const w = window as any, m = w.eval("me");
+      m.ships.push({ ...m.ships[0], id: 901, type: "coaster" }, { ...m.ships[0], id: 902, type: "bulker", qty: 120, good: 2 });
+      w.eval("render")(); w.eval("drawMap")();
+    });
+    const legend = await p.textContent(".legend");
+    for (const g of ["grain", "fuel", "ore", "machinery"]) assert.match(legend!, new RegExp(`${g} producer`));
+    if (process.env.SHOTS) {
+      await p.evaluate(() => { const w = window as any; w.eval("me").ships.length = 1; w.eval("render")(); });
+      await p.screenshot({ path: `${process.env.SHOTS}/port-390.png`, fullPage: true });
+    }
     await ctx.close();
   } finally { await t.stop(); cleanup(t); }
 });

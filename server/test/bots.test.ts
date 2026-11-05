@@ -87,3 +87,18 @@ test("new players start where a trip pays, all season", async () => {
   }
   assert.ok(good / checks > 0.95, `picked start port pays ${good}/${checks} times (random port: ${randomGood})`);
 });
+
+test("when no trip pays anywhere (a new Hard season), new players start near the first trips to open", async () => {
+  const { pickStartPort, bestStartTrip } = await import("../src/bots.ts");
+  const e = new Engine(rules, map, 60);
+  e.apply({ type: "setDifficulty", level: "hard" });
+  const value = Array.from({ length: e.n }, (_, p) => bestStartTrip(e, p));
+  assert.ok(value.every(v => v <= 0), "test assumes nothing pays at hour 0 on Hard");
+  const ranked = [...value].sort((a, b) => b - a);
+  const cutoff = ranked[Math.ceil(e.n / 8) - 1];
+  // Before, the fallback was any port at random, often one whose best trip lost ~800.
+  for (let r = 0; r < e.n; r++) {
+    const p = pickStartPort(e, n => r % n);
+    assert.ok(value[p] >= cutoff, `port ${p} (${Math.round(value[p])}) is among the closest to paying (>= ${Math.round(cutoff)})`);
+  }
+});

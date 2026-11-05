@@ -125,6 +125,7 @@ describe("admin API", () => {
     assert.equal((await admin(s, "/api/admin/difficulty", { level: "easy" })).status, 200);
     const m = JSON.parse((await admin(s, "/api/admin/metrics")).body);
     assert.equal(m.difficulty, "easy"); assert.equal(m.tax, 0.05);
+    assert.equal(m.nextSeasonDifficulty, "normal", "a change here isn't kept for the next season (no DIFFICULTY env)");
     const c = new Client(s);
     const st = await c.next(m => m.type === "state" && m.world.rules.difficulty === "easy");
     assert.equal(st.world.rules.tax, 0.05);
@@ -141,7 +142,11 @@ describe("admin API", () => {
       assert.equal(m.difficulty, "hard"); assert.equal(m.tax, 0.09);
       await t.stop();
       const u = await startServer({ DIFFICULTY: "easy" }, t.db);   // existing world: the log wins
-      assert.equal(JSON.parse((await admin(u, "/api/admin/metrics")).body).difficulty, "hard");
+      const mu = JSON.parse((await admin(u, "/api/admin/metrics")).body);
+      assert.equal(mu.difficulty, "hard");
+      assert.equal(mu.nextSeasonDifficulty, "easy", "the admin page says what the next season starts on");
+      assert.equal((await admin(u, "/api/admin/new-season", {})).status, 200);
+      assert.equal(JSON.parse((await admin(u, "/api/admin/metrics")).body).difficulty, "easy");
       await u.stop();
     } finally { await t.stop(); cleanup(t); }
   });
@@ -163,7 +168,8 @@ describe("accounts", () => {
   test("sign-up rules", async () => {
     const c = new Client(s);
     for (const [name, pw, err] of [["ab", "password123", /3-24/], ["bad<name>", "password123", /3-24/], ["Way too long a company name here", "password123", /3-24/],
-      ["Bot · Freight", "password123", /3-24/], ["Good Name", "short", /8 characters/], [null, "password123", /3-24/]] as const) {
+      ["Bot · Freight", "password123", /3-24/], ["Good Name", "short", /8 characters/], [null, "password123", /3-24/],
+      ["...", "password123", /letter or number/], ["- _ -", "password123", /letter or number/], ["Acme  Freight", "password123", /two spaces/]] as const) {
       const r = await c.auth("register", name as any, pw);
       assert.equal(r.type, "authError"); assert.match(r.error, err);
     }
@@ -181,6 +187,8 @@ describe("accounts", () => {
     assert.equal((await b.auth("register", "acme freight")).error, "That name is taken");
     assert.equal((await b.auth("login", "Acme Freight", "wrong-password")).error, "Wrong name or password");
     assert.equal((await b.auth("login", "Nobody Here")).error, "Wrong name or password");
+    // Sign-up trims the name, so a trailing space typed at log-in still matches.
+    assert.equal((await b.auth("login", "  Acme Freight ")).type, "auth");
     const l = await b.auth("login", "ACME FREIGHT");
     assert.equal(l.type, "auth");
     assert.equal((await b.state(m => m.me)).me.id, st.me.id);
@@ -221,6 +229,25 @@ describe("sessions and abuse limits", () => {
       assert.match((await b.next(m => m.type === "authError")).error, /Session expired/);
       assert.equal((await b.auth("login", "Leaver Co")).type, "auth", "can log in again");
       a.close(); b.close();
+    } finally { await s.stop(); cleanup(s); }
+  });
+
+  test("logging out also logs out other tabs on the same session, not other sessions", async () => {
+    const s = await startServer();
+    try {
+      const a = new Client(s);
+      const { token } = await a.auth("register", "Twotab Co");
+      const b = new Client(s); await b.ready;        // a second tab sharing the saved token
+      b.send({ type: "resume", token });
+      assert.ok((await b.next(m => m.type === "state" && m.me)).me);
+      const other = new Client(s);                   // another device: its own session
+      await other.auth("login", "Twotab Co");
+      a.send({ type: "logout" });
+      await a.next(m => m.type === "loggedOut");
+      await b.next(m => m.type === "loggedOut");
+      assert.equal((await b.cmd({ type: "sell", ship: 2 })).error, "Log in first", "the other tab can't keep trading");
+      assert.notEqual((await other.cmd({ type: "sell", ship: 2 })).error, "Log in first", "another device stays logged in");
+      a.close(); b.close(); other.close();
     } finally { await s.stop(); cleanup(s); }
   });
 
@@ -424,6 +451,27 @@ describe("playing over WebSockets", () => {
     const me = (await a.state(m => m.me)).me;
     assert.equal((await a.cmd({ type: "buyShip", port: me.ships[0].port })).error, "not enough cash");
     assert.equal((await a.cmd({ type: "scrapShip", ship: me.ships[0].id })).error, "you must keep one ship");
+    a.close();
+  });
+
+  test("ship classes and goods reach the client: rules, per-ship type, and buying a class", async () => {
+    const a = new Client(s); await a.auth("register", uniq("Classes"));
+    const st = await a.state(m => m.me);
+    const w = st.world;
+    assert.deepEqual(w.goods, ["grain", "fuel", "ore", "machinery"]);
+    assert.deepEqual(Object.keys(w.rules.shipTypes), ["coaster", "freighter", "bulker"]);
+    assert.equal(w.rules.shipTypes.bulker.capacity, 200);
+    assert.equal(w.rules.targets.length, 4);
+    assert.equal(w.ports[0].prices.length, 4); assert.equal(w.ports[0].stock.length, 4); assert.equal(w.ports[0].inbound.length, 4);
+    assert.equal(st.me.ships[0].type, "freighter");
+    const port = st.me.ships[0].port;
+    assert.equal((await a.cmd({ type: "buyShip", port, shipType: "bulker" })).error, "not enough cash");
+    assert.equal((await a.cmd({ type: "buyShip", port, shipType: "tanker" })).error, "unknown ship class");
+    assert.equal((await a.cmd({ type: "buyShip", port, shipType: "coaster" })).ok, true);
+    const after = await a.fresh(m => m.me?.ships.length === 2);
+    assert.deepEqual(after.me.ships.map((x: any) => x.type), ["freighter", "coaster"]);
+    assert.ok(after.world.ships.some((x: any) => x.type === "coaster"), "other players can see the class");
+    assert.equal(after.me.cash, 10000 - 7000);
     a.close();
   });
 

@@ -4,7 +4,10 @@
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmt = n => Math.round(n).toLocaleString("en-IE");
-const GOOD_NAMES = ["grain", "fuel"];
+const GOOD_NAMES = ["grain", "fuel", "ore", "machinery"];
+const ALL_GOODS = GOOD_NAMES.map((_, g) => g);
+const SHIP_CLASSES = ["coaster", "freighter", "bulker"];
+let buyClass = "freighter";   // the class the Buy a ship control is set to
 
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -29,6 +32,7 @@ function connect() {
   };
   ws.onclose = () => {
     $("conn").textContent = "reconnecting"; $("conn").classList.remove("live");
+    pendingReq.clear();   // replies to commands sent on the old connection will never come
     setTimeout(connect, 2000);
   };
   ws.onmessage = ev => {
@@ -51,7 +55,7 @@ function connect() {
         activeShip = null; selectedPort = null;
       }
       ensureIslandBuffer(world);
-      if (before && me && before.id === me.id) noteDockings(before);
+      if (before && me && before.id === me.id) { noteDockings(before); noteForcedSales(before); noteOrderFills(before); }
       noteprices();
       if ((selectedPort === null || firstLogin) && me?.ships?.length) selectedPort = me.ships[0].dest ?? me.ships[0].port;
       if (selectedPort === null) selectedPort = 0;
@@ -64,7 +68,7 @@ function connect() {
       store.set("token", null); showAuth(true); $("authError").textContent = msg.error;
     } else if (msg.type === "result") {
       const cb = pendingReq.get(msg.reqId); pendingReq.delete(msg.reqId);
-      if (!msg.ok) toast(msg.error, true); else if (cb) cb();
+      if (!msg.ok) toast(msg.error, true); else if (cb) cb(msg);
     } else if (msg.type === "loggedOut") location.reload();
     else if (msg.type === "error") toast(msg.error, true);
   };
@@ -74,11 +78,50 @@ function connect() {
  *  turned those on and the tab isn't in view. */
 function noteDockings(before) {
   const docked = me.ships.filter(s => s.dest === null && before.ships.some(b => b.id === s.id && b.dest !== null));
+  // Watching the port a ship just left (nothing of yours docked there now)? Follow it to where it
+  // docked, so its Sell button is in view instead of "None of your ships are docked here". Also on the
+  // Fleet and Leaderboard tabs, so opening Port later shows the docked ship, not the port it left
+  // (not on Orders, whose port box starts on the selected port).
+  const watching = tab !== "orders" && !me.ships.some(s => s.dest === null && s.port === selectedPort)
+    && !(document.activeElement?.matches("input, select") && $("panel").contains(document.activeElement)) && !pointerInPanel;
+  const follow = watching && docked.find(s => before.ships.find(b => b.id === s.id).port === selectedPort);
+  if (follow) selectedPort = follow.port;
   for (const s of docked) {
     const text = `Ship ${s.id} docked at ${world.ports[s.port].name}${s.qty > 0 ? ` with ${s.qty} ${GOOD_NAMES[s.good]}` : ""}`;
     toast(text);
     if (store.get("notify") && "Notification" in window && Notification.permission === "granted" && document.hidden) {
       try { new Notification("Manifest", { body: text, tag: `dock-${s.id}` }); } catch {}
+    }
+  }
+}
+/** Spare ships the game sold because cash was below zero at the daily upkeep. Without this the
+ *  ship just vanished from the fleet with no explanation. */
+function forcedSaleText(f) {
+  return `Ship ${f.ship} was sold at ${world.ports[f.port].name} for ${fmt(f.paid)} at the start of day ${Math.floor(f.tick / 24) + 1}: your cash was ${fmt(f.cashBefore)} after the daily upkeep, and a company below zero sells an idle spare ship.`;
+}
+function noteForcedSales(before) {
+  const seen = Math.max(-1, ...(before.forcedSales ?? []).map(f => f.tick));
+  for (const f of (me.forcedSales ?? []).filter(f => f.tick > seen)) {
+    toast(forcedSaleText(f), "warn");
+    if (store.get("notify") && "Notification" in window && Notification.permission === "granted" && document.hidden) {
+      try { new Notification("Manifest", { body: forcedSaleText(f), tag: `sold-${f.ship}` }); } catch {}
+    }
+  }
+}
+/** Orders of yours another company filled since the last update. A listing's money arrives on its
+ *  own (often while the player is elsewhere), so without this cash just jumped with no reason given. */
+function orderFillText(f) {
+  const where = world.ports[f.port].name, what = `${f.qty} ${GOOD_NAMES[f.good]}`;
+  return f.side === "sell"
+    ? `Your listing at ${where} sold ${what} for ${fmt(f.amount)} after tax${f.left > 0 ? `; ${f.left} still listed` : ""}.`
+    : `Your buy order at ${where} was filled: ${what} delivered for ${fmt(f.amount)}${f.left > 0 ? `; ${f.left} still wanted` : ""}.`;
+}
+function noteOrderFills(before) {
+  const seen = Math.max(0, ...(before.orderFills ?? []).map(f => f.id));
+  for (const f of (me.orderFills ?? []).filter(f => f.id > seen)) {
+    toast(orderFillText(f));
+    if (store.get("notify") && "Notification" in window && Notification.permission === "granted" && document.hidden) {
+      try { new Notification("Manifest", { body: orderFillText(f), tag: `order-${f.order}` }); } catch {}
     }
   }
 }
@@ -90,26 +133,55 @@ function notifyHtml() {
     <span class="quiet">${on ? "On: you'll get a browser notification while this tab is open in the background." : "Works while this tab is open, even in the background."}</span></div>`;
 }
 
-function command(cmd, onOk) {
-  const id = ++reqId;
-  pendingReq.set(id, () => { if (cmd.ship !== undefined) clearForm(cmd.ship); onOk?.(); render(); });
-  ws.send(JSON.stringify({ type: "cmd", reqId: id, cmd }));
+/** Send a message if connected; otherwise say so instead of dropping it silently. */
+function send(msg) {
+  if (ws?.readyState !== WebSocket.OPEN) {
+    toast("Not connected to the server, so nothing was done. Reconnecting; try again in a moment.", "bad");
+    return false;
+  }
+  ws.send(JSON.stringify(msg));
+  return true;
 }
 
-function toast(text, bad = false) {
-  const t = $("toast"); t.textContent = text; t.className = "toast" + (bad ? " bad" : "");
+function command(cmd, onOk) {
+  const id = ++reqId;
+  if (send({ type: "cmd", reqId: id, cmd })) pendingReq.set(id, res => { if (cmd.ship !== undefined) clearForm(cmd.ship); onOk?.(res); render(); });
+}
+
+/** What happened to a new listing: goods can sell at once to buy orders already waiting at the port. */
+function listedText(res) {
+  if (!res?.sold) return "Listed for sale";
+  const sold = `Sold ${res.sold} at once to a waiting buy order for ${fmt(res.earned)} after tax`;
+  return res.id ? `${sold}; the rest is listed for sale` : sold;
+}
+
+/** What happened to a new buy order: it can buy at once from listings already at the port, and those
+ *  goods are used up there, so "Order posted" with no order on the list and less cash looked like a bug. */
+function orderPostedText(res, port, good) {
+  if (!res?.bought) return "Order posted";
+  const bought = `Bought ${res.bought} ${good} at once from a listing at ${world.ports[port].name} for ${fmt(res.spent)} (used up there)`;
+  return res.id ? `${bought}; the rest is posted as a buy order` : bought;
+}
+
+/** kind: falsy for done (tick), true or "bad" for an error, "warn" for done-but-careful. */
+function toast(text, kind = false) {
+  const t = $("toast"); t.textContent = text; t.className = "toast" + (kind === "warn" ? " warn" : kind ? " bad" : "");
   clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.add("hidden"), 3500);
 }
 
 // ------------------------------------------------------------ auth
 
-function showAuth(on) { $("auth").classList.toggle("hidden", !on); }
+function showAuth(on) {
+  $("auth").classList.toggle("hidden", !on);
+  // Keep keyboard and screen-reader users on the sign-in card, not the game behind it.
+  for (const el of document.querySelectorAll("header, #seasonBanner, main")) el.inert = on;
+}
 let authMode = "login";
 document.querySelectorAll("#authForm button").forEach(b => b.addEventListener("click", () => { authMode = b.dataset.mode; }));
 $("authForm").addEventListener("submit", e => {
   e.preventDefault();
   $("authError").textContent = "";
-  ws.send(JSON.stringify({ type: authMode, name: $("authName").value, password: $("authPass").value }));
+  if (!send({ type: authMode, name: $("authName").value, password: $("authPass").value })) $("authError").textContent = "Not connected to the server yet. Try again in a moment.";
 });
 $("logout").addEventListener("click", () => {
   store.set("token", null);
@@ -120,21 +192,32 @@ $("logout").addEventListener("click", () => {
 
 // ------------------------------------------------------------ first-time guide
 
-// Shown once to a new company (remembered in this browser), and any time from "How to play".
+// Shown once to a new company (remembered in this browser), and any time from "How to play"
+// (sign-in card) or "Help" (header).
 let guidePending = false, guideAt = 0;
 function guideSteps() {
-  const ship = me?.ships?.[0], here = ship && ship.dest === null ? world?.ports[ship.port] : null;
+  const ship = me?.ships?.length === 1 ? me.ships[0] : null, here = ship && ship.dest === null ? world?.ports[ship.port] : null;
   return [
     ["Your ship", here
       ? `This is your company: one ship, docked at ${esc(here.name)}. It's the green ring on the map, and its card is on the Port and Fleet tabs. Your first ship costs nothing to keep.`
       : "You start with one ship, shown with a green ring on the map. Its card, on the Port and Fleet tabs, is where you trade and sail. Your first ship costs nothing to keep."],
-    ["Buy where it's cheap", "Each port makes some goods and needs others. Where a good is made, stock is high and the price is low. On your ship's card, pick grain or fuel to load and how much."],
+    ["Buy where it's cheap", "Each port makes some goods and needs others. Where a good is made, stock is high and the price is low. On your ship's card, pick what to load (grain, fuel, ore or machinery) and how much; cheap bulk goods suit big ships, valuable machinery suits small, fast ones."],
     ["Sail where it's needed", "Tap a port on the map, or pick one from the list, to set the destination. The estimate counts fuel, the port fee and how prices move as you trade. \"Best trips from here\" fills in the most profitable ones for you."],
-    ["Sell, and grow", "When your ship docks, sell to the market or fill another player's order. Use the profit to buy more ships. The company with the highest net worth when the season ends wins."],
+    ["Sell, and grow", "When your ship docks, sell to the market or fill another player's order. Use the profit to buy more ships: coasters are fast and small, bulkers slow and big. The company with the highest net worth when the season ends wins."],
   ];
 }
-function openGuide() { guideAt = 0; showGuideStep(); $("guide").classList.remove("hidden"); $("guideNext").focus(); }
-function closeGuide() { $("guide").classList.add("hidden"); store.set("guideSeen", "1"); }
+let guideOpener = null;   // where focus goes back to when the guide closes
+function openGuide() {
+  const a = document.activeElement;
+  guideOpener = a && a !== document.body && !$("guide").contains(a) ? a : null;
+  guideAt = 0; showGuideStep(); $("guide").classList.remove("hidden"); $("guideNext").focus();
+}
+function closeGuide() {
+  $("guide").classList.add("hidden"); store.set("guideSeen", "1");
+  // Back to the button that opened it, or (shown at sign-up, or that button is now hidden) to the open tab.
+  const back = guideOpener?.isConnected && guideOpener.offsetParent ? guideOpener : document.querySelector("#tabs button.on");
+  guideOpener = null; back?.focus();
+}
 function showGuideStep() {
   const steps = guideSteps(), [title, text] = steps[guideAt];
   $("guideStep").textContent = `Step ${guideAt + 1} of ${steps.length}`;
@@ -151,7 +234,17 @@ $("guideNext").addEventListener("click", () => {
 $("guideBack").addEventListener("click", () => { if (guideAt > 0) { guideAt--; showGuideStep(); } });
 $("guideSkip").addEventListener("click", closeGuide);
 $("howToPlay").addEventListener("click", openGuide);
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("guide").classList.contains("hidden")) closeGuide(); });
+$("help").addEventListener("click", openGuide);
+document.addEventListener("keydown", e => {
+  if ($("guide").classList.contains("hidden")) return;
+  if (e.key === "Escape") return closeGuide();
+  if (e.key !== "Tab") return;
+  // The guide is a modal: keep Tab and Shift+Tab inside it instead of wandering to the page behind.
+  const els = [...$("guide").querySelectorAll("button")].filter(b => !b.disabled);
+  const i = els.indexOf(document.activeElement);
+  e.preventDefault();
+  els[(i + (e.shiftKey ? -1 : 1) + els.length) % els.length]?.focus();
+});
 
 // ------------------------------------------------------------ routes and voyages (display only; the server decides)
 
@@ -189,6 +282,12 @@ function shipPos(s) {
   const f = Math.max(0, Math.min(1, elapsed / total));
   return {...ManifestNavigation.position(voyageGeometry(s.port,s.dest),f),f};
 }
+/** Stats of a ship class (or of a ship, by its type); the server sends them in world.rules.shipTypes. */
+function spec(s) { const t = world.rules.shipTypes; return t[(typeof s === "string" ? s : s?.type) || "freighter"] || t.freighter; }
+/** The daily upkeep the server charges (engine upkeepDue): every ship's upkeep less one freighter's worth. */
+function upkeepDue(ships) { return Math.max(0, ships.reduce((a, s) => a + spec(s).upkeep, 0) - spec("freighter").upkeep); }
+/** Half of what the cheapest spare ship paid: what a "scrap a spare ship" hint can quote without picking one. */
+function spareScrap() { return Math.min(...me.ships.map(s => spec(s).price / 2)); }
 function distance(a, b) {
   // Real sea-route distance from the server; straight line only until it arrives.
   if (dist) return dist[a][b];
@@ -235,7 +334,7 @@ const MAP_W = 1000, MAP_H = 700;
 const C = {};   // colours from the stylesheet, read once
 function readColours() {
   const cs = getComputedStyle(document.documentElement);
-  for (const k of ["line", "line-strong", "ink", "quiet", "grain", "fuel", "other", "mine", "sea", "sea-deep", "bg"]) C[k] = cs.getPropertyValue("--" + k).trim();
+  for (const k of ["line", "line-strong", "ink", "quiet", "grain", "fuel", "ore", "machinery", "other", "mine", "sea", "sea-deep", "bg"]) C[k] = cs.getPropertyValue("--" + k).trim();
 }
 readColours();
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -335,10 +434,16 @@ function drawBackground() {
   g.font = "600 9px IBM Plex Sans, sans-serif"; g.textAlign = "center"; g.fillText("N", cx, cy - 22); g.textAlign = "left";
 }
 
-function portColour(p) { return p.produces.includes("grain") ? C.grain : p.produces.includes("fuel") ? C.fuel : C.other; }
+/** A port's main good: the first of grain, fuel, ore, machinery it makes. */
+function portMain(p) { return GOOD_NAMES.find(g => p.produces.includes(g)) ?? null; }
+function portColour(p) { const g = portMain(p); return g ? C[g] : C.other; }
 function portShape(c, p, x, y, r) {
   c.beginPath();
-  if (p.produces.includes("fuel") && !p.produces.includes("grain")) { c.moveTo(x, y - r * 1.25); c.lineTo(x + r * 1.25, y); c.lineTo(x, y + r * 1.25); c.lineTo(x - r * 1.25, y); c.closePath(); }
+  // Grain is a circle, fuel a diamond, ore a square, machinery a triangle: the map reads without colour.
+  const m = portMain(p);
+  if (m === "fuel") { c.moveTo(x, y - r * 1.25); c.lineTo(x + r * 1.25, y); c.lineTo(x, y + r * 1.25); c.lineTo(x - r * 1.25, y); c.closePath(); }
+  else if (m === "ore") c.rect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8);
+  else if (m === "machinery") { c.moveTo(x, y - r * 1.2); c.lineTo(x + r * 1.15, y + r * 0.85); c.lineTo(x - r * 1.15, y + r * 0.85); c.closePath(); }
   else c.arc(x, y, r, 0, Math.PI * 2);
 }
 
@@ -355,22 +460,24 @@ function drawMap() {
   const mine = new Set(myShips.map(s => s.id));
 
   // Lanes out of the focused port, with sailing times. Their boxes keep port labels clear of them.
-  const placed = overlays.slice();
+  // The hour boxes are drawn after your voyages and planned route, so those lines never hide them.
+  const placed = overlays.slice(), hourLabels = [];
+  // Sailing times are for your ship docked at the focused port (the one whose form is open), else a freighter.
+  const laneShip = myShips.find(s => s.id === activeShip && s.dest === null && s.port === focus) ?? myShips.find(s => s.dest === null && s.port === focus);
+  const laneSpeed = spec(laneShip).speed_per_hour;
   if (focus !== null) {
     ctx.strokeStyle = rgba(C.ink, 0.38); ctx.lineWidth = 1.6;
     ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.font = "600 10px IBM Plex Mono, monospace";
     for (const r of world.routes) {
       if (r.a !== focus && r.b !== focus) continue;
       const geometry = routeIndex.get(`${r.a}:${r.b}`);
       ManifestNavigation.stroke(ctx, geometry.points, P);
       if (view.scale > 0.55) {
-        const h = Math.ceil(r.distance / world.rules.speed) + "h";
+        const h = Math.ceil(r.distance / laneSpeed) + "h";
         const [mx,my] = P(ManifestNavigation.position(geometry,.5));
-        ctx.font = "600 10px IBM Plex Mono, monospace";
-        const tw = ctx.measureText(h).width + 8;
-        ctx.fillStyle = "rgba(10,22,32,.85)"; ctx.fillRect(mx - tw / 2, my - 8, tw, 15);
-        placed.push({ x: mx - tw / 2, y: my - 8, w: tw, h: 15 });
-        ctx.fillStyle = C.quiet; ctx.textAlign = "center"; ctx.fillText(h, mx, my + 3); ctx.textAlign = "left";
+        const tw = ctx.measureText(h).width + 8, box = { x: mx - tw / 2, y: my - 8, w: tw, h: 15 };
+        placed.push(box); hourLabels.push({ text: h, x: mx, y: my, box });
       }
     }
   }
@@ -396,6 +503,12 @@ function drawMap() {
     ManifestNavigation.stroke(ctx, voyageGeometry(planShipObj.port,planDest).points, P);
     ctx.setLineDash([]); ctx.lineCap = "butt";
   }
+  ctx.font = "600 10px IBM Plex Mono, monospace"; ctx.textAlign = "center";
+  for (const l of hourLabels) {
+    ctx.fillStyle = "rgba(10,22,32,.92)"; ctx.fillRect(l.box.x, l.box.y, l.box.w, l.box.h);
+    ctx.fillStyle = C.quiet; ctx.fillText(l.text, l.x, l.y + 3);
+  }
+  ctx.textAlign = "left";
 
   // Ports.
   const r0 = clamp(4.2 * Math.sqrt(cam.z) * Math.max(0.8, Math.min(1.15, fit * 1.4)), 3.5, 9);
@@ -464,8 +577,18 @@ function drawMap() {
       ctx.shadowColor = C.mine; ctx.shadowBlur = 10;
     }
     ctx.save(); ctx.globalAlpha = own ? 1 : 0.7;
-    const drawn = window.ManifestShipSprites.draw(ctx, x, y, 32,
-      pos.angle, s.qty > 0 && s.good !== null ? GOOD_NAMES[s.good] : null);
+    const cargo = s.qty > 0 && s.good !== null ? GOOD_NAMES[s.good] : null;
+    const cs = SPRITE_SCALE[s.type || "freighter"];
+    let drawn = false;
+    if (cargo === "ore" || cargo === "machinery") {
+      // These two cargoes have only a side-view sprite: flipped to face the way the ship sails.
+      const img = shipSprite(s);
+      if (img) {
+        const w = 32 * cs * 1.1, h = w * img.height / img.width;
+        ctx.translate(x, y); if (Math.cos(pos.angle) < 0) ctx.scale(-1, 1);
+        ctx.imageSmoothingEnabled = false; ctx.drawImage(img, -w / 2, -h * 0.65, w, h); drawn = true;
+      }
+    } else drawn = window.ManifestShipSprites.draw(ctx, x, y, 32 * cs, pos.angle, cargo);
     ctx.restore();
     if (drawn) {
       ctx.shadowBlur = 0;
@@ -476,6 +599,15 @@ function drawMap() {
     ctx.fillStyle = own ? C.mine : s.qty > 0 ? "rgba(232,238,242,.85)" : "rgba(232,238,242,.5)"; ctx.fill();
     ctx.restore(); ctx.shadowBlur = 0;
   }
+}
+
+// Side-view sprites for ore and machinery (the 8-direction atlas covers the other cargoes).
+const SPRITES = Object.fromEntries(["empty", "grain", "fuel", "ore", "machinery"].map(k => { const im = new Image(); im.src = `img/ship-${k}.png`; return [k, im]; }));
+/** Hull size on the map by class (all classes share the sprites). */
+const SPRITE_SCALE = { coaster: 0.75, freighter: 1, bulker: 1.3 };
+function shipSprite(s) {
+  const im = SPRITES[s.qty > 0 && s.good !== null ? GOOD_NAMES[s.good] : "empty"];
+  return im.complete && im.naturalWidth ? im : null;
 }
 
 function portAt(sx, sy) {
@@ -517,9 +649,13 @@ function pickDestination(id) {
   if (!s || s.port === id || sel.value === String(id) || ![...sel.options].some(o => o.value === String(id))) return false;
   sel.value = String(id); formState.set(formKey(sel), sel.value);
   activeShip = s.id;
-  estimate(card);
+  const summary = estimate(card);
+  // Bring the Set sail button into view inside the side panel, but never scroll the page itself:
+  // on a phone that pushed the map (and the route just drawn on it) off the screen after every tap.
+  const y = window.scrollY;
   card.querySelector("[data-act=sail]")?.scrollIntoView({ block: "nearest" });
-  toast(`Ship ${s.id} → ${world.ports[id].name} (≈${Math.ceil(distance(s.port, id) / world.rules.speed)} h). Tap it again to open the port.`);
+  if (window.scrollY !== y) window.scrollTo(window.scrollX, y);
+  toast(`Ship ${s.id} → ${world.ports[id].name} (≈${Math.ceil(distance(s.port, id) / spec(s).speed_per_hour)} h): ${summary}. Tap it again to open the port.`, summary.startsWith("makes") ? false : "warn");
   return true;
 }
 
@@ -580,12 +716,23 @@ $("zoomReset").addEventListener("click", () => { cam.z = 1; layout(); });
 // ------------------------------------------------------------ panels
 
 document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => { tab = b.dataset.tab; render(); }));
+// Tabs pattern: arrow keys (and Home/End) move between tabs and open them; Tab goes on to the panel.
+$("tabs").addEventListener("keydown", e => {
+  const btns = [...document.querySelectorAll("#tabs button")], i = btns.indexOf(document.activeElement);
+  if (i < 0) return;
+  const j = e.key === "ArrowRight" ? (i + 1) % btns.length : e.key === "ArrowLeft" ? (i - 1 + btns.length) % btns.length
+    : e.key === "Home" ? 0 : e.key === "End" ? btns.length - 1 : -1;
+  if (j < 0) return;
+  e.preventDefault();
+  tab = btns[j].dataset.tab; render(); btns[j].focus();
+});
 
 function render() {
   if (!world) return;
-  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  document.querySelectorAll("#tabs button").forEach(b => { b.classList.toggle("on", b.dataset.tab === tab); b.setAttribute("aria-selected", String(b.dataset.tab === tab)); b.tabIndex = b.dataset.tab === tab ? 0 : -1; });
   $("hName").textContent = me?.name ?? "–";
   $("hCash").textContent = me ? fmt(me.cash) : "–";
+  $("hCash").classList.toggle("neg", !!me && me.cash < 0);
   showDelta();
   const level = world.rules.difficulty;
   $("diff").className = `pill diff ${level ?? "hidden"}`;
@@ -618,14 +765,29 @@ function render() {
     return;
   }
   renderPending = false;
+  // Keyboard players: keep focus on the same button after the rebuild instead of dropping it to the page.
+  const refocus = focused && focused !== document.body && $("panel").contains(focused) ? focusKey(focused) : null;
   const html = { port: portPanel, fleet: fleetPanel, orders: ordersPanel, board: boardPanel }[tab]();
   $("panel").innerHTML = html;
   restoreForm();
   bindPanel();
+  if (scrollToBuy) { scrollToBuy = false; document.querySelector("[data-field=buyShipRow]")?.scrollIntoView({ block: "center" }); }
+  if (refocus) {
+    const els = [...$("panel").querySelectorAll("button, input, select, a[href]")];
+    const el = els.find(x => focusKey(x) === refocus) ?? els.find(x => focusKey(x, true) === focusKey(focused, true));
+    el?.focus({ preventScroll: true });
+  }
+}
+/** Identifies a panel control across rebuilds. loose: only the action and ship, for when a
+ *  suggested trip's details changed (e.g. a new quantity) but it is still the same kind of button. */
+function focusKey(el, loose = false) {
+  const d = el.dataset;
+  if (loose) return `${el.tagName}|${d.act ?? ""}|${d.ship ?? ""}|${d.order ?? ""}`;
+  return `${el.tagName}|${el.id}|${JSON.stringify(Object.entries(d).sort())}|${Object.keys(d).length || el.id ? "" : el.textContent.trim()}`;
 }
 
 // What the player has typed or picked survives the panel being rebuilt by live updates.
-let renderPending = false, pointerInPanel = false;
+let renderPending = false, pointerInPanel = false, scrollToBuy = false;   // scrollToBuy: "Buy a ship at X" on the Fleet tab
 const formState = new Map();
 const formKey = el => `${el.closest("[data-ship]")?.dataset.ship ?? ""}:${el.dataset.field ?? el.id}`;
 $("panel").addEventListener("pointerdown", () => { pointerInPanel = true; });
@@ -633,6 +795,7 @@ $("panel").addEventListener("focusin", e => { const c = e.target.closest?.(".shi
 $("panel").addEventListener("pointerdown", e => { const c = e.target.closest?.(".shipCard[data-ship]"); if (c) activeShip = Number(c.dataset.ship); });
 // Clicks fire right after pointerup, so wait a moment before allowing a rebuild.
 window.addEventListener("pointerup", () => setTimeout(() => { pointerInPanel = false; if (renderPending) render(); }, 0), true);
+$("panel").addEventListener("change", e => { if (e.target.matches("[data-field=shipClass]")) { buyClass = e.target.value; render(); } });
 $("panel").addEventListener("input", e => { if (e.target.matches("input, select")) formState.set(formKey(e.target), e.target.value); });
 function restoreForm() {
   $("panel").querySelectorAll("input, select").forEach(el => {
@@ -664,7 +827,7 @@ function portPanel() {
   const p = world.ports[selectedPort];
   const chips = [...p.produces.map(g => `<span class="tag ${g}">Produces ${g}</span>`), ...p.consumes.map(g => `<span class="tag">Needs ${g}</span>`)];
   // Stock bars are scaled to the fullest port for that good, so you can compare ports at a glance.
-  const most = [0, 1].map(g => Math.max(1, ...world.ports.map(q => q.stock[g])));
+  const most = ALL_GOODS.map(g => Math.max(1, ...world.ports.map(q => q.stock[g])));
   const rows = GOOD_NAMES.map((g, i) => `<tr><td><span class="tag ${g}">${g}</span></td>
     <td class="num">${p.prices[i].toFixed(2)}${trend(p.id, i)}</td>
     <td class="sparkCell">${sparkline(p.id, i)}</td>
@@ -676,68 +839,98 @@ function portPanel() {
   // On a phone your ship's buttons come first, above the market, so you can act without scrolling.
   const shipsFirst = docked.length > 0 && window.matchMedia("(max-width: 860px)").matches;
   const shipsHtml = `<h3>Your ships here</h3>
-    ${docked.length ? docked.map(shipCard).join("") : `<div class="empty">None of your ships are docked here.${coming.length ? ` ${coming.length === 1 ? "One is" : coming.length + " are"} on the way.` : me ? " Pick a port with your ship from the map or the Fleet tab." : ""}</div>`}
+    ${docked.length ? docked.map(shipCard).join("") : `<div class="empty">None of your ships are docked here.${me ? ` ${whereShipsAre()}` : ""}</div>`}
     ${me && docked.length && !world.seasonOver && me.ships.length < world.rules.maxShips ? buyShipHtml() : ""}`;
   return `
     <h2>${esc(p.name)}</h2><div class="chips">${chips.join("") || `<span class="quiet">A quiet port</span>`}</div>
     ${shipsFirst ? shipsHtml : ""}
     <h3>Market</h3>
     <table class="market"><tr><th>Good</th><th class="num">Price</th><th class="sparkCell">Trend</th><th class="num">Stock</th><th class="num">Inbound</th></tr>${rows}</table>
-    <div class="est">${p.emptyInbound ? `${p.emptyInbound} empty ship${p.emptyInbound === 1 ? "" : "s"} heading here to load.` : "No empty ships heading here to load."} Inbound cargo will push prices down when it lands.</div>
+    <div class="est">${p.emptyInbound ? `${p.emptyInbound} empty ship${p.emptyInbound === 1 ? "" : "s"} heading here to load.` : "No empty ships heading here to load."} ${p.inbound.some(q => q > 0) ? `The inbound ${ALL_GOODS.filter(g => p.inbound[g] > 0).map(g => GOOD_NAMES[g]).join(" and ")} will push ${p.inbound.filter(q => q > 0).length > 1 ? "those prices" : "its price"} down when it lands.` : "No cargo is heading here either."}</div>
     <h3>Player orders here</h3>
     ${orders.length ? `<table><tr><th>Player</th><th>Wants to</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${orders.map(o => `<tr${me && o.owner === me.id ? ' class="me"' : ""}><td>${esc(o.ownerName)}</td><td>${o.side === "sell" ? "sell" : "buy"}</td><td><span class="tag ${GOOD_NAMES[o.good]}">${GOOD_NAMES[o.good]}</span></td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="quiet">None yet.</div>`}
     ${shipsFirst ? "" : shipsHtml}`;
+}
+
+/** For a port where none of your ships are docked: where they are instead, so a player who has just
+ *  set sail (the panel stays on the port they left) isn't told to go and find a ship. */
+function whereShipsAre() {
+  const lines = me.ships.slice(0, 3).map(s => s.dest !== null
+    ? `Ship ${s.id} is sailing to ${esc(world.ports[s.dest].name)}, ${hoursLeft(s) > 0 ? `arriving in ${hoursLeft(s)} h` : "arriving now"}.`
+    : `Ship ${s.id} is docked at ${esc(world.ports[s.port].name)}.`);
+  if (me.ships.length > 3) lines.push(`${me.ships.length - 3} more on the Fleet tab.`);
+  const ports = [...new Set(me.ships.filter(s => s.dest === null).map(s => s.port))].slice(0, 3);
+  const links = ports.map(id => `<button class="link" data-act="openPort" data-port="${id}">Open ${esc(world.ports[id].name)} →</button>`).join(" ");
+  return `${lines.join(" ")} ${links ? `<div class="row">${links}</div>` : "Tap its port on the map or use the Fleet tab to see it."}`;
 }
 
 function shipCard(s) {
   const cargo = s.qty > 0 ? `<span class="tag ${GOOD_NAMES[s.good]}">${s.qty} ${GOOD_NAMES[s.good]}</span>` : `<span class="tag">empty</span>`;
   if (s.dest !== null) {
     const total = Math.max(1, s.arriveTick - s.departTick), done = Math.min(1, (world.tick - s.departTick) / total);
-    return `<div class="shipCard"><div class="top"><b>Ship ${s.id}</b>${cargo}</div>
+    return `<div class="shipCard"><div class="top"><b>Ship ${s.id}</b><span class="cls">${esc(s.type)}</span>${cargo}</div>
       <div class="quiet">Sailing to ${esc(world.ports[s.dest].name)}, arrives in ${hoursLeft(s)} h</div>
       <div class="voyage"><span>${esc(world.ports[s.port].name)}</span><span>${Math.round(done * 100)}%</span><span>${esc(world.ports[s.dest].name)}</span></div>
       <div class="bar mine"><i style="width:${(done * 100).toFixed(0)}%"></i></div></div>`;
   }
   const port = world.ports[s.port];
   if (world.seasonOver) {
-    return `<div class="shipCard"><div class="top"><b>Ship ${s.id}</b>${cargo}</div>
+    return `<div class="shipCard"><div class="top"><b>Ship ${s.id}</b><span class="cls">${esc(s.type)}</span>${cargo}</div>
       <div class="quiet">Docked at ${esc(port.name)}. Trading is closed until the next season starts.</div></div>`;
   }
   const matching = world.orders.filter(o => o.side === "buy" && o.port === s.port && o.good === s.good && o.owner !== me.id);
   const forSale = world.orders.filter(o => o.side === "sell" && o.port === s.port && o.owner !== me.id
-    && (s.qty === 0 || o.good === s.good) && s.qty < world.rules.capacity);
+    && (s.qty === 0 || o.good === s.good) && s.qty < spec(s).capacity);
   const dests = world.ports.filter(p => p.id !== s.port).sort((a, b) => a.name.localeCompare(b.name));
   // The form starts on the best trip, or the best port to sail to when nothing pays here,
   // never on whichever port happens to come first alphabetically.
-  const trips = bestTrips(s), move = trips.length || s.qty > 0 ? null : bestMove(s);
+  const trips = bestTrips(s), move = trips.length || s.qty > 0 ? null : bestMove(s) ?? chainMove(s);
   const plan = trips[0] ? { dest: trips[0].dest, good: s.qty > 0 ? "" : GOOD_NAMES[trips[0].g], qty: trips[0].qty }
-    : move ? { dest: move.dest, good: "", qty: world.rules.capacity }
-    : { dest: null, good: "", qty: world.rules.capacity };   // nothing worth doing: don't pick a trip for them
+    : move ? { dest: move.dest, good: "", qty: spec(s).capacity }
+    : { dest: null, good: "", qty: spec(s).capacity };   // nothing worth doing: don't pick a trip for them
   return `<div class="shipCard" data-ship="${s.id}">
-    <div class="top"><b>Ship ${s.id}</b>${cargo}</div>
-    <div class="quiet">Docked at ${esc(port.name)}</div>
-    ${s.qty > 0 ? `<div class="row"><button data-act="sell" data-ship="${s.id}">Sell to market at ${port.prices[s.good].toFixed(2)}</button>
-      ${matching.map(o => `<button class="secondary" data-act="fill" data-ship="${s.id}" data-order="${o.id}">Fill ${esc(o.ownerName)}'s order at ${o.price.toFixed(2)}</button>`).join("")}</div>
+    <div class="top"><b>Ship ${s.id}</b><span class="cls">${esc(s.type)}</span>${cargo}</div>
+    <div class="quiet">Docked at ${esc(port.name)} · ${classLine(s)}</div>
+    ${s.qty > 0 ? `<div class="row"><button data-act="sell" data-ship="${s.id}">Sell ${s.qty} ${GOOD_NAMES[s.good]} here for ${fmt(saleNet(s))}</button>
+      ${matching.map(o => `<button class="secondary" data-act="fill" data-ship="${s.id}" data-order="${o.id}">Fill ${esc(o.ownerName)}'s order: ${Math.min(o.qty, s.qty)} for ${fmt(Math.min(o.qty, s.qty) * o.price * (1 - world.rules.tax))}</button>`).join("")}</div>
+      <div class="est" data-field="saleNote">${saleNote(s)}</div>
       <div class="row labelled"><label class="mini">Quantity<input data-field="sellQty" type="number" min="1" max="${s.qty}" value="${s.qty}" style="width:80px"></label>
-        <label class="mini">Price each<input data-field="sellPrice" type="number" step="0.5" value="${(port.prices[s.good] * 1.15).toFixed(1)}" style="width:90px"></label>
+        <label class="mini">Price each<input data-field="sellPrice" type="number" step="0.5" value="${listPrice(s).toFixed(1)}" style="width:90px"></label>
         <button class="secondary" data-act="listSell" data-ship="${s.id}">List for sale here</button></div>
-      <div class="est">Listing leaves the goods at this port for other players to buy, and frees your ship.</div>` : ""}
-    ${forSale.length ? `<h3>For sale here</h3>${forSale.map(o => `<div class="row"><span>${o.qty} ${GOOD_NAMES[o.good]} from ${esc(o.ownerName)} at ${o.price.toFixed(2)}</span>
-      <button class="secondary" data-act="buyOrder" data-ship="${s.id}" data-order="${o.id}" data-qty="${Math.min(o.qty, world.rules.capacity - s.qty)}">Buy ${Math.min(o.qty, world.rules.capacity - s.qty)}</button></div>`).join("")}` : ""}
+      <div class="est" data-field="listNote">Listing leaves the goods at this port for other players to buy, and frees your ship. Players can buy ${GOOD_NAMES[s.good]} from the market here for about ${marketBuyUnit(s).toFixed(2)} each with tax, so a listing above that rarely sells; the price box starts just under it. You get your price less ${Math.round(world.rules.tax * 1000) / 10}% tax.</div>` : ""}
+    ${forSale.length ? `<h3>For sale here</h3>${forSale.map(o => listingHtml(s, o)).join("")}` : ""}
     ${tripsHtml(s, trips, move)}
-    <label>Destination <span class="quiet">(or tap a port on the map)</span><select data-field="dest">${plan.dest === null ? `<option value="" selected disabled>Choose where to sail…</option>` : ""}${dests.map(p => `<option value="${p.id}"${p.id === plan.dest ? " selected" : ""}>${esc(p.name)} (≈${Math.ceil(distance(s.port, p.id) / world.rules.speed)} h)</option>`).join("")}</select></label>
+    <label>Destination <span class="quiet">(or tap a port on the map)</span><select data-field="dest">${plan.dest === null ? `<option value="" selected disabled>Choose where to sail…</option>` : ""}${dests.map(p => `<option value="${p.id}"${p.id === plan.dest ? " selected" : ""}>${esc(p.name)} (≈${Math.ceil(distance(s.port, p.id) / spec(s).speed_per_hour)} h)</option>`).join("")}</select></label>
     ${s.qty === 0 ? `<div class="row" style="margin-top:4px">
-      <select data-field="good" style="width:auto"><option value="">Sail empty</option>${GOOD_NAMES.map((g, i) => `<option value="${g}"${g === plan.good ? " selected" : ""}>Load ${g} at ${port.prices[i].toFixed(2)}</option>`).join("")}</select>
-      <input data-field="qty" type="number" min="1" max="${world.rules.capacity}" value="${plan.qty}" style="width:90px"></div>` : ""}
+      <select data-field="good" aria-label="Cargo to load" style="width:auto"><option value="">Sail empty</option>${GOOD_NAMES.map((g, i) => `<option value="${g}"${g === plan.good ? " selected" : ""}>Load ${g} at ${port.prices[i].toFixed(2)}</option>`).join("")}</select>
+      <input data-field="qty" type="number" aria-label="Quantity to load" min="1" max="${spec(s).capacity}" value="${plan.qty}" style="width:90px"></div>` : ""}
     <div class="est big" data-field="estimate"></div>
     <div class="row"><button data-act="sail" data-ship="${s.id}">Set sail</button>
-      ${me.ships.length > 1 && s.qty === 0 ? `<button class="link" data-act="scrap" data-ship="${s.id}">Scrap for ${fmt(world.rules.shipPrice / 2)}</button>` : ""}</div>
+      ${me.ships.length > 1 && s.qty === 0 ? `<button class="link" data-act="${scrapAsk === s.id ? "scrapKeep" : "scrap"}" data-ship="${s.id}">${scrapAsk === s.id ? "Keep it" : `Scrap for ${fmt(spec(s).price / 2)}`}</button>` : ""}</div>
+    ${me.ships.length > 1 && s.qty === 0 && scrapAsk === s.id ? scrapConfirmHtml(s) : ""}
   </div>`;
+}
+
+/** One line of a ship's class: what it holds and how fast it sails. */
+function classLine(s) { const c = spec(s); return `holds ${c.capacity}, ${c.speed_per_hour} per hour`; }
+/** Price each the market here charges a buyer for this load, with tax. */
+function marketBuyUnit(s) { return buyCost(s.port, s.good, s.qty) * (1 + world.rules.tax) / s.qty; }
+/** Starting price for "List for sale": the highest half step below what buying the same load from the
+ *  market here costs, so the listing undercuts the market. It used to start at 1.15× the price, above
+ *  that, at a price the note beside it said "rarely sells". */
+function listPrice(s) { return Math.max(0.5, Math.ceil(marketBuyUnit(s) * 2 - 1) / 2); }
+/** Scrapping can't be undone, so the first tap only asks (a stray tap on a phone cost a 12,000 ship). */
+let scrapAsk = null;
+function scrapConfirmHtml(s) {
+  const price = spec(s).price;
+  return `<div class="est warn" data-field="scrapNote">Scrapping Ship ${s.id} pays ${fmt(price / 2)} and can't be undone: a new ship like it costs ${fmt(price)}.
+    It saves ${fmt(upkeepDue(me.ships) - upkeepDue(me.ships.filter(x => x !== s)))} a day in upkeep. Your net worth stays the same, since ships count at half their price.</div>
+    <div class="row"><button class="secondary" data-act="scrap" data-ship="${s.id}">Yes, scrap Ship ${s.id} for ${fmt(price / 2)}</button></div>`;
 }
 
 // ---- trade maths, mirroring the server's sliding prices (engine.ts) so estimates are honest
 function priceAt(g, stock) {
-  const b = world.rules.bands[GOOD_NAMES[g]], T = world.rules.target;
+  const b = world.rules.bands[GOOD_NAMES[g]], T = world.rules.targets[g];
   return b.floor + (b.ceiling - b.floor) * clamp(1 - stock / (2 * T), 0, 1);
 }
 /** Cost of buying qty at a port: each unit costs more as the stock runs down. */
@@ -750,28 +943,36 @@ function sellValue(port, g, qty, withInbound = true) {
   const p = world.ports[port], stock = p.stock[g] + (withInbound ? p.inbound[g] : 0);
   return qty * priceAt(g, stock + qty / 2);
 }
-function fuelCost(from, to, g = -1, qty = 0) {
-  const need = distance(from, to) * world.rules.fuelPer100 / 100;
+function fuelCost(from, to, g = -1, qty = 0, ship = null) {
+  const need = distance(from, to) * spec(ship).fuel_per_100_distance / 100;
   const stock = world.ports[from].stock[1] - (g === 1 ? qty : 0);
   return buyCost(from, 1, need, stock);
 }
 /** Profit of a trip after tax, fuel and the port fee. A loaded ship is compared with selling here now. */
 function tripProfit(s, dest, g, qty) {
-  const tax = world.rules.tax, fuel = fuelCost(s.port, dest, s.qty > 0 ? -1 : g, s.qty > 0 ? 0 : qty);
+  const tax = world.rules.tax, fuel = fuelCost(s.port, dest, s.qty > 0 ? -1 : g, s.qty > 0 ? 0 : qty, s);
   const sell = g >= 0 && qty > 0 ? sellValue(dest, g, qty) * (1 - tax) : 0;
   const cost = s.qty > 0 ? sellValue(s.port, g, qty, false) * (1 - tax) : g >= 0 && qty > 0 ? buyCost(s.port, g, qty) * (1 + tax) : 0;
-  return { profit: sell - cost - fuel - world.rules.portFee, fuel, hours: Math.max(1, Math.ceil(distance(s.port, dest) / world.rules.speed)) };
+  return { profit: sell - cost - fuel - world.rules.portFee, fuel, hours: Math.max(1, Math.ceil(distance(s.port, dest) / spec(s).speed_per_hour)) };
 }
 /** Whether a voyage of this many hours, starting `delay` hours from now, docks while trading is
  *  still open. A ship docking on the last hour (or later) can't sell: the season is over by then. */
 function landsInSeason(hours, delay = 0) { return world.tick + delay + hours < world.seasonHours; }
 /** Trips from where a docked ship is now, by profit per hour (the raw ranking). Trips that would
  *  dock after the season ends are left out: their cargo could never be sold. */
-function rawTrips(s, n = 3, delay = 0) {
-  const cap = world.rules.capacity, here = world.ports[s.port], out = [];
-  const goods = s.qty > 0 ? [s.good] : [0, 1];
+/** Cash the advice leaves unspent. With spare ships it also keeps a day's upkeep and a port fee per
+ *  ship: if cash is below zero when upkeep is charged, the engine sells an idle spare ship at half
+ *  price, and spending every last credit on cargo walked straight into that (a scripted player who
+ *  bought a second ship at about 14,000 cash lost it that way five times in one season). */
+function cashReserve() {
+  const n = me.ships.length;
+  return 300 + (n > 1 ? upkeepDue(me.ships) + world.rules.portFee * n : 0);
+}
+function rawTrips(s, n = 3, delay = 0, cash = me.cash) {
+  const cap = spec(s).capacity, here = world.ports[s.port], out = [];
+  const goods = s.qty > 0 ? [s.good] : ALL_GOODS;
   for (const g of goods) {
-    const qty = s.qty > 0 ? s.qty : Math.floor(Math.min(cap, here.stock[g], Math.max(0, me.cash - 300) / (here.prices[g] * (1 + world.rules.tax) * 1.1)));
+    const qty = s.qty > 0 ? s.qty : Math.floor(Math.min(cap, here.stock[g], Math.max(0, cash - cashReserve()) / (here.prices[g] * (1 + world.rules.tax) * 1.1)));
     if (qty < 10) continue;
     for (const p of world.ports) {
       if (p.id === s.port) continue;
@@ -795,11 +996,26 @@ function bestTrips(s, n = 3) {
   return scored.sort((a, b) => b.score - a.score).slice(0, n);
 }
 
+/** Another of your ships already sailing empty to this port to load there, if any. Empty moves to
+ *  it are left out: with two ships docked together, both were told the same move (sail empty to X,
+ *  then load grain for Y), and the second one to follow it paid more for the load and sold it for
+ *  less. A playthrough with two ships did this time and again (two -579 empty trips side by side). */
+function ownEmptyHeading(s, port) {
+  return me.ships.find(o => o.id !== s.id && o.dest === port && o.qty === 0) ?? null;
+}
+/** Says which ports the move advice left out because another of your empty ships is going there. */
+function takenNote(s) {
+  const taken = me.ships.filter(o => o.id !== s.id && o.dest !== null && o.qty === 0 && o.dest !== s.port);
+  if (s.qty > 0 || !taken.length) return "";
+  const list = taken.map(o => `${esc(world.ports[o.dest].name)} (Ship ${o.id})`).join(", ");
+  return `<div class="est quiet" data-field="takenNote">Not suggesting a move to ${list}: ${taken.length === 1 ? "that ship is" : "those ships are"} already sailing there empty to load, and a second load from the same port costs more and sells for less.</div>`;
+}
+
 /** When no trip pays from here: the port whose best trip, minus the cost of sailing there empty, pays most per hour. */
 function bestMove(s, delay = 0) {
   let best = null;
   for (const p of world.ports) {
-    if (p.id === s.port) continue;
+    if (p.id === s.port || ownEmptyHeading(s, p.id)) continue;
     const go = tripProfit(s, p.id, -1, 0);
     const [next] = rawTrips({ ...s, port: p.id, qty: 0 }, 1, delay + go.hours);
     if (!next) continue;
@@ -808,6 +1024,92 @@ function bestMove(s, delay = 0) {
     if (net >= 50 && (!best || score > best.score)) best = { dest: p.id, score, cost: -go.profit, hours: go.hours, next };
   }
   return best;
+}
+
+/** When no single empty move pays: an empty move whose next two trips together clear +50. A ship at
+ *  a dead-end port (Dunness, say) can sit there for weeks with no one-step move paying, because the
+ *  first trip from the nearest busy port doesn't cover the long sail out; the second one does. A test
+ *  ship waited from day 25 to the end of the season that way. Season playtest (normal, 4 h check-ins,
+ *  players taking the best trips): median 19,660 without this, 28,357 with it; lowest 16,429 vs 20,066. */
+function chainMove(s) {
+  let best = null;
+  for (const p of world.ports) {
+    if (p.id === s.port || ownEmptyHeading(s, p.id)) continue;
+    const go = tripProfit(s, p.id, -1, 0);
+    const [next] = rawTrips({ ...s, port: p.id, qty: 0 }, 1, go.hours, me.cash + go.profit);
+    if (!next) continue;
+    const [then] = rawTrips({ ...s, port: next.dest, qty: 0 }, 1, go.hours + next.hours, me.cash + go.profit + next.profit);
+    if (!then) continue;
+    const net = go.profit + next.profit + then.profit, score = net / (go.hours + next.hours + then.hours);
+    if (net >= 50 && (!best || score > best.score)) best = { dest: p.id, score, cost: -go.profit, hours: go.hours, next, then };
+  }
+  return best;
+}
+
+/** The empty move that comes closest to paying (largest net, even below zero), for when bestMove
+ *  finds none. A test player sat 8 game days at one port told only "waiting costs nothing", with
+ *  no idea how far off the nearest paying trip was or why moving there didn't count. */
+function closestMove(s) {
+  let best = null;
+  for (const p of world.ports) {
+    if (p.id === s.port || ownEmptyHeading(s, p.id)) continue;
+    const go = tripProfit(s, p.id, -1, 0);
+    const [next] = rawTrips({ ...s, port: p.id, qty: 0 }, 1, go.hours);
+    if (next && (!best || next.profit + go.profit > best.net)) best = { dest: p.id, net: next.profit + go.profit, cost: -go.profit, hours: go.hours, next };
+  }
+  return best;
+}
+function closestMoveText(s) {
+  const m = closestMove(s);
+  if (!m) return "";
+  const net = Math.round(m.net), sign = net >= 0 ? `only +${fmt(net)}` : `<b class="neg">−${fmt(-net)}</b>`;
+  return ` Nearest option: sail empty to ${esc(world.ports[m.dest].name)} (${m.hours} h, about ${fmt(m.cost)} in fuel and fees), then load ${GOOD_NAMES[m.next.g]} for ${esc(world.ports[m.next.dest].name)} (+${fmt(m.next.profit)}): ${sign} overall at today's prices.`;
+}
+
+/** Whether an empty ship with this company's cash (or `cash`) could make a paying trip from any port
+ *  at all. Early in a Hard season none does, and saying so beats implying the problem is where you are. */
+function paysAnywhere(s, cash = me.cash) {
+  return world.ports.some(p => rawTrips({ ...s, port: p.id, qty: 0 }, 1, 0, cash).length > 0);
+}
+/** Why an empty ship has no trip when trips do pay for a company with money: its cash is too low.
+ *  Cargo must be paid for in cash (only a last ship's fuel goes on credit, engine.ts sail), so a
+ *  one-ship company below zero can never load again this season; it used to be told "every company
+ *  is waiting, check back in a few hours", and would have waited forever. Null if cash isn't why. */
+function cashAdvice(s) {
+  if (s.qty > 0 || paysAnywhere(s) || !paysAnywhere(s, 1e9)) return null;
+  const listed = world.orders.some(o => o.owner === me.id && o.side === "sell");
+  if (me.cash > 0) return `Trips are paying, but with ${fmt(me.cash)} cash you can't buy a load worth sailing (the advice keeps ${fmt(cashReserve())} in hand for fees and fuel). You can still load a few by hand below; the estimate says whether it pays.`;
+  if (me.ships.length > 1) return `Your cash is ${fmt(me.cash)}, so this ship can't buy cargo or fuel: only a company's last ship can sail on credit. Scrap a spare ship (${fmt(spareScrap())}) to raise cash${listed ? ", or wait for the goods you listed to sell" : ""}.`;
+  return `Your cash is ${fmt(me.cash)}, so you can't buy cargo: it must be paid for in cash, and only fuel goes on credit. ${listed
+    ? "The goods you listed for sale are your way back: when someone buys them, the money comes to you."
+    : "Nothing earns money without cargo, and sailing empty only adds to the debt, so this company can't trade again this season. Every company starts fresh next season."}`;
+}
+
+/** One listing in "For sale here": what it costs in total, how many you can take (room and cash),
+ *  and whether the market here is cheaper, so a player never pays over the odds without knowing. */
+function listingHtml(s, o) {
+  const g = GOOD_NAMES[o.good], tax = world.rules.tax;
+  const room = Math.min(o.qty, spec(s).capacity - s.qty);
+  const qty = Math.min(room, Math.floor(Math.max(0, me.cash) / o.price + 1e-9));
+  const head = `<span>${o.qty} ${g} from ${esc(o.ownerName)} at ${o.price.toFixed(2)} each</span>`;
+  if (qty < 1) return `<div class="row">${head}<button class="secondary" disabled>Buy</button></div>
+    <div class="est">Not enough cash: one costs ${o.price.toFixed(2)} and you have ${fmt(me.cash)}.</div>`;
+  const cost = qty * o.price, market = buyCost(s.port, o.good, qty) * (1 + tax);
+  const diff = Math.round(market - cost);
+  const vs = diff > 0 ? `That's <b class="pos">${fmt(diff)} less</b> than buying ${qty} from the market here (about ${fmt(market)} with tax).`
+    : diff < 0 ? `Buying ${qty} from the market here costs about ${fmt(market)} with tax, <b class="neg">${fmt(-diff)} less</b> than this listing.`
+    : `About the same as buying ${qty} from the market here.`;
+  const part = qty < room ? ` You can afford ${qty} of ${room}.` : "";
+  return `<div class="row">${head}<button class="secondary" data-act="buyOrder" data-ship="${s.id}" data-order="${o.id}" data-qty="${qty}">Buy ${qty} for ${fmt(cost)}</button></div>
+    <div class="est${diff < 0 ? " warn" : ""}" data-field="listingNote">${vs}${part}</div>`;
+}
+/** What selling a ship's whole cargo to this port's market pays, after tax (the server's sliding price). */
+function saleNet(s) { return sellValue(s.port, s.good, s.qty, false) * (1 - world.rules.tax); }
+/** One line under the sell button so the sum adds up: price, tax, and profit against what was paid. */
+function saleNote(s) {
+  const net = saleNet(s), gain = net - s.cost, tax = Math.round(world.rules.tax * 1000) / 10;
+  return `About ${(net / s.qty).toFixed(2)} each after ${tax}% tax (the price slides as you sell). You paid ${fmt(s.cost)}, so this sale `
+    + (Math.abs(gain) < 0.5 ? "breaks even." : gain > 0 ? `makes <b class="pos">+${fmt(gain)}</b>.` : `loses <b class="neg">${fmt(-gain)}</b>.`);
 }
 
 /** At the very end of a season: is selling a cargo here worth more than keeping it? Unsold cargo
@@ -819,28 +1121,38 @@ function endCargoAdvice(s) {
     : `Selling here now would lower your net worth by about ${fmt(s.cost - sell)}: unsold cargo counts at what you paid for it, so keeping it is fine.`;
 }
 function tripsHtml(s, trips = bestTrips(s), move = null) {
+  if (!trips.length && move?.then) return `<h3>Best trips from here</h3><div class="est">No trip pays from here right now. Your best move:</div>
+    <div class="trips"><button class="trip move secondary" data-act="plan" data-ship="${s.id}" data-dest="${move.dest}" data-good="">
+      <span>Sail empty → ${esc(world.ports[move.dest].name)}, then load ${GOOD_NAMES[move.next.g]} for ${esc(world.ports[move.next.dest].name)}, then ${GOOD_NAMES[move.then.g]} for ${esc(world.ports[move.then.dest].name)}</span>
+      <span class="num"><b class="pos">+${fmt(move.next.profit + move.then.profit - move.cost)}</b> · ${move.hours + move.next.hours + move.then.hours} h</span></button></div>
+    <div class="est" data-field="chainNote">Getting there costs about ${fmt(move.cost)} in fuel and fees. The first trip from there pays about +${fmt(move.next.profit)}, which doesn't cover that on its own, and the one after about +${fmt(move.then.profit)} (today's prices). No empty move pays back with just one trip, and waiting here for prices to change can take days.</div>${takenNote(s)}`;
   if (!trips.length && move) return `<h3>Best trips from here</h3><div class="est">No trip pays from here right now. Your best move:</div>
     <div class="trips"><button class="trip move secondary" data-act="plan" data-ship="${s.id}" data-dest="${move.dest}" data-good="">
       <span>Sail empty → ${esc(world.ports[move.dest].name)}, then load ${GOOD_NAMES[move.next.g]} for ${esc(world.ports[move.next.dest].name)}</span>
       <span class="num"><b class="pos">+${fmt(move.next.profit - move.cost)}</b> · ${move.hours + move.next.hours} h</span></button></div>
-    <div class="est">Getting there costs about ${fmt(move.cost)} in fuel and fees; the trip from there pays about +${fmt(move.next.profit)} at today's prices.</div>`;
+    <div class="est">Getting there costs about ${fmt(move.cost)} in fuel and fees; the trip from there pays about +${fmt(move.next.profit)} at today's prices.</div>${takenNote(s)}`;
   const left = world.seasonHours - world.tick;
-  const soonest = Math.min(...world.ports.filter(p => p.id !== s.port).map(p => Math.max(1, Math.ceil(distance(s.port, p.id) / world.rules.speed))));
+  const soonest = Math.min(...world.ports.filter(p => p.id !== s.port).map(p => Math.max(1, Math.ceil(distance(s.port, p.id) / spec(s).speed_per_hour))));
   if (!trips.length && !landsInSeason(soonest)) return `<h3>Best trips from here</h3><div class="est">The season ends in ${left} h, too soon for any voyage from here to dock in time. ${s.qty > 0 ? endCargoAdvice(s) : "Your ship can stay where it is."}</div>`;
-  if (!trips.length) return `<h3>Best trips from here</h3><div class="est">${s.qty > 0 ? "Nowhere pays more than selling here right now." : "No trip pays right now at these prices, from here or one hop away. Waiting costs nothing; prices move every hour."}</div>`;
+  const broke = !trips.length && cashAdvice(s);
+  if (broke) return `<h3>Best trips from here</h3><div class="est warn" data-field="cashAdvice">${broke}</div>`;
+  if (!trips.length) return `<h3>Best trips from here</h3><div class="est">${s.qty > 0 ? "Nowhere pays more than selling here right now."
+    : paysAnywhere(s) ? `No trip pays from here right now, and no empty move to another port earns at least +50 after its fuel and fees.${closestMoveText(s)} Waiting costs nothing; prices move every hour.`
+    : "No trip pays anywhere on the map right now, so every company is waiting. Prices drift apart as ports make and use goods; waiting costs nothing, so check back in a few hours."}</div>${takenNote(s)}`;
   return `<h3>Best trips from here</h3><div class="trips">${trips.map(t => `<button class="trip secondary" data-act="plan" data-ship="${s.id}" data-dest="${t.dest}" data-good="${s.qty > 0 ? "" : GOOD_NAMES[t.g]}" data-qty="${t.qty}">
       <span>${s.qty > 0 ? "Sell" : `Load ${t.qty}`} <span class="tag ${GOOD_NAMES[t.g]}">${GOOD_NAMES[t.g]}</span> → ${esc(world.ports[t.dest].name)}</span>
       <span class="num"><b class="pos">+${fmt(t.profit)}</b> · ${t.hours} h</span>
-      ${t.next ? `<span class="then">then +${fmt(t.next.profit)} from there</span>` : t.onward ? `<span class="then">then a short hop to more trips</span>` : `<span class="then">nothing pays from there yet</span>`}</button>`).join("")}</div>`;
+      ${t.next ? `<span class="then">then +${fmt(t.next.profit)} from there</span>` : t.onward ? `<span class="then">then +${fmt(t.onward.next.profit - t.onward.cost)} after a ${t.onward.hours} h empty hop to ${esc(world.ports[t.onward.dest].name)}</span>` : `<span class="then">nothing pays from there yet</span>`}</button>`).join("")}</div>
+    ${trips.length > 1 ? `<div class="est quiet" data-field="tripsNote">Ranked by what each trip earns an hour, counting the next trip from where it ends, so a smaller trip to a busy port can come first.</div>` : ""}`;
 }
 
 /** Why the server would refuse this trip for lack of cash (engine.ts sail), or null if it's affordable.
  *  Cargo must always be paid for; fuel too, unless this is the company's last ship (then it goes on credit). */
 function cashShortfall(s, dest, g, qty, fuel) {
   const loading = s.qty === 0 && g >= 0 && qty > 0;
-  if (loading && (qty > world.rules.capacity || qty > world.ports[s.port].stock[g])) return null;   // refused for another reason
+  if (loading && (qty > spec(s).capacity || qty > world.ports[s.port].stock[g])) return null;   // refused for another reason
   const last = me.ships.length === 1, have = last ? Math.max(0, me.cash) : me.cash;
-  const cost = n => buyCost(s.port, g, n) * (1 + world.rules.tax) + (last ? 0 : fuelCost(s.port, dest, g, n));
+  const cost = n => buyCost(s.port, g, n) * (1 + world.rules.tax) + (last ? 0 : fuelCost(s.port, dest, g, n, s));
   const need = loading ? cost(qty) : last ? 0 : fuel;
   if (need <= have) return null;
   const what = loading ? (last ? "the cargo costs" : "cargo and fuel cost") : "the fuel costs";
@@ -848,9 +1160,30 @@ function cashShortfall(s, dest, g, qty, fuel) {
   let n = 0;
   if (loading) { let lo = 0, hi = qty; while (lo < hi) { const m = Math.ceil((lo + hi) / 2); if (cost(m) <= have) lo = m; else hi = m - 1; } n = lo; }
   if (n > 0) text += ` You can afford about ${n} ${GOOD_NAMES[g]}.`;
-  else if (last) text += " Sail empty instead: your last ship's fuel can go on credit.";
-  else text += ` Only a company's last ship can sail on credit: sell cargo or scrap a spare ship (${fmt(world.rules.shipPrice / 2)}) first.`;
+  else if (last) text += me.cash > 0 ? " Sail empty instead: your last ship's fuel can go on credit." : " Cargo must be paid for in cash; only fuel goes on credit.";
+  else text += ` Only a company's last ship can sail on credit: sell cargo or scrap a spare ship (${fmt(spareScrap())}) first.`;
   return text;
+}
+/** Why the server would refuse loading `qty` of good `g` onto empty ship `s`, or null if it wouldn't. */
+function loadProblem(s, g, qty) {
+  const cap = spec(s).capacity, stock = Math.floor(world.ports[s.port].stock[g]);
+  if (!(qty >= 1)) return `Enter how many ${GOOD_NAMES[g]} to load (1 to ${cap}), or choose Sail empty.`;
+  if (qty > cap) return `Your ship holds ${cap} at most.`;
+  if (qty > stock) return `This port only has ${fmt(stock)} ${GOOD_NAMES[g]} in stock.`;
+  return null;
+}
+/** What the sail form says before a destination is picked. A loaded ship has cargo to sell, so
+ *  "waiting is free" (meant for an empty ship with nothing worth doing) would point the wrong way.
+ *  Nor does "prices move every hour, check back soon" help a ship held back by cash (cashAdvice):
+ *  a company below zero sat under "this company can't trade again this season" and was told to
+ *  check back soon or move anyway, though moving only adds fuel to the debt. */
+function noDestText(s) {
+  if (s.qty > 0) return `Selling here pays best right now: use the Sell button above. Or pick a port above to carry your ${GOOD_NAMES[s.good]} there instead.`;
+  if (cashAdvice(s)) return me.cash > 0
+    ? "Pick a port above and load what you can afford; the estimate shows whether it pays."
+    : me.ships.length > 1 ? "This ship can't sail until your cash is back above zero."
+    : "Waiting costs nothing. Sailing empty puts its fuel on credit, adding to the debt, and earns nothing back.";
+  return "Waiting is free: prices move every hour, so check back soon. Or pick a port above if you want to move anyway.";
 }
 function estimate(card) {
   const s = me.ships.find(x => x.id === Number(card.dataset.ship));
@@ -858,14 +1191,24 @@ function estimate(card) {
   const sailBtn = card.querySelector("[data-act=sail]");
   if (destVal === "") {
     if (sailBtn) sailBtn.disabled = true;
-    card.querySelector("[data-field=estimate]").innerHTML = "Waiting is free: prices move every hour, so check back soon. Or pick a port above if you want to move anyway.";
+    card.querySelector("[data-field=estimate]").innerHTML = noDestText(s);
     return;
   }
   if (sailBtn) sailBtn.disabled = false;
   const dest = Number(destVal);
   const goodSel = card.querySelector("[data-field=good]");
   const g = s.qty > 0 ? s.good : (goodSel?.value ? GOOD_NAMES.indexOf(goodSel.value) : -1);
-  const qty = s.qty > 0 ? s.qty : Number(card.querySelector("[data-field=qty]")?.value || 0);
+  const qtyInput = card.querySelector("[data-field=qty]");
+  if (qtyInput) qtyInput.disabled = g < 0;   // nothing to count when sailing empty
+  const qty = s.qty > 0 ? s.qty : Math.floor(Number(qtyInput?.value || 0));
+  // The server refuses these loads; say why here and keep "Set sail" off, instead of a bare
+  // "bad cargo" or "over capacity" after the click (and an estimate for cargo that won't fit).
+  const bad = s.qty === 0 && g >= 0 ? loadProblem(s, g, qty) : null;
+  if (bad) {
+    if (sailBtn) sailBtn.disabled = true;
+    card.querySelector("[data-field=estimate]").innerHTML = `<b class="neg">${bad}</b>`;
+    return (bad.charAt(0).toLowerCase() + bad.slice(1)).replace(/\.$/, "");
+  }
   const there = world.ports[dest];
   const t = tripProfit(s, dest, g, qty);
   let text = `Fuel ≈ ${fmt(t.fuel)}, port fee ${world.rules.portFee}.`;
@@ -885,6 +1228,11 @@ function estimate(card) {
   }
   if (late) text = `<b class="neg">This ship would dock after the season ends</b> (≈${t.hours} h; ${Math.max(0, world.seasonHours - world.tick)} h left), so ${g >= 0 && qty > 0 ? "the cargo could never be sold: it only counts at what you paid for it, and the fuel is lost" : "the fuel would be wasted"}. ` + text;
   card.querySelector("[data-field=estimate]").innerHTML = text;
+  // A one-line version for the toast when a destination is tapped on the map.
+  if (late) return "docks after the season ends";
+  if (short) return "not enough cash";
+  if (g < 0 || qty <= 0) return `sailing empty costs about ${fmt(t.fuel + world.rules.portFee)}`;
+  return `${t.profit >= 0 ? "makes" : "loses"} about ${fmt(Math.abs(t.profit))}`;
 }
 
 function fleetPanel() {
@@ -892,16 +1240,49 @@ function fleetPanel() {
   const atSea = me.ships.filter(s => s.dest !== null).length;
   const cargo = me.ships.reduce((a, s) => a + (s.qty > 0 ? s.cost : 0), 0);
   return `<h2>${esc(me.name)}</h2>
-    <div class="quiet">${me.ships.length} of ${world.rules.maxShips} ships. Every ship after the first costs ${fmt(world.rules.upkeep)} a day.</div>
+    <div class="quiet">${me.ships.length} of ${world.rules.maxShips} ships. Upkeep is ${fmt(upkeepDue(me.ships))} a day now: each ship has its own, less one freighter's worth (${fmt(spec("freighter").upkeep)}) that is free.</div>
     <div class="bar mine" style="height:6px;margin-top:8px"><i style="width:${me.ships.length / world.rules.maxShips * 100}%"></i></div>
     <div class="tiles">
       <div><span>At sea</span><b>${atSea}</b></div><div><span>Docked</span><b>${me.ships.length - atSea}</b></div>
-      <div><span>Cargo value</span><b>${fmt(cargo)}</b></div><div><span>Net worth</span><b>${fmt(me.worth)}</b></div>
+      <div><span>Cargo (cost)</span><b>${fmt(cargo)}</b></div><div><span>Net worth</span><b>${fmt(me.worth)}</b></div>
     </div>
-    <h3>Ships</h3>${me.ships.map(shipCard).join("")}
+    <div class="quiet" data-field="worthSum">${worthSum(cargo)}</div>
+    <h3>Ships</h3>${(me.forcedSales ?? []).slice().reverse().map(f => `<div class="est warn" data-field="forcedSale">${forcedSaleText(f)}</div>`).join("")}
+    ${me.ships.map(shipCard).join("")}
+    ${fleetBuyHtml()}
     ${notifyHtml()}
     ${worthChart()}
     ${tripLog()}`;
+}
+
+/** Ships are bought at a port where one of yours is docked (engine buyShip), which the Fleet tab
+ *  never said: point to those ports' Port tab, where the buy button and its warnings are. */
+function fleetBuyHtml() {
+  if (world.seasonOver) return "";
+  const price = spec(buyClass).price, n = me.ships.length, max = world.rules.maxShips;
+  if (n >= max) return `<div class="quiet" data-field="fleetBuy">Your fleet is full: ${max} ships is the most a company can have.</div>`;
+  const ports = [...new Set(me.ships.filter(s => s.dest === null).map(s => s.port))];
+  const why = `A new ship costs ${fmt(spec("coaster").price)} (coaster), ${fmt(spec("freighter").price)} (freighter) or ${fmt(spec("bulker").price)} (bulker) and is bought at a port where one of your ships is docked.`;
+  if (!ports.length) return `<div class="quiet" data-field="fleetBuy">${why} All your ships are at sea, so wait until one docks.</div>`;
+  const short = me.cash < price ? ` You need ${fmt(price - me.cash)} more cash for a ${buyClass}.` : "";
+  return `<div class="quiet" data-field="fleetBuy">${why}${short}</div>
+    <div class="row">${ports.map(id => `<button class="link" data-act="goPort" data-port="${id}">Buy a ship at ${esc(world.ports[id].name)} →</button>`).join(" ")}</div>`;
+}
+
+/** How net worth is made up (engine netWorth), so it adds up for a player who sees only cash and cargo. */
+function worthSum(cargo) {
+  const ships = me.ships.reduce((a, s) => a + spec(s).price / 2, 0);
+  const orders = world.orders.filter(o => o.owner === me.id)
+    .reduce((a, o) => a + (o.side === "buy" ? o.qty * o.price : o.cost ?? 0), 0);
+  const n = me.ships.length;
+  return `Net worth ${fmt(me.worth)} = cash ${fmt(me.cash)} + ${n} ship${n === 1 ? "" : "s"} at half price ${fmt(ships)}`
+    + ` + cargo at cost ${fmt(cargo)}${orders ? ` + open orders ${fmt(orders)}` : ""}.`;
+}
+
+/** The day a net-worth log starts on: it has the founding value, then one value at the start of each
+ * day since, so a company founded mid-season starts on its own day, not Day 1. */
+function worthStartDay(logLength, tick) {
+  return Math.max(1, Math.floor(tick / 24) + 1 - (logLength - 1));
 }
 
 /** Net worth at the start of each day this season, with today's value as the last point. */
@@ -916,7 +1297,7 @@ function worthChart() {
     <div class="quiet">${fmt(pts[0])} → <b>${fmt(me.worth)}</b> <span class="${change >= 0 ? "pos" : "neg"}">(${change >= 0 ? "+" : "−"}${fmt(Math.abs(change))})</span></div>
     <svg class="worthChart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Net worth by day">
       <path d="${line}L${w},${h}L0,${h}Z" class="area"/><path d="${line}" class="line"/></svg>
-    <div class="axis"><span>Day 1</span><span>Today</span></div>`;
+    <div class="axis"><span>Day ${worthStartDay(pts.length - 1, world.tick)}</span><span>${world.seasonOver ? `Day ${Math.round(world.seasonHours / 24)}` : "Today"}</span></div>`;
 }
 
 function tripLog() {
@@ -926,21 +1307,33 @@ function tripLog() {
     const what = t.good === null ? "empty" : `${t.qty} ${GOOD_NAMES[t.good]}`;
     const profit = t.earned - t.spent;
     const result = t.open
-      ? `<span class="quiet">${t.good === null ? "at sea" : "in progress"}</span>`
+      ? `<span class="quiet">${me.ships.some(x => x.id === t.ship && x.dest !== null) ? "at sea" : t.good === null ? "docked" : world.seasonOver ? "unsold at season end" : "not sold yet"}</span>`
+      : t.listed ? `<span class="quiet" title="Some of this cargo is listed for sale. The profit shows once it has all sold (or you take it back).">listed for sale</span>`
       : t.good === null ? `<span class="neg">−${fmt(t.spent)}</span>`
-      : `<b class="${profit >= 0 ? "pos" : "neg"}">${profit >= 0 ? "+" : "−"}${fmt(Math.abs(profit))}</b>${t.listed ? ` <span class="quiet" title="Part of the cargo was listed for sale, so it isn't counted">*</span>` : ""}`;
+      : `<b class="${profit >= 0 ? "pos" : "neg"}">${profit >= 0 ? "+" : "−"}${fmt(Math.abs(profit))}</b>`;
     return `<tr><td class="num">${Math.floor(t.departTick / 24) + 1}</td><td>${esc(world.ports[t.from].name)} → ${esc(world.ports[t.to].name)}</td><td>${what}</td><td class="num">${result}</td></tr>`;
   }).join("");
-  const done = trips.filter(t => !t.open), total = done.reduce((a, t) => a + t.earned - t.spent, 0);
+  const done = trips.filter(t => !t.open && !t.listed), total = done.reduce((a, t) => a + t.earned - t.spent, 0);
   return `<h3>Trip log</h3>
     <table class="trips-log"><tr><th class="num">Day</th><th>Route</th><th>Cargo</th><th class="num">Profit</th></tr>${rows}</table>
-    ${done.length ? `<div class="est">Last ${done.length} finished trip${done.length === 1 ? "" : "s"}: <b class="${total >= 0 ? "pos" : "neg"}">${total >= 0 ? "+" : "−"}${fmt(Math.abs(total))}</b> after cargo, fuel, fees and tax.${trips.some(t => t.listed) ? " * Listed cargo isn't counted until it sells." : ""}</div>` : ""}`;
+    ${done.length ? `<div class="est">Last ${done.length} finished trip${done.length === 1 ? "" : "s"}: <b class="${total >= 0 ? "pos" : "neg"}">${total >= 0 ? "+" : "−"}${fmt(Math.abs(total))}</b> after cargo, fuel, fees and tax.${trips.some(t => t.listed) ? " Trips with cargo listed for sale are added once it has all sold." : ""}</div>` : ""}`;
 }
 
-/** What a buy order costs if it fills completely: the goods don't come back to you. */
-function orderCostText(qty, price) {
+/** What a buy order costs if it fills completely: the goods don't come back to you. The server
+ *  refuses an order your cash doesn't cover (engine.ts placeOrder), so say that before the click. */
+function orderCostText(qty, price, good = "grain") {
+  const band = world.rules.bands[good];
+  if (!(Math.floor(qty) >= 1 && Math.floor(qty) <= 1000)) return "Quantity must be 1 to 1000.";
+  if (band && !(price >= band.floor && price <= band.ceiling)) return `Price for ${good} must be between ${band.floor} and ${band.ceiling}.`;
   const total = Math.floor(qty) * price;
+  if (total > 0 && me && total > me.cash) return `Not enough cash: this order needs ${fmt(total)} to cover it and you have ${fmt(me.cash)}.`;
   return total > 0 ? `If it fills, this costs you ${fmt(total)}.` : "";
+}
+/** A buy order can always be cancelled; a listing only when one of your ships is docked at its port
+ *  with room to take the goods back (engine cancelOrder), otherwise the Cancel button only errors. */
+function canTakeBack(o) {
+  return o.side === "buy" || me.ships.some(s => s.dest === null && s.port === o.port
+    && (s.qty === 0 || s.good === o.good) && s.qty + o.qty <= spec(s).capacity);
 }
 function ordersPanel() {
   const mine = me ? world.orders.filter(o => o.owner === me.id) : [];
@@ -951,26 +1344,44 @@ function ordersPanel() {
     <div class="est warn">Goods delivered to your buy order are used up at that port. They don't come to you, so a filled order costs you its full price and doesn't add to your net worth.</div>
     ${me && world.seasonOver ? `<div class="est">Trading is closed until the next season starts.</div>` : ""}
     ${me && !world.seasonOver ? `<h3>Post an order</h3>
-    <div class="row"><select id="oPort">${world.ports.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}" ${p.id === selectedPort ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+    <div class="row"><label class="mini grow">Port<select id="oPort">${world.ports.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}" ${p.id === selectedPort ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label></div>
     <div class="row labelled"><label class="mini">Good<select id="oGood" style="width:auto">${GOOD_NAMES.map(g => `<option>${g}</option>`).join("")}</select></label>
       <label class="mini">Quantity<input id="oQty" type="number" min="1" max="1000" value="100" style="width:90px"></label>
       <label class="mini">Price each<input id="oPrice" type="number" step="0.5" value="30" style="width:90px"></label>
       <button data-act="placeOrder">Post</button></div>
     <div class="est">Grain ${b.grain.floor}–${b.grain.ceiling}, fuel ${b.fuel.floor}–${b.fuel.ceiling} per unit. <span id="oCost">${orderCostText(100, 30)}</span></div>` : ""}
     <h3>Your orders</h3>
-    ${mine.length ? `<table><tr><th>Port</th><th>Order</th><th class="num">Qty</th><th class="num">Price</th><th></th></tr>${mine.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td><span class="tag ${GOOD_NAMES[o.good]}">${o.side === "sell" ? "selling" : "buying"} ${GOOD_NAMES[o.good]}</span></td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td><td>${world.seasonOver ? "" : `<button class="link" data-act="cancelOrder" data-order="${o.id}">Cancel</button>`}</td></tr>`).join("")}</table>` : `<div class="empty">You have no open orders.</div>`}
+    ${mine.length ? `<table><tr><th>Port</th><th>Order</th><th class="num">Qty</th><th class="num">Price</th><th></th></tr>${mine.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td><span class="tag ${GOOD_NAMES[o.good]}">${o.side === "sell" ? "selling" : "buying"} ${GOOD_NAMES[o.good]}</span></td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td><td>${world.seasonOver ? "" : canTakeBack(o) ? `<button class="link" data-act="cancelOrder" data-order="${o.id}">Cancel</button>`
+      : `<span class="quiet" data-field="takeBack">Dock a ship with room here to cancel</span>`}</td></tr>`).join("")}</table>` : `<div class="empty">You have no open orders.</div>`}
     <h3>All open orders</h3>
     ${others.length ? `<table><tr><th>Port</th><th>Good</th><th class="num">Qty</th><th class="num">Price</th></tr>${others.map(o => `<tr><td>${esc(world.ports[o.port].name)}</td><td>${o.side === "sell" ? "for sale" : "wanted"}: ${GOOD_NAMES[o.good]}</td><td class="num">${o.qty}</td><td class="num">${o.price.toFixed(2)}</td></tr>`).join("")}</table>` : `<div class="empty">No other open orders.</div>`}`;
 }
 
+/** What each class is for, in a line, so the choice isn't a guess. */
+const CLASS_ADVICE = {
+  coaster: "Fast and small: best on short hops, in thin markets like machinery, and when cash is tight.",
+  freighter: "The all-rounder, and the ship you start with.",
+  bulker: "Slow and big: best for cheap bulk goods (grain, ore, fuel) between big producers and consumers. Too big for thin machinery markets.",
+};
+function classNote(c) {
+  const k = spec(c);
+  return `${CLASS_ADVICE[c]} Holds ${k.capacity}, sails ${k.speed_per_hour} a hour, burns ${k.fuel_per_100_distance} fuel per 100 distance, upkeep ${fmt(k.upkeep)} a day.`;
+}
 /** "Buy a ship" when you can afford one; otherwise say how much more cash it needs instead of a button that only errors. */
 function buyShipHtml() {
-  const price = world.rules.shipPrice;
+  const price = spec(buyClass).price;
   // Ships count at half their price in net worth (engine netWorth), so a new ship drops your net
   // worth at once; without saying so, the net-worth chart's sudden fall looks like a loss.
-  if (me.cash >= price) return `<div class="row"><button data-act="buyShip">Buy a ship here (${fmt(price)})</button></div>
-    <div class="est">Ships count at half their price, so your net worth drops by ${fmt(price / 2)} at first; the extra ship has to earn it back. Every ship after the first costs ${fmt(world.rules.upkeep)} a day.</div>`;
-  return `<div class="row"><button disabled>Buy a ship here (${fmt(price)})</button><span class="quiet">You need ${fmt(price - me.cash)} more cash.</span></div>`;
+  // Upkeep is charged at the start of each day; a company below zero then has an idle spare ship
+  // sold for half its price. Buying with little cash left (cargo soon eats the rest) walks into that.
+  const left = me.cash - price, upkeep = upkeepDue([...me.ships, { type: buyClass }]);   // upkeep once the new ship is in
+  const load = Math.min(...[0, 1].map(g => buyCost(selectedPort, g, spec(buyClass).capacity) * (1 + world.rules.tax)));
+  const tight = left < load + upkeep;
+  const picker = `<div class="row labelled"><label class="mini">Ship class<select data-field="shipClass" aria-label="Ship class to buy">${SHIP_CLASSES.map(c => `<option value="${c}"${c === buyClass ? " selected" : ""}>${c} · ${fmt(spec(c).price)}</option>`).join("")}</select></label></div>
+    <div class="est" data-field="classNote">${classNote(buyClass)}</div>`;
+  if (me.cash >= price) return `${picker}<div class="row" data-field="buyShipRow"><button data-act="buyShip">Buy a ship here (${fmt(price)})</button></div>
+    <div class="est${tight ? " warn" : ""}" data-field="buyShipNote">${tight ? `You'd have ${fmt(left)} cash left, less than one full load here (about ${fmt(load)}) plus a day's upkeep (${fmt(upkeep)}). ` : ""}Upkeep is charged at the start of each day for every ship, less one freighter's worth that is free across the fleet; if your cash is below zero then, an idle spare ship is sold for ${fmt(price / 2)}, half what you paid. Ships count at half their price, so your net worth drops by ${fmt(price / 2)} at first; the extra ship has to earn it back.</div>`;
+  return `${picker}<div class="row" data-field="buyShipRow"><button disabled>Buy a ship here (${fmt(price)})</button><span class="quiet">You need ${fmt(price - me.cash)} more cash.</span></div>`;
 }
 function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
 function boardPanel() {
@@ -1003,8 +1414,14 @@ function bindPanel() {
     estimate(card);
   });
   if ($("oCost")) {   // after restoreForm, so it matches what the player typed
-    const cost = () => { $("oCost").textContent = orderCostText(Number($("oQty").value), Number($("oPrice").value)); };
-    for (const id of ["oQty", "oPrice"]) $(id).addEventListener("input", cost);
+    const cost = () => {
+      const qty = Number($("oQty").value), price = Number($("oPrice").value), good = $("oGood").value;
+      const text = orderCostText(qty, price, good), bad = !text.startsWith("If it fills");
+      $("oCost").textContent = text;
+      $("oCost").classList.toggle("neg", bad);
+      document.querySelector("[data-act=placeOrder]").disabled = bad;
+    };
+    for (const id of ["oQty", "oPrice", "oGood"]) $(id).addEventListener("input", cost);
     cost();
   }
   document.querySelectorAll("[data-act]").forEach(btn => btn.addEventListener("click", () => {
@@ -1015,17 +1432,26 @@ function bindPanel() {
     }
     if (act === "sell") command({ type: "sell", ship }, () => toast("Sold"));
     if (act === "fill") command({ type: "sell", ship, order: Number(btn.dataset.order) }, () => toast("Order filled"));
-    if (act === "scrap") command({ type: "scrapShip", ship }, () => toast("Ship scrapped"));
-    if (act === "buyShip") command({ type: "buyShip", port: selectedPort }, () => toast("New ship bought"));
+    if (act === "scrap") {
+      if (scrapAsk !== ship) { scrapAsk = ship; render(); }
+      else { scrapAsk = null; const back = spec(me.ships.find(x => x.id === ship) ?? "freighter").price / 2; command({ type: "scrapShip", ship }, () => toast(`Ship ${ship} scrapped for ${fmt(back)}`)); }
+    }
+    if (act === "openPort") { selectedPort = Number(btn.dataset.port); tab = "port"; render(); }
+    if (act === "goPort") { selectedPort = Number(btn.dataset.port); tab = "port"; scrollToBuy = true; render(); }
+    if (act === "scrapKeep") { scrapAsk = null; render(); }
+    if (act === "buyShip") command({ type: "buyShip", port: selectedPort, shipType: buyClass }, () => toast(`New ${buyClass} bought`));
     if (act === "cancelOrder") command({ type: "cancelOrder", order: Number(btn.dataset.order) }, () => toast("Order cancelled"));
     if (act === "listSell") {
       const card = btn.closest(".shipCard");
       command({ type: "placeSell", ship, qty: Number(card.querySelector("[data-field=sellQty]").value),
-        price: Number(card.querySelector("[data-field=sellPrice]").value) }, () => toast("Listed for sale"));
+        price: Number(card.querySelector("[data-field=sellPrice]").value) }, res => toast(listedText(res)));
     }
     if (act === "buyOrder") command({ type: "buyFromOrder", ship, order: Number(btn.dataset.order), qty: Number(btn.dataset.qty) }, () => toast("Bought"));
-    if (act === "placeOrder") command({ type: "placeOrder", port: Number($("oPort").value), good: $("oGood").value,
-      qty: Number($("oQty").value), price: Number($("oPrice").value) }, () => toast("Order posted"));
+    if (act === "placeOrder") {
+      const port = Number($("oPort").value), good = $("oGood").value;
+      command({ type: "placeOrder", port, good, qty: Number($("oQty").value), price: Number($("oPrice").value) },
+        res => toast(orderPostedText(res, port, good)));
+    }
     if (act === "plan") {
       // Fill the sail form with this trip; the player still presses Set sail.
       const card = btn.closest(".shipCard"), set = (field, v) => {

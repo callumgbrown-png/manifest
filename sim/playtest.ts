@@ -2,15 +2,18 @@
 // Season playtest: players who check in every few hours and follow the game's own advice panel,
 // against 30 live bots. Mirrors the client's "best trips" and "best move" maths (app.js) on the engine.
 import { readFileSync } from "node:fs";
-import { Engine } from "../server/src/engine.ts";
+import { Engine, GOODS } from "../server/src/engine.ts";
 import { runBots, botName, pickStartPort } from "../server/src/bots.ts";
 
 const rules = JSON.parse(readFileSync(new URL("../config/rules.json", import.meta.url), "utf8"));
 const map = JSON.parse(readFileSync(new URL("../config/map.json", import.meta.url), "utf8"));
-const CHECK = Number(process.env.CHECK ?? 4);        // hours between a player's check-ins
-const PER = Number(process.env.PER ?? 4);            // players per strategy
-const SEEDS = Number(process.env.SEEDS ?? 3);
-const DIFF = process.env.DIFF ?? "normal";
+const CHECK = Number(process.env.CHECK || 4);        // hours between a player's check-ins
+const PER = Number(process.env.PER || 4);            // players per strategy
+const SEEDS = Number(process.env.SEEDS || 3);
+const DIFF = process.env.DIFF || "normal";
+for (const [k, v] of Object.entries({ CHECK, PER, SEEDS })) {
+  if (!Number.isInteger(v) || v < 1) { console.error(`${k} must be a whole number of 1 or more (SEEDS is how many seeds, e.g. SEEDS=3)`); process.exit(1); }
+}
 
 type Strat = "advice" | "tripsOnly" | "oldDefault" | "newDefault" | "plan";
 interface P { id: number; strat: Strat; emptySpent: number; trips: number; moves: number; waits: number; }
@@ -26,7 +29,7 @@ function makeTools(e: Engine) {
   }
   function bestTrips(port: number, cash: number, cargo: number[][], delay = 0) {
     const out: { dest: number; g: number; qty: number; profit: number; hours: number }[] = [];
-    for (let g = 0; g < 2; g++) {
+    for (let g = 0; g < GOODS.length; g++) {
       const qty = Math.floor(Math.min(cap, e.stock[port][g], Math.max(0, cash - 300) / (e.price(port, g) * (1 + tax()) * 1.1)));
       if (qty < 10) continue;
       for (let d = 0; d < e.n; d++) {
@@ -49,6 +52,21 @@ function makeTools(e: Engine) {
     }
     return best;
   }
+  /** Like the client's chainMove: when no single move pays, an empty move whose next two trips together clear +50. */
+  function chainMove(port: number, cash: number, cargo: number[][]) {
+    let best: { dest: number; score: number } | null = null;
+    for (let d = 0; d < e.n; d++) {
+      if (d === port || !Number.isFinite(e.dist[port][d])) continue;
+      const go = profit(port, d, -1, 0, cargo), h0 = e.voyageHours(port, d);
+      const [t1] = bestTrips(d, cash + go, cargo, h0);
+      if (!t1) continue;
+      const [t2] = bestTrips(t1.dest, cash + go + t1.profit, cargo, h0 + t1.hours);
+      if (!t2) continue;
+      const net = go + t1.profit + t2.profit, score = net / (h0 + t1.hours + t2.hours);
+      if (net >= 50 && (!best || score > best.score)) best = { dest: d, score };
+    }
+    return best;
+  }
   const alphaFirst = (port: number) => [...map.ports].filter((p: any) => p.id !== port).sort((a: any, b: any) => a.name.localeCompare(b.name))[0].id;
   const nearest = (port: number) => { let b = -1; for (let d = 0; d < e.n; d++) if (d !== port && Number.isFinite(e.dist[port][d]) && (b < 0 || e.dist[port][d] < e.dist[port][b])) b = d; return b; };
   /** Trip choice that also values where the ship ends up: profit plus the best next step from there, per hour. */
@@ -64,12 +82,12 @@ function makeTools(e: Engine) {
     }
     return best;
   }
-  return { bestTrips, bestMove, alphaFirst, nearest, planned };
+  return { bestTrips, bestMove, chainMove, alphaFirst, nearest, planned };
 }
 
-const STRATS: Strat[] = (process.env.STRATS ?? "advice,tripsOnly,oldDefault,newDefault,plan").split(",") as Strat[];
+const STRATS: Strat[] = (process.env.STRATS || "advice,tripsOnly,oldDefault,newDefault,plan").split(",") as Strat[];
 const results = Object.fromEntries(STRATS.map(k => [k, [] as number[]])) as Record<Strat, number[]>;
-const stats = Object.fromEntries(STRATS.map(k => [k, { empty: 0, trips: 0, moves: 0 }])) as Record<Strat, { empty: number; trips: number; moves: number }>;
+const stats = Object.fromEntries(STRATS.map(k => [k, { empty: 0, trips: 0, moves: 0, waits: 0 }])) as Record<Strat, { empty: number; trips: number; moves: number; waits: number }>;
 let botFinal: number[] = [];
 
 for (let seed = 1; seed <= SEEDS; seed++) {
@@ -98,13 +116,19 @@ for (let seed = 1; seed <= SEEDS; seed++) {
       const { cargo } = e.inbound();
       const trip = p.strat === "plan" ? T.planned(s.port, c.cash, cargo) : T.bestTrips(s.port, c.cash, cargo)[0];
       if (trip) {
-        if (e.apply({ type: "sail", company: p.id, ship: s.id, dest: trip.dest, buy: { good: trip.g === 0 ? "grain" : "fuel", qty: trip.qty } }).ok) p.trips++;
+        if (e.apply({ type: "sail", company: p.id, ship: s.id, dest: trip.dest, buy: { good: GOODS[trip.g], qty: trip.qty } }).ok) p.trips++;
         continue;
       }
       const before = c.cash;
-      if (p.strat === "advice" || p.strat === "plan" || p.strat === "newDefault") {
+      if (p.strat === "plan") {
+        // Like the client: a one-step move if one pays, otherwise a move whose next two trips pay.
+        const mv = T.bestMove(s.port, c.cash, cargo) ?? T.chainMove(s.port, c.cash, cargo);
+        if (mv && e.apply({ type: "sail", company: p.id, ship: s.id, dest: mv.dest }).ok) { p.moves++; p.emptySpent += before - c.cash; }
+        else p.waits++;
+      } else if (p.strat === "advice" || p.strat === "newDefault") {
         const mv = T.bestMove(s.port, c.cash, cargo);
         if (mv && e.apply({ type: "sail", company: p.id, ship: s.id, dest: mv.dest }).ok) { p.moves++; p.emptySpent += before - c.cash; }
+        else if (!mv) p.waits++;
         // Someone who just presses the green button: the form falls back to sailing empty to the nearest port.
         else if (!mv && p.strat === "newDefault" && e.apply({ type: "sail", company: p.id, ship: s.id, dest: T.nearest(s.port) }).ok) { p.moves++; p.emptySpent += before - c.cash; }
       } else if (p.strat === "oldDefault") {
@@ -115,7 +139,7 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   }
   for (const p of players) {
     results[p.strat].push(Math.round(e.netWorth(e.companies.get(p.id)!)));
-    stats[p.strat].empty += p.emptySpent; stats[p.strat].trips += p.trips; stats[p.strat].moves += p.moves;
+    stats[p.strat].empty += p.emptySpent; stats[p.strat].trips += p.trips; stats[p.strat].moves += p.moves; stats[p.strat].waits += p.waits;
   }
   botFinal = botFinal.concat(bots.map(id => Math.round(e.netWorth(e.companies.get(id)!))));
 }
@@ -124,5 +148,5 @@ const med = (a: number[]) => { const s = [...a].sort((x, y) => x - y); return s[
 const n = PER * SEEDS;
 console.log(`difficulty ${DIFF}, check-in every ${CHECK} h, ${n} players per strategy, start worth 16,000`);
 for (const k of STRATS)
-  console.log(`${k.padEnd(10)} median ${med(results[k])}  min ${Math.min(...results[k])}  max ${Math.max(...results[k])}  | per player: ${(stats[k].trips / n).toFixed(0)} trips, ${(stats[k].moves / n).toFixed(0)} empty moves costing ${(stats[k].empty / n).toFixed(0)}`);
+  console.log(`${k.padEnd(10)} median ${med(results[k])}  min ${Math.min(...results[k])}  max ${Math.max(...results[k])}  | per player: ${(stats[k].trips / n).toFixed(0)} trips, ${(stats[k].moves / n).toFixed(0)} empty moves costing ${(stats[k].empty / n).toFixed(0)}, ${(stats[k].waits * CHECK / n).toFixed(0)} h waiting with nothing to do`);
 console.log(`bots       median ${med(botFinal)}  max ${Math.max(...botFinal)}`);

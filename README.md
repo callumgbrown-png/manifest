@@ -21,10 +21,11 @@ On Windows, double-click `server/start.bat`.
 
 ## What's in the MVP
 
-- 40-port region, two commodities (grain and fuel), voyages in real time
+- 40-port region, four goods (grain, fuel, ore, machinery), voyages in real time
+- Three ship classes: coaster (fast, small, cheap), freighter (the start ship) and bulker (slow, big, dear). Machinery is valuable but its markets are thin, ore and grain are cheap and deep, so the best ship and cargo depend on where you are and how much cash you have
 - Port markets where price slides with stock; cargo already sailing to each port is public
 - Player buy orders with cash held in escrow
-- Up to 5 ships per company; first ship is upkeep-free, spare ships scrapped automatically if in debt; a last ship can always sail, with fuel on credit if needed
+- Up to 5 ships per company; one freighter's worth of upkeep is free (so a lone freighter or coaster costs nothing), spare ships scrapped automatically if in debt; a last ship can always sail, with fuel on credit if needed
 - Leaderboard by net worth, admin dashboard with live tax, upkeep and port-fee controls
 - Every action stored in an append-only event log (SQLite); a restart replays it exactly
 
@@ -41,7 +42,7 @@ and failure handling.
 | Path | What it is |
 | --- | --- |
 | `config/rules.json` | All economy rules, shared by server and simulator |
-| `config/map.json` | The region map (regenerate with `tools/generate_map.py --seed N`) |
+| `config/map.json` | The region map. `tools/generate_map.py --seed N` makes the ports, grain and fuel; run `tools/add_goods.py` after it to give the ports ore and machinery roles |
 | `server/src/engine.ts` | Authoritative game rules, no I/O |
 | `server/src/main.ts` | HTTP, WebSockets, accounts, event log, clock |
 | `server/public/` | Browser client and admin page |
@@ -64,12 +65,12 @@ The browser test needs Playwright (`npm i -D playwright && npx playwright instal
 ## Economy simulator
 
 ```
-python tools/generate_map.py
+python tools/generate_map.py && python tools/add_goods.py
 python sim/simulate.py --seasons 10 --companies 300
 python sim/charts.py results
 ```
 
-Current rules pass all health checks across 10 seasons: see `docs/economy-v1.png`.
+Current rules pass all health checks across 10 seasons: see `docs/economy-v1.png`. The Python simulator still models only grain, fuel and the freighter; `npx tsx ../sim/goods-check.ts` (from `server/`) runs the real engine with bots and shows which good and ship class wins where, and `sim/playtest.ts` plays whole seasons.
 
 ## Deploying to a VPS
 

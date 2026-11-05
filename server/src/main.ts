@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { join, dirname, extname, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
-import { Engine, GOODS, type Command } from "./engine.js";
+import { Engine, GOODS, SHIP_TYPES, type Command } from "./engine.js";
 import { runBots, botName, isBot, pickStartPort } from "./bots.js";
 import { addCoasts, type CoastDirection } from "./coasts.js";
 import { type NavigationMap } from "./navigation.js";
@@ -83,7 +83,7 @@ let engine = new Engine(rules, activeMap, EXPECTED);
 const HISTORY_HOURS = 72;
 let history: { tick: number; prices: number[][] }[] = [];
 function recordPrices() {
-  const prices = engine.stock.map((_, p) => [0, 1].map(g => Math.round(engine.price(p, g) * 100) / 100));
+  const prices = engine.stock.map((_, p) => GOODS.map((_, g) => Math.round(engine.price(p, g) * 100) / 100));
   if (history.at(-1)?.tick === engine.tick) history.pop();
   history.push({ tick: engine.tick, prices });
   if (history.length > HISTORY_HOURS) history.shift();
@@ -107,6 +107,12 @@ function startDifficulty() {
   if (!DIFFICULTY) return;
   const r = commit({ type: "setDifficulty", level: DIFFICULTY });
   if (!r.ok) console.error(`DIFFICULTY=${DIFFICULTY} ignored: ${r.error}`);
+}
+
+/** The difficulty a new season starts on: the DIFFICULTY env if it names a preset, else the rules' default. */
+function nextSeasonDifficulty(): string {
+  const presets = rules.difficulty?.presets ?? {};
+  return DIFFICULTY && Object.hasOwn(presets, DIFFICULTY) ? DIFFICULTY : rules.difficulty?.default ?? "normal";
 }
 
 let botIds: number[] = [];
@@ -133,7 +139,10 @@ function hashPassword(password: string, salt: string) {
 
 function register(name: string, password: string): { token: string } | { error: string } {
   name = String(name ?? "").trim();
-  if (!/^[A-Za-z0-9 _.-]{3,24}$/.test(name)) return { error: "Company name must be 3-24 letters, numbers or spaces" };
+  if (!/^[A-Za-z0-9 _.-]{3,24}$/.test(name)) return { error: "Company name must be 3-24 letters, numbers, spaces, dots, dashes or underscores" };
+  if (!/[A-Za-z0-9]/.test(name)) return { error: "Company name needs at least one letter or number" };
+  // Pages collapse runs of spaces, so "Acme  Freight" would look exactly like "Acme Freight".
+  if (/  /.test(name)) return { error: "Company name can't have two spaces in a row" };
   if (String(password ?? "").length < 8) return { error: "Password must be at least 8 characters" };
   if (db.prepare("SELECT 1 FROM accounts WHERE name = ?").get(name)) return { error: "That name is taken" };
   const res = commit({ type: "register", name, startPort: pickStartPort(engine, randomInt) });
@@ -144,7 +153,8 @@ function register(name: string, password: string): { token: string } | { error: 
 }
 
 function login(name: string, password: string): { token: string } | { error: string } {
-  const row = db.prepare("SELECT salt, hash, company FROM accounts WHERE name = ?").get(String(name ?? "")) as
+  // Sign-up trims the name, so log-in must too (phone keyboards often add a trailing space).
+  const row = db.prepare("SELECT salt, hash, company FROM accounts WHERE name = ?").get(String(name ?? "").trim()) as
     { salt: string; hash: string; company: number } | undefined;
   if (!row) return { error: "Wrong name or password" };
   const a = Buffer.from(hashPassword(String(password ?? ""), row.salt), "hex"), b = Buffer.from(row.hash, "hex");
@@ -201,19 +211,20 @@ function publicView() {
       fuelPer100: engine.rules.ship.fuel_per_100_distance, upkeep: engine.rules.ship.upkeep_per_day,
       tax: engine.rules.fees.trade_tax_rate, portFee: engine.rules.fees.port_fee_per_docking,
       maxShips: engine.rules.company.max_ships, bands: engine.rules.commodities,
-      target: engine.target, difficulty: engine.difficulty,
+      target: engine.target, targets: engine.targets, difficulty: engine.difficulty,
+      shipTypes: Object.fromEntries(SHIP_TYPES.map(t => [t, engine.spec(t)])),
     },
     ports: activeMap.ports.map((p: any, i: number) => ({
       id: p.id, name: p.name, x: p.x, y: p.y, produces: p.produces, consumes: p.consumes,
       coastDirection: p.coastDirection,
-      prices: [0, 1].map(g => round2(engine.price(i, g))),
+      prices: GOODS.map((_, g) => round2(engine.price(i, g))),
       stock: engine.stock[i].map(Math.round),
       inbound: inbound.cargo[i].map(Math.round),
       emptyInbound: inbound.emptyShips[i],
     })),
     routes: activeMap.routes.map(({a,b,distance})=>({a,b,distance})),
     ships: [...engine.ships.values()].map(s => ({
-      id: s.id, owner: s.owner, port: s.port, dest: s.dest, departTick: s.departTick, arriveTick: s.arriveTick,
+      id: s.id, owner: s.owner, port: s.port, type: s.type, dest: s.dest, departTick: s.departTick, arriveTick: s.arriveTick,
       good: s.good, qty: Math.round(s.qty),
     })),
     orders: [...engine.orders.values()].map(o => ({ ...o, ownerName: engine.companies.get(o.owner)?.name })),
@@ -241,6 +252,8 @@ function privateView(company: number) {
     trips: (engine.trips.get(c.id) ?? []).slice(-15).reverse()
       .map(t => ({ ...t, spent: Math.round(t.spent), earned: Math.round(t.earned) })),
     worthLog: engine.worthLog.get(c.id) ?? [],
+    forcedSales: (engine.forcedSales.get(c.id) ?? []).map(f => ({ ...f, cashBefore: Math.round(f.cashBefore) })),
+    orderFills: (engine.orderFills.get(c.id) ?? []).map(f => ({ ...f, amount: Math.round(f.amount) })),
   };
 }
 
@@ -278,7 +291,7 @@ function handle(req: IncomingMessage, res: ServerResponse) {
   }
   if (url.pathname === "/api/admin/metrics") {
     if (!isAdmin(req)) return json(res, 403, { error: "admin token required" });
-    return json(res, 200, engine.metrics());
+    return json(res, 200, { ...engine.metrics(), nextSeasonDifficulty: nextSeasonDifficulty() });
   }
   if (url.pathname === "/api/admin/set" && req.method === "POST") {
     if (!isAdmin(req)) return json(res, 403, { error: "admin token required" });
@@ -385,10 +398,17 @@ function onMessage(client: Client, msg: any) {
   }
   if (msg.type === "logout") {
     // Ends this session everywhere: the saved token stops working.
-    if (client.token) endSession(client.token);
-    client.company = client.token = undefined;
-    send(client, { type: "loggedOut" });
-    return sendState(client);
+    // Other tabs or windows open on the same session are logged out too, or they
+    // could keep trading on a session the player has just ended.
+    const token = client.token;
+    if (token) endSession(token);
+    for (const c of clients) {
+      if (c !== client && (!token || c.token !== token)) continue;
+      c.company = c.token = undefined;
+      send(c, { type: "loggedOut" });
+      sendState(c);
+    }
+    return;
   }
   if (msg.type === "cmd") {
     if (!client.company) return send(client, { type: "result", reqId: msg.reqId, ok: false, error: "Log in first" });

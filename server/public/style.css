@@ -1,7 +1,7 @@
 :root {
   --bg: #0a1620; --sea: #0e2130; --sea-deep: #0a1924; --panel: #11273a; --panel-2: #163147; --line: #23435a; --line-strong: #2f5875;
   --ink: #e8eef2; --quiet: #8aa3b5; --faint: #5d788c;
-  --grain: #e5b84b; --fuel: #e8735a; --other: #7a98ae; --mine: #5fd3a8; --accent: #5fd3a8; --bad: #ff7a6b; --good: #5fd3a8;
+  --grain: #e5b84b; --fuel: #e8735a; --ore: #9aa7b5; --machinery: #b48cf0; --other: #7a98ae; --mine: #5fd3a8; --accent: #5fd3a8; --bad: #ff7a6b; --good: #5fd3a8;
   --mono: "IBM Plex Mono", ui-monospace, monospace; --sans: "IBM Plex Sans", system-ui, sans-serif;
   --radius: 10px; --shadow: 0 10px 30px rgba(0,0,0,.35);
 }
@@ -30,6 +30,7 @@ label input, label select { margin-top: 4px; }
 .row { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 .row.labelled { align-items: flex-end; }
 label.mini { margin: 0; font-size: 11px; display: flex; flex-direction: column; }
+label.mini.grow { flex: 1; }
 .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .pos { color: var(--good); } .neg { color: var(--bad); }
 
@@ -37,6 +38,8 @@ label.mini { margin: 0; font-size: 11px; display: flex; flex-direction: column; 
 .shape { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; background: var(--other); border-radius: 50%; }
 .shape.grain { background: var(--grain); }
 .shape.fuel { background: var(--fuel); border-radius: 2px; transform: rotate(45deg) scale(.85); }
+.shape.ore { background: var(--ore); border-radius: 1px; }
+.shape.machinery { background: none; width: 0; height: 0; border-radius: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 11px solid var(--machinery); }
 .shape.mine { background: none; width: 0; height: 0; border-radius: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 11px solid var(--mine); }
 
 /* ---------------------------------------------------------------- sign in */
@@ -68,7 +71,7 @@ header { position: relative; display: flex; align-items: center; gap: 18px; padd
 .stat { position: relative; }
 .stat span { display: block; font-size: 11px; color: var(--quiet); text-transform: uppercase; letter-spacing: .07em; }
 .stat b { font: 600 15px var(--mono); font-variant-numeric: tabular-nums; }
-.delta { position: absolute; left: 0; top: 100%; margin-top: -1px; font: 600 12px var(--mono); font-style: normal; white-space: nowrap; opacity: 0; transition: opacity .3s; pointer-events: none; }
+.delta { position: absolute; z-index: 2; left: 0; top: 100%; margin-top: -3px; font: 600 12px var(--mono); font-style: normal; white-space: nowrap; opacity: 0; transition: opacity .3s; pointer-events: none; }
 .delta.show { opacity: 1; }
 .spacer { flex: 1; }
 .pill { font-size: 12px; padding: 3px 10px 3px 20px; border-radius: 99px; border: 1px solid var(--line); color: var(--quiet); position: relative; }
@@ -121,6 +124,9 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
 .tag { display: inline-block; font-size: 11px; line-height: 16px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line-strong); color: var(--quiet); white-space: nowrap; }
 .tag.grain { color: var(--grain); border-color: rgba(229,184,75,.55); background: rgba(229,184,75,.07); }
 .tag.fuel { color: var(--fuel); border-color: rgba(232,115,90,.55); background: rgba(232,115,90,.07); }
+.tag.ore { color: var(--ore); border-color: rgba(154,167,181,.55); background: rgba(154,167,181,.07); }
+.tag.machinery { color: var(--machinery); border-color: rgba(180,140,240,.55); background: rgba(180,140,240,.07); }
+.cls { margin: 0 6px; font-size: 11px; color: var(--quiet); text-transform: capitalize; }
 .tag.mine { color: var(--mine); border-color: rgba(95,211,168,.5); background: rgba(95,211,168,.07); }
 .est { font-size: 12px; color: var(--quiet); margin-top: 8px; }
 .est b.pos { color: var(--good); } .est b.neg { color: var(--bad); }
@@ -133,7 +139,7 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
 .spark { display: block; width: 74px; height: 22px; }
 .bar { position: relative; height: 4px; width: 100%; min-width: 50px; background: var(--sea-deep); border-radius: 2px; margin-top: 4px; overflow: hidden; }
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--other); }
-.bar.grain i { background: var(--grain); } .bar.fuel i { background: var(--fuel); } .bar.mine i { background: linear-gradient(90deg, var(--mine), #8ff0cb); }
+.bar.grain i { background: var(--grain); } .bar.fuel i { background: var(--fuel); } .bar.ore i { background: var(--ore); } .bar.machinery i { background: var(--machinery); } .bar.mine i { background: linear-gradient(90deg, var(--mine), #8ff0cb); }
 
 .shipCard { background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 14px; margin-bottom: 10px; }
 .shipCard .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 2px; }
@@ -155,9 +161,11 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
 .rank.r2 { background: rgba(200,214,224,.16); color: #d5e0e8; }
 .rank.r3 { background: rgba(232,115,90,.18); color: var(--fuel); }
 
-.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line-strong); padding: 10px 16px 10px 38px; border-radius: 10px; z-index: 20; box-shadow: var(--shadow); animation: rise .2s ease-out; }
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(560px, calc(100vw - 32px)); box-sizing: border-box; background: var(--panel-2); border: 1px solid var(--line-strong); padding: 10px 16px 10px 38px; border-radius: 10px; z-index: 20; box-shadow: var(--shadow); animation: rise .2s ease-out; }
 .toast::before { content: "✓"; position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: rgba(95,211,168,.2); color: var(--mine); }
 .toast.bad { border-color: rgba(255,122,107,.6); color: #ffd2cc; }
+.toast.warn { border-color: rgba(229,184,75,.6); }
+.toast.warn::before { content: "!"; background: rgba(229,184,75,.2); color: var(--grain); font-weight: 700; }
 .toast.bad::before { content: "!"; background: rgba(255,122,107,.2); color: var(--bad); font-weight: 700; }
 @keyframes rise { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .banner { padding: 10px 16px; background: linear-gradient(90deg, rgba(229,184,75,.14), rgba(95,211,168,.08)); border-bottom: 1px solid rgba(229,184,75,.5); }
@@ -174,7 +182,8 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
   .stat b { font-size: 13px; }
   header { gap: 6px 10px; padding: 8px 12px 10px; }
   header .spacer { display: none; }
-  #logout { margin-left: auto; padding: 4px 2px; }
+  #help { margin-left: auto; padding: 4px 2px; }
+  #logout { padding: 4px 2px; }
   .brand span { letter-spacing: .12em; }
   header .pill { padding-top: 2px; padding-bottom: 2px; font-size: 11px; }
   .stat b { white-space: nowrap; font-size: 12px; }
@@ -194,11 +203,19 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
 .youRank .quiet { width: 100%; font-size: 12px; }
 .legendShip { width: 22px; height: auto; image-rendering: pixelated; vertical-align: middle; margin-right: 4px; }
 .trip { flex-wrap: wrap; } .trip .then { width: 100%; font-size: 11px; font-weight: 400; color: var(--quiet); margin-top: -2px; }
+/* 381-420 px phones (iPhone 12-16 are 390): the brand, difficulty pill, live pill, Help and Log out
+   needed 401 px, so Log out wrapped onto a row of its own. Tighter gaps and pill keep them on one row. */
+@media (max-width: 420px) {
+  header { column-gap: 6px; }
+  header .pill.diff { padding-left: 7px; padding-right: 7px; }
+  .brand span { letter-spacing: .08em; }
+}
 /* Small phones (iPhone SE and similar): stats two by two, tighter tabs, no sideways scrolling. */
 @media (max-width: 380px) {
   .stats { grid-template-columns: 1fr 1fr; }
   nav button { padding-left: 4px; padding-right: 4px; font-size: 12px; }
   header .pill.diff { display: none; }
+  .delta { position: static; margin-left: 6px; }   /* beside the cash: below it, it covered the clock's label */
   .market .sparkCell { padding-left: 4px; }
   .spark { width: 52px; }
   .bar { min-width: 36px; }

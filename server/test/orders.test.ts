@@ -47,6 +47,8 @@ test("a new sell order fills against a higher buy order straight away", () => {
   const cashA = A.cash;
   const r = e.apply({ type: "placeSell", company: A.id, ship: sa.id, qty: 100, price: 75 });
   assert.ok(near(A.cash, cashA + 50 * 80 * (1 - tax)), "filled at the buyer's price");
+  assert.equal((r as any).sold, 50, "the result says how much sold at once");
+  assert.ok(near((r as any).earned, 50 * 80 * (1 - tax)), "and what it earned after tax");
   const rest = e.orders.get((r as any).id)!;
   assert.equal(rest.qty, 50, "remaining 50 listed");
   assert.equal([...e.orders.values()].filter(o => o.side === "buy").length, 0);
@@ -57,7 +59,7 @@ test("a new buy order fills against a cheaper sell order", () => {
   e.apply({ type: "placeSell", company: A.id, ship: sa.id, qty: 100, price: 60 });
   const cashB = B.cash;
   const r = e.apply({ type: "placeOrder", company: B.id, port: 0, good: "fuel", qty: 40, price: 65 });
-  assert.deepEqual(r, { ok: true });
+  assert.deepEqual(r, { ok: true, bought: 40, spent: 2400 });
   assert.ok(near(B.cash, cashB - 40 * 60), "paid the seller's price");
 });
 
@@ -77,4 +79,24 @@ test("money is conserved apart from tax across a full trade cycle", () => {
   const id = (e.apply({ type: "placeSell", company: A.id, ship: sa.id, qty: 100, price: 70 }) as any).id;
   e.apply({ type: "buyFromOrder", company: B.id, ship: sb.id, order: id, qty: 100 });
   assert.ok(near(A.cash + B.cash, before - 100 * 70 * tax));
+});
+
+test("a buy order that crosses listings says how much it bought at once and what that cost", () => {
+  const { e, A, B, sa } = setup();
+  e.apply({ type: "placeSell", company: A.id, ship: sa.id, qty: 30, price: 60 });
+  const cash = B.cash;
+  // Wants 50 at up to 70: buys the 30 listed at 60 straight away, the other 20 wait as an order.
+  const r = e.apply({ type: "placeOrder", company: B.id, port: sa.port, good: "fuel", qty: 50, price: 70 }) as any;
+  assert.ok(r.ok);
+  assert.equal(r.bought, 30); assert.ok(near(r.spent, 30 * 60));
+  assert.equal(e.orders.get(r.id)!.qty, 20, "the rest is a buy order");
+  assert.ok(near(B.cash, cash - 30 * 60 - 20 * 70));
+  // Fully filled from a listing: no order left, so the result has no id.
+  const t = setup();
+  t.e.apply({ type: "placeSell", company: t.A.id, ship: t.sa.id, qty: 10, price: 55 });
+  const r2 = t.e.apply({ type: "placeOrder", company: t.B.id, port: t.sa.port, good: "fuel", qty: 10, price: 60 }) as any;
+  assert.equal(r2.id, undefined); assert.equal(r2.bought, 10); assert.ok(near(r2.spent, 550));
+  // Nothing to cross: a plain order, no bought/spent.
+  const r3 = e.apply({ type: "placeOrder", company: B.id, port: sa.port, good: "grain", qty: 5, price: 20 }) as any;
+  assert.ok(r3.id); assert.equal(r3.bought, undefined);
 });

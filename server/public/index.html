@@ -19,7 +19,7 @@
     </div>
     <p class="lede">Run a shipping company. Every price is set by other players.</p>
     <ul class="pitch">
-      <li><i class="shape grain"></i>Buy grain and fuel where it's cheap</li>
+      <li><i class="shape grain"></i>Buy grain, fuel, ore or machinery where it's cheap</li>
       <li><i class="shape fuel"></i>Sail it to the ports that need it</li>
       <li><i class="shape mine"></i>Grow a fleet and top the season's leaderboard</li>
     </ul>
@@ -61,6 +61,7 @@
   <div class="spacer"></div>
   <span id="diff" class="pill diff hidden" title="World difficulty, set by the game admin"></span>
   <span id="conn" class="pill">connecting</span>
+  <button id="help" class="link" title="How to play" aria-label="How to play">Help</button>
   <button id="logout" class="link">Log out</button>
   <div class="seasonBar" aria-hidden="true"><i id="seasonFill"></i></div>
 </header>
@@ -78,18 +79,20 @@
     <div class="legend">
       <span><i class="shape grain"></i>grain producer</span>
       <span><i class="shape fuel"></i>fuel producer</span>
+      <span><i class="shape ore"></i>ore producer</span>
+      <span><i class="shape machinery"></i>machinery producer</span>
       <span><i class="shape other"></i>other port</span>
       <span><img class="legendShip" src="img/ship-empty.png" alt="">ships (yours glow)</span>
     </div>
   </section>
   <aside>
-    <nav id="tabs">
-      <button data-tab="port" class="on">Port</button>
-      <button data-tab="fleet">Fleet</button>
-      <button data-tab="orders">Orders</button>
-      <button data-tab="board">Leaderboard</button>
+    <nav id="tabs" role="tablist" aria-label="Panels">
+      <button role="tab" aria-controls="panel" data-tab="port" class="on">Port</button>
+      <button role="tab" aria-controls="panel" data-tab="fleet">Fleet</button>
+      <button role="tab" aria-controls="panel" data-tab="orders">Orders</button>
+      <button role="tab" aria-controls="panel" data-tab="board">Leaderboard</button>
     </nav>
-    <div id="panel"></div>
+    <div id="panel" role="tabpanel"></div>
   </aside>
 </main>
 <div id="toast" class="toast hidden" role="status"></div>
