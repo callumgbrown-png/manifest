@@ -3,6 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 rem --- Use the Node.js on this PC if there is one, otherwise download a private copy (no install, no admin) ---
+if exist ".node\node.exe" set "PATH=%~dp0.node;%PATH%"
 where node >nul 2>nul
 if errorlevel 1 (
   if not exist ".node\node.exe" (
