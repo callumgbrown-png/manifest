@@ -579,16 +579,16 @@ function drawMap() {
     ctx.save(); ctx.globalAlpha = own ? 1 : 0.7;
     const cargo = s.qty > 0 && s.good !== null ? GOOD_NAMES[s.good] : null;
     const cs = SPRITE_SCALE[s.type || "freighter"];
-    let drawn = false;
-    if (cargo === "ore" || cargo === "machinery") {
-      // These two cargoes have only a side-view sprite: flipped to face the way the ship sails.
+    let drawn = window.ManifestShipSprites.draw(ctx, x, y, 32 * cs, pos.angle, cargo);
+    if (!drawn) {
+      // Until the 8-direction sheet loads, fall back to the old side-view sprite.
       const img = shipSprite(s);
       if (img) {
         const w = 32 * cs * 1.1, h = w * img.height / img.width;
         ctx.translate(x, y); if (Math.cos(pos.angle) < 0) ctx.scale(-1, 1);
         ctx.imageSmoothingEnabled = false; ctx.drawImage(img, -w / 2, -h * 0.65, w, h); drawn = true;
       }
-    } else drawn = window.ManifestShipSprites.draw(ctx, x, y, 32 * cs, pos.angle, cargo);
+    }
     ctx.restore();
     if (drawn) {
       ctx.shadowBlur = 0;
