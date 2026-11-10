@@ -1,0 +1,8 @@
+{
+  "_comment": "Names and labels for the world feature modules. Self-written; safe to edit. Region names are assigned left to right, top row first.",
+  "regions": ["The Northwest Reach", "The Northern Approaches", "The Boreal Shelf", "The Southwest Banks", "The Middle Sea", "The Southern Gulf"],
+  "buoyLabels": ["Good fishing", "Shoal water", "Meet here", "Fast water", "Storm seen", "Safe anchorage", "Watch for pirates"],
+  "relics": ["a brass sextant", "a ship's bell", "a cracked figurehead", "a captain's logbook", "a jar of old coins", "a rusted anchor chain", "a sealed bottle", "a lantern", "a porcelain plate", "a compass rose"],
+  "trophies": ["a gilded chest", "a jewelled goblet", "a pearl necklace", "a silver crown"],
+  "blocklist": ["damn", "hell", "crap", "idiot", "stupid", "hate", "kill", "nazi", "sex"]
+}
