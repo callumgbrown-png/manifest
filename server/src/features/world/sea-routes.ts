@@ -18,9 +18,14 @@ const total = (l: { distance: number }[]) => l.reduce((s, x) => s + x.distance, 
 export function currents(e: Engine) {
   return e.map.routes.flatMap((r, i) => hash(77, i) < 0.4 ? [hash(77, i, 1) < 0.5 ? { route: i, a: r.a, b: r.b } : { route: i, a: r.b, b: r.a }] : []);
 }
-export const currentsModule: FeatureFactory = (e) => ({
-  id: "world.currents", ideas: [98], title: "Ocean currents", economy: true,
+/** Idea 98, content half: the currents drawn on the chart (on). The speed change is world.currents-effects (off). */
+export const currentsChart: FeatureFactory = (e) => ({
+  id: "world.currents", ideas: [98], title: "Ocean currents", economy: false,
   world: () => ({ currents: currents(e) }),
+  cards: () => [{ title: "Ocean currents", detail: `${currents(e).length} lanes carry a current, drawn as arrows on the chart. Sail with the arrows when you can.` }],
+});
+export const currentsEffects: FeatureFactory = (e) => ({
+  id: "world.currents-effects", ideas: [98], title: "Ocean currents: sailing time", economy: true,
   adjust: {
     travelHours(v, ctx) {
       const flow = new Map(currents(e).map(c => [c.route, c]));

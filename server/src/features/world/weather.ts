@@ -19,7 +19,7 @@ export const weather: FeatureFactory = (e) => {
     return out;
   });
   return {
-    id, ideas: [97, 99, 101, 102, 103, 254, 333, 334], title: "Weather and sky", economy: false,
+    id, ideas: [96, 97, 99, 101, 102, 103, 254, 333, 334], title: "Weather and sky", economy: false,
     world() {
       const cal = calendar(e), ec = eclipse();
       return {

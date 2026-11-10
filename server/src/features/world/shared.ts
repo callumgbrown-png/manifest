@@ -2,6 +2,9 @@
 // event schedules, sea regions, text filtering and the news registry. Nothing here holds game state.
 import { readFileSync } from "node:fs";
 import type { Company, Engine, Result, Ship } from "../../engine.js";
+
+/** Same order as GOODS in engine.ts (not imported: engine.ts loads the feature modules, so a value import would be circular). */
+export const GOODS_NAMES: readonly string[] = ["grain", "fuel", "ore", "machinery"];
 import type { Poly, Pt } from "../../geo.js";
 
 export interface WorldContent { regions: string[]; buoyLabels: string[]; relics: string[]; trophies: string[]; blocklist: string[] }
@@ -156,3 +159,30 @@ export function headlines(e: Engine): Headline[] {
   for (const [id, fn] of providers.get(e) ?? []) if (e.features.enabled(id)) out.push(...fn());
   return out.sort((a, b) => b.tick - a.tick || a.text.localeCompare(b.text));
 }
+
+// ------------------------------------------------------------ small helpers for cards and commands
+
+export const portName = (e: Engine, port: number) => e.map.ports[port]?.name ?? `port ${port}`;
+export const companyName = (e: Engine, id: number) => e.companies.get(id)?.name ?? "a lost company";
+/** A card button that sends { type: "feature", module, action, ...extra }. */
+export function action(module: string, label: string, act: string, extra: Record<string, unknown> = {}, fields?: { key: string; label: string; min?: number; max?: number; value?: number | string; options?: { value: number | string; label: string }[] }[]) {
+  return { label, command: { type: "feature", module, action: act, ...extra }, ...(fields ? { fields } : {}) };
+}
+/** Ports that can be sailed to from somewhere (some maps have unreachable islets). */
+export function connected(e: Engine): number[] {
+  return e.map.ports.map(p => p.id).filter(i => e.dist[i].some((d, j) => j !== i && Number.isFinite(d)));
+}
+/** A connected port chosen by salt. */
+export function portBy(e: Engine, ...salt: number[]): number {
+  const ports = connected(e);
+  return ports[Math.floor(hash(...salt) * ports.length)] ?? 0;
+}
+/** Ships of a company, optionally only those at sea. */
+export const fleet = (e: Engine, company: number) => (e.companies.get(company)?.ships ?? []).map(id => e.ships.get(id)!).filter(Boolean);
+/** A field for picking one of the company's ships. */
+export function shipField(e: Engine, company: number, filter: (s: Ship) => boolean = () => true) {
+  const ships = fleet(e, company).filter(filter);
+  return ships.length ? [{ key: "ship", label: "Ship", options: ships.map(s => ({ value: s.id, label: `Ship ${s.id}${s.dest === null ? ` at ${portName(e, s.port)}` : " at sea"}` })), value: ships[0].id }] : undefined;
+}
+/** Quarter length of the season calendar (hours). */
+export const quarterHours = (e: Engine) => Math.max(24, Math.floor(e.seasonHours / 4));
