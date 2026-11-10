@@ -19,4 +19,4 @@ passes, and `docs/features/reports/<category>.md` exists.
 | 10 | community | 73 | DONE 2026-11-10 (13 modules, 16 tests) |
 | 11 | social | 60 | DONE 2026-11-10 (47 modules, 33 tests) |
 
-After all eleven: merge every category branch into `feature/600-features`, run the whole suite, write `FINAL_REPORT.md`.
+All eleven categories are merged into `feature/600-features` (2026-11-10). See `FINAL_REPORT.md`.

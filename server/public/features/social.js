@@ -45,14 +45,14 @@
   function open(show) {
     if (!panel) {
       panel = document.createElement("div");
-      panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Social");
+      panel.id = "socialPanel"; panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Social");
       Object.assign(panel.style, { position: "fixed", left: "12px", bottom: "56px", width: "min(440px, calc(100vw - 24px))", maxHeight: "70vh", overflow: "auto",
         background: "var(--panel)", border: "1px solid var(--line-strong)", borderRadius: "10px", padding: "12px", zIndex: 31, boxShadow: "0 8px 30px rgba(0,0,0,.4)" });
       panel.addEventListener("keydown", e => { if (e.key === "Escape") open(false); });
       document.body.appendChild(panel);
     }
     panel.hidden = !show;
-    if (show) draw(); else $("socialButton")?.focus();
+    if (show) { const other = document.getElementById("communityPanel"); if (other) other.hidden = true; draw(); } else $("socialButton")?.focus();
   }
   const typing = () => panel && panel.contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
   function draw() {

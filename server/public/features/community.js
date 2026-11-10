@@ -148,7 +148,7 @@
       document.body.appendChild(panel);
     }
     panel.hidden = !show;
-    if (show) { draw(); panel.querySelector("button")?.focus(); } else $("communityButton")?.focus();
+    if (show) { const other = document.getElementById("socialPanel"); if (other) other.hidden = true; draw(); panel.querySelector("button")?.focus(); } else $("communityButton")?.focus();
   }
   const visible = () => panel && !panel.hidden;
 
