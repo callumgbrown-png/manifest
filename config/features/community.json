@@ -1,1 +1,16 @@
-{ "_comment": "true = switched on. Economy modules ship false until Dave approves them." }
+{
+  "_comment": "true = switched on. Economy modules ship false until Dave approves them.",
+  "community.locker": true,
+  "community.codes": true,
+  "community.seasonal": true,
+  "community.shop": false,
+  "community.dedications": true,
+  "community.naming": false,
+  "community.share-fleet": true,
+  "community.stats": true,
+  "community.speedruns": true,
+  "community.testers": true,
+  "community.referrals": true,
+  "community.wiki": true,
+  "community.links": true
+}
