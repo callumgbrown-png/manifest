@@ -124,3 +124,16 @@ export function cleanName(raw: unknown, max = 20): string | null {
   if (/\.(com|net|org|gg|io|xyz)\b/i.test(name) || BLOCKED.some(w => squashed.includes(w))) return null;
   return name;
 }
+
+/** Cleans a short player-written sentence (wiki tips): 8-140 characters, ordinary punctuation, same blocked words,
+ *  no links, e-mail addresses or long digit strings (phone numbers). */
+export function cleanText(raw: unknown, max = 140): string | null {
+  if (typeof raw !== "string" || raw.length > 400) return null;
+  const text = raw.normalize("NFKC").replace(/\s+/g, " ").trim();
+  if (text.length < 8 || text.length > max || !/^[A-Za-z0-9 '.,!?:;()&%+\-/]+$/.test(text)) return null;
+  if (/\d{6,}/.test(text.replace(/[ .\-()+/]/g, ""))) return null;
+  if (/[a-z0-9]\.(com|net|org|gg|io|xyz|co|uk)\b/i.test(text)) return null;
+  const squashed = text.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/0/g, "o").replace(/1/g, "i").replace(/3/g, "e").replace(/4/g, "a").replace(/5/g, "s").replace(/7/g, "t");
+  const words = BLOCKED.filter(w => !["admin", "moderator", "official", "staff"].includes(w));   // fine inside a tip
+  return words.some(w => squashed.includes(w)) ? null : text;
+}

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manifest season stats</title>
+<link rel="stylesheet" href="../style.css">
+<style>
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 16px 0; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  .tile b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; } td, th { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: left; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Season stats</h1>
+  <p id="status" class="quiet">Connecting…</p>
+  <div class="tiles" id="tiles"></div>
+  <h2>Top companies</h2><table id="top"><tbody></tbody></table>
+  <h2>Busiest ports</h2><table id="ports"><tbody></tbody></table>
+  <p><a href="/">Play Manifest</a></p>
+</main>
+<script>
+// Idea 189: read-only. Opens the game's websocket without signing in and shows community.stats from the public state.
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = n => Math.round(n).toLocaleString("en-IE");
+function show(s) {
+  if (!s) { document.getElementById("status").textContent = "Public stats are switched off on this server."; return; }
+  document.getElementById("status").textContent = `Day ${s.day}, updated every 6 game hours.`;
+  document.getElementById("tiles").innerHTML = [["Companies", s.companies], ["Ships", s.ships], ["Deliveries", s.voyages], ["Tonnes delivered", s.tonnes]]
+    .map(([k, v]) => `<div class="tile">${k}<b>${fmt(v)}</b></div>`).join("");
+  document.querySelector("#top tbody").innerHTML = s.top.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td class="n">${fmt(c.worth)}</td><td class="n">${c.ships} ships</td></tr>`).join("");
+  document.querySelector("#ports tbody").innerHTML = s.busiest.length ? s.busiest.map(p => `<tr><td>${esc(p.port)}</td><td class="n">${fmt(p.calls)} deliveries</td></tr>`).join("") : "<tr><td>No deliveries yet</td></tr>";
+}
+(function connect() {
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  ws.onmessage = ev => { try { const m = JSON.parse(ev.data); if (m.type === "state" && m.world) show(m.world.featureData?.["community.stats"]); } catch {} };
+  ws.onclose = () => { document.getElementById("status").textContent = "Disconnected; retrying…"; setTimeout(connect, 5000); };
+})();
+</script>
+</body>
+</html>
