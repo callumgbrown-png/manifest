@@ -169,3 +169,70 @@ export class TripWatcher {
 export function arrivedThisHour(e: Engine): Ship[] {
   return [...e.ships.values()].filter(s => s.dest === null && s.arriveTick === e.tick && s.departTick < e.tick);
 }
+
+// ------------------------------------------------------------ small shared bits
+
+export const credits = (n: number) => `${Math.round(n).toLocaleString("en-GB")} cr`;
+/** Index of an engine good by name, or undefined (a function, not a table: engine.ts imports this module tree). */
+export const goodIndex = (name: string): number | undefined => { const i = (GOODS as readonly string[]).indexOf(name); return i >= 0 ? i : undefined; };
+export const isEngineGood = (g: unknown): g is number => whole(g, 0, GOODS.length - 1);
+export const cashOf = (e: Engine, company: number) => e.companies.get(company)?.cash ?? 0;
+
+/** Mid-band price of an engine good (used for "how expensive is it now"). */
+export function midPrice(e: Engine, g: number) {
+  const c = e.rules.commodities[GOODS[g]];
+  return (c.floor + c.ceiling) / 2;
+}
+
+/** Where a good sits in its price band at a port: 0 = floor, 1 = ceiling. */
+export function bandPosition(e: Engine, port: number, g: number) {
+  const c = e.rules.commodities[GOODS[g]];
+  return (e.price(port, g) - c.floor) / Math.max(1e-9, c.ceiling - c.floor);
+}
+
+/** Move port stock without letting it go negative. */
+export function shiftStock(e: Engine, port: number, g: number, delta: number) {
+  e.stock[port][g] = Math.max(0, e.stock[port][g] + delta);
+}
+
+/** Connected ports (have at least one route). */
+export function connectedPorts(e: Engine): number[] {
+  return e.map.ports.map(p => p.id).filter(id => e.dist[id].some((d, j) => j !== id && Number.isFinite(d)));
+}
+
+/** A short per-company notice list (newest last, capped). */
+export class Notes {
+  private readonly byCompany = new Map<number, string[]>();
+  constructor(private readonly keep = 6) {}
+  add(company: number, text: string) {
+    const list = this.byCompany.get(company) ?? [];
+    list.push(text);
+    this.byCompany.set(company, list.slice(-this.keep));
+  }
+  of(company: number) { return this.byCompany.get(company) ?? []; }
+}
+
+/** Net worth ranking, richest first (ids). */
+export function ranking(e: Engine): number[] {
+  return [...e.companies.values()].map(c => ({ id: c.id, w: e.netWorth(c) })).sort((a, b) => b.w - a.w || a.id - b.id).map(x => x.id);
+}
+
+/** Sell all of a docked ship's engine cargo outside the market (black market, contracts): proceeds go to the trip. */
+export function sellEngineCargoFor(e: Engine, s: Ship, value: number) {
+  const c = e.companies.get(s.owner);
+  if (c) c.cash += value;
+  s.qty = 0; s.good = null; s.cost = 0;
+  e.maritime.cargoMoved(s, Infinity);
+  e.maritime.dockedCargoChanged(s);
+  e.recordSpecialSale(s, value);
+}
+
+export const taxRate = (e: Engine) => e.rules.fees.trade_tax_rate;
+export const isPort = (e: Engine, p: unknown): p is number => whole(p, 0, e.n - 1);
+
+/** Factories run while the Engine is still being constructed (before map, stock and targets exist), so anything
+ *  derived from the map is built on first use. The result depends only on the map, so it replays the same. */
+export function lazy<T>(make: () => T): () => T {
+  let value: T | undefined, made = false;
+  return () => { if (!made) { value = make(); made = true; } return value as T; };
+}
