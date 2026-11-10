@@ -1,0 +1,4 @@
+{
+  "_comment": "Simple word filter for player text (chat, guild names, newspapers, cases). Case-insensitive, with common digit/symbol swaps (0=o, 1=i, 3=e, 4=a, 5=s, 7=t, @=a, $=s). A trailing * matches any word starting with it; otherwise whole words only. Names that hit the filter are refused; other text is starred out.",
+  "words": ["fuck*", "shit*", "cunt*", "bitch*", "bastard*", "asshole*", "arsehole*", "dickhead*", "wank*", "twat*", "prick", "pricks", "slut*", "whore*", "nigg*", "fag", "fags", "faggot*", "retard*", "spastic*", "kike*", "chink*", "paki", "pakis", "tranny*", "nazi*", "rape", "raped", "rapist*", "pedo*", "paedo*", "kys"]
+}
