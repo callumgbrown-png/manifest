@@ -21,6 +21,11 @@
 <div class="row"><input id="token" type="password" placeholder="Admin token" style="max-width:320px"><button id="save">Use token</button></div>
 <p id="err" class="error"></p>
 <div class="grid" id="tiles"></div>
+<h3>Feature console</h3>
+<div class="quiet">Balance dashboard, fair-play review, reports, checkpoints and experiments from the switched-on platform modules (/api/admin/features).</div>
+<div class="grid" id="ftiles"></div>
+<div id="health"></div>
+<div id="fpanels"></div>
 <h3>Live controls</h3>
 <div class="quiet">Changes apply immediately and are recorded in the event log.</div>
 <div class="row">
@@ -94,6 +99,48 @@ $("newSeason").onclick = async () => {
   $("err").textContent = res.ok ? `Season ${res.season} has started.` : res.error;
 };
 load(); setInterval(load, 10000);
+// ---------------------------------------------------------------- feature console (platform.admin-console)
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function spark(values, w = 600, h = 80) {
+  if (!values.length) return "";
+  const max = 100, step = values.length > 1 ? w / (values.length - 1) : 0;
+  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`).join(" ");
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:${w}px;height:${h}px;background:var(--panel);border:1px solid var(--line);border-radius:8px"><polyline fill="none" stroke="currentColor" stroke-width="2" points="${pts}"/></svg>`;
+}
+function table(title, rows, cols) {
+  if (!rows || !rows.length) return "";
+  return `<h4>${esc(title)}</h4><div style="overflow-x:auto"><table><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>${rows.map(r => `<tr>${cols.map(c => `<td>${esc(typeof r[c] === "object" ? JSON.stringify(r[c]) : r[c])}</td>`).join("")}</tr>`).join("")}</table></div>`;
+}
+async function loadFeatures() {
+  if (!token) return;
+  const r = await fetch("/api/admin/features", { headers: { "x-admin-token": token } });
+  if (!r.ok) return;
+  const f = await r.json();
+  const health = f["platform.economy-health"], con = f["platform.admin-console"], test = f["platform.self-test"], last = health?.history?.at(-1);
+  const tiles = [];
+  if (con) tiles.push(["Features on", `${con.featuresOn} / ${con.featuresTotal}`], ["Flagged for review", con.flagged, con.flagged > 0]);
+  if (last) tiles.push(["Health score", `${last.score}/100`, last.score < 50], ["Gini", last.gini, last.gini > 0.6]);
+  if (test?.last) tiles.push(["Self-test", test.last.passed ? "passed" : "FAILED", !test.last.passed]);
+  if (f["platform.anomaly"]) tiles.push(["Alerts (latest 100)", f["platform.anomaly"].alerts.length, f["platform.anomaly"].alerts.length > 0]);
+  $("ftiles").innerHTML = tiles.map(([k, v, warn]) => `<div class="tile ${warn ? "warn" : ""}"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("");
+  $("health").innerHTML = health ? `<h4>Health score, last ${health.history.length} hours</h4>${spark(health.history.map(h => h.score))}<ul>${health.report.map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : "";
+  const fp = f["platform.fair-play"], rep = f["platform.reports"], bug = f["platform.bug-report"], cp = f["platform.checkpoints"];
+  const ex = f["platform.experiments"], churn = f["platform.churn"], bots = f["platform.bot-reports"];
+  $("fpanels").innerHTML = [
+    table("Flagged companies", fp?.flagged?.map(x => ({ id: x.id, name: x.name, flags: x.flags.map(g => `${g.reason}: ${g.detail}`).join("; ") })), ["id", "name", "flags"]),
+    table("Anomaly alerts", f["platform.anomaly"]?.alerts?.slice(-20).reverse(), ["tick", "kind", "company", "detail"]),
+    table("Open appeals", rep?.appeals, ["id", "company", "tick", "text"]),
+    table("Player reports", rep?.reports?.slice(-20).reverse(), ["tick", "from", "target", "reason", "text"]),
+    table("Bug reports", bug?.reports?.slice(-20).reverse(), ["id", "tick", "company", "kind", "text"]),
+    table("Players at risk of leaving", churn?.high, ["id", "name", "risk", "idle"]),
+    table("Experiments", ex?.experiments?.map(x => ({ id: x.id, share: x.share + "%", results: x.results.map(g => `${g.variant}: ${g.companies} co., avg ${g.averageWorth}`).join("; ") })), ["id", "share", "results"]),
+    table("Checkpoints (seed " + esc(JSON.stringify(cp?.seed)) + ")", cp?.checkpoints?.slice(-12).reverse(), ["tick", "digest"]),
+    bots?.latest ? `<h4>Latest hourly report</h4><pre style="white-space:pre-wrap">${esc(bots.latest.summary)}</pre>` : "",
+  ].join("");
+}
+loadFeatures(); setInterval(loadFeatures, 30000);
+$("save").addEventListener("click", loadFeatures);
+
 </script>
 </body>
 </html>

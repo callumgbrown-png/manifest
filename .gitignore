@@ -9,3 +9,4 @@ sim/ml/.venv/
 sim/ml/runs/
 sim/ml/results/
 sim/ml/.pytest_cache/
+sim/out/
