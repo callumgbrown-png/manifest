@@ -27,8 +27,8 @@ function world(opts: { port?: number; cash?: number; level?: string } = {}) {
 const farthest = (e: Engine, from: number) => e.dist[from].map((d, i) => [d, i]).filter(([d]) => Number.isFinite(d)).sort((a, b) => b[0] - a[0])[0][1];
 
 describe("ship classes", () => {
-  test("the three classes are in the rules and the freighter is the starting ship", () => {
-    assert.deepEqual([...SHIP_TYPES], ["coaster", "freighter", "bulker"]);
+  test("the four classes are in the rules and the freighter is the starting ship", () => {
+    assert.deepEqual([...SHIP_TYPES], ["coaster", "freighter", "bulker", "pirate"]);
     assert.equal(types.freighter.price, rules.ship.price);
     assert.equal(types.freighter.capacity, rules.ship.capacity);
     assert.equal(types.freighter.speed_per_hour, rules.ship.speed_per_hour);

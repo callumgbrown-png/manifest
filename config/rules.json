@@ -86,11 +86,47 @@
     "_comment": "Ship classes a company can buy. freighter must match `ship` (the starting ship). Coaster: fast, small, cheap, thirsty per unit of cargo. Bulker: slow, big, dear, but moves the most cargo per fuel. Upkeep is the Normal-difficulty figure; it scales with the difficulty preset in the same ratio as the freighter's (Easy x0.75, Hard x1.25). A company's upkeep is the total for its ships minus one freighter's worth (the old 'first ship is free'), so a single coaster or freighter costs nothing to keep.",
     "coaster": { "capacity": 50, "speed_per_hour": 90, "fuel_per_100_distance": 2, "price": 7000, "upkeep": 250 },
     "freighter": { "capacity": 100, "speed_per_hour": 40, "fuel_per_100_distance": 3, "price": 12000, "upkeep": 400 },
-    "bulker": { "capacity": 200, "speed_per_hour": 24, "fuel_per_100_distance": 6, "price": 24000, "upkeep": 800 }
+    "bulker": { "capacity": 200, "speed_per_hour": 24, "fuel_per_100_distance": 6, "price": 24000, "upkeep": 800 },
+    "pirate": { "capacity": 30, "speed_per_hour": 120, "fuel_per_100_distance": 3, "price": 9500, "upkeep": 300 }
+  },
+  "pirates": {
+    "_comment": "Pirates (see docs/PIRATES.md). A pirate ship is the fastest and smallest class and is sold only at its company's home port. enabled: false switches pirates and police off (the old game). Raiding: a pirate may hit a ship at sea within `range` map units that is farther than `home_safe_radius` from its own owner's home port, is not a company's only ship, and is not itself a pirate; each pirate then rests `cooldown_hours`. The fight: chance = base_chance + speed_weight x (1 - victim speed / pirate speed) - size_weight x max(0, victim hold / pirate hold - 1), kept between min_chance and max_chance; a seeded roll below the chance wins. A win takes as much cargo as the pirate's hold has room for; a roll below chance x (1 - capture_margin) captures the whole ship instead. A lost fight costs the pirate failed_raid_cost. Every raid, won or not, adds notoriety.per_raid (up to notoriety.max); it falls by notoriety.decay_per_hour.",
+    "enabled": true,
+    "buy_at_home_only": true,
+    "protect_only_ship": true,
+    "home_safe_radius": 45,
+    "range": 70,
+    "cooldown_hours": 12,
+    "base_chance": 0.2,
+    "speed_weight": 0.7,
+    "size_weight": 0.03,
+    "min_chance": 0.1,
+    "max_chance": 0.85,
+    "capture_margin": 0.85,
+    "failed_raid_cost": 300,
+    "notoriety": { "per_raid": 25, "decay_per_hour": 0.4, "max": 100 },
+    "bot_share": 0.1
+  },
+  "police": {
+    "_comment": "Neutral police ships (see docs/PIRATES.md), driven by the engine, never by players, and only present when pirates.enabled. There is one per `per_companies` companies, between min_ships and max_ships. An idle police ship sails to where an active pirate (its company's notoriety at least chase_notoriety, ship at sea) is heading, else patrols to a neighbouring port. A pirate at sea within catch_range of a police ship is caught with chance catch_base + catch_per_notoriety x notoriety (at most catch_max) each hour. Penalty by the company's notoriety: below fine_below a fine of fine_per_point x notoriety; below lockout_below a lockout from sailing for lockout_hours; at or above it the pirate ship is confiscated (a company's only ship gets the lockout instead). Afterwards notoriety drops to notoriety_after_arrest.",
+    "per_companies": 8,
+    "min_ships": 3,
+    "max_ships": 10,
+    "speed_per_hour": 100,
+    "catch_range": 30,
+    "chase_notoriety": 10,
+    "catch_base": 0.15,
+    "catch_per_notoriety": 0.005,
+    "catch_max": 0.7,
+    "fine_below": 45,
+    "lockout_below": 75,
+    "fine_per_point": 80,
+    "lockout_hours": 24,
+    "notoriety_after_arrest": 5
   },
   "health_checks": {
     "_comment": "Thresholds the simulator reports against. Breaching one means the economy needs tuning.",
-    "max_money_supply_growth_per_day": 0.01,
+    "max_money_supply_growth_per_day": 0.02,
     "max_top1pct_networth_share": 0.15,
     "max_bankrupt_share": 0.1
   }

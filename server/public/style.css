@@ -122,6 +122,8 @@ td.num, th.num { text-align: right; }
 tr.me td { color: var(--mine); }
 tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
 .tag { display: inline-block; font-size: 11px; line-height: 16px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line-strong); color: var(--quiet); white-space: nowrap; }
+.tag.home { color: var(--mine); border-color: rgba(95,211,168,.6); background: rgba(95,211,168,.08); }
+.homeFlag { display: inline-block; width: 9px; height: 12px; margin-right: 4px; vertical-align: -1px; border-left: 2px solid var(--mine); background: linear-gradient(135deg, var(--mine) 50%, transparent 50%) 0 0 / 100% 55% no-repeat; }
 .tag.grain { color: var(--grain); border-color: rgba(229,184,75,.55); background: rgba(229,184,75,.07); }
 .tag.fuel { color: var(--fuel); border-color: rgba(232,115,90,.55); background: rgba(232,115,90,.07); }
 .tag.ore { color: var(--ore); border-color: rgba(154,167,181,.55); background: rgba(154,167,181,.07); }
@@ -221,3 +223,97 @@ tr.me td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
   .bar { min-width: 36px; }
 }
 tr.notListed td { border-top: 2px dashed var(--line-strong); }
+
+/* Pirates and police */
+.raidBox { margin-top: 8px; }
+.raidRow { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; padding: 4px 0; border-top: 1px solid var(--line); }
+.raidRow span { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+button.danger { border-color: var(--bad); color: var(--bad); background: transparent; }
+button.danger:hover:not(:disabled) { background: rgba(232,115,90,.12); }
+button.danger:focus-visible, .howPirates summary:focus-visible { outline: 2px solid var(--mine); outline-offset: 2px; }
+.notoBar i { background: var(--bad); }
+.notices { list-style: none; margin: 4px 0; padding: 0; font-size: 13px; }
+.notices li { padding: 4px 0 4px 8px; border-left: 3px solid var(--line-strong); margin-bottom: 4px; overflow-wrap: anywhere; }
+.notices li.raided, .notices li.captured, .notices li.fined, .notices li.locked-out, .notices li.confiscated { border-left-color: var(--bad); }
+.howPirates { margin: 10px 0; font-size: 13px; }
+.howPirates summary { cursor: pointer; padding: 4px 0; color: var(--mine); }
+.howPirates p { margin: 6px 0; overflow-wrap: anywhere; }
+.marketOutlook, .voyageCosts details, .watchlist { margin: 12px 0; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); }
+summary { cursor: pointer; }
+.marketOutlook ul { padding-left: 18px; }
+.marketOutlook li { margin: 8px 0; }
+.costBreakdown { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }
+.costBreakdown dd { margin: 0; text-align: right; font-family: var(--mono); }
+.watchRow { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0; }
+.watchRow span { flex: 1 1 180px; }
+.tripReview { min-width: 0; white-space: normal; overflow-wrap: anywhere; font-size: 12px; }
+
+/* Shipyard (Fleet tab) */
+.yard { display: grid; gap: 10px; }
+.yardCard { background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.yardCard.pirateCard { border-color: rgba(127,178,255,.55); }
+.yardCard p { margin: 8px 0 6px; font-size: 12.5px; }
+.yardTop { display: flex; gap: 12px; align-items: center; }
+.yardTop b { font-size: 14px; }
+.shipArt { flex: none; width: 68px; height: 66px; display: grid; place-items: center; background: var(--sea-deep); border: 1px solid var(--line); border-radius: 8px; image-rendering: pixelated; object-fit: contain; padding: 4px; }
+.shipArt.pirate { padding: 0; background: var(--sea-deep) url(img/sprites/ships/pirate_speedboat/pirate_speedboat_atlas.png) -136px 0 / 544px 66px no-repeat; }
+.yardStats { display: grid; grid-template-columns: auto auto auto auto; gap: 1px 8px; margin: 4px 0 0; font-size: 12px; }
+.yardStats dt { color: var(--quiet); } .yardStats dd { margin: 0; font-family: var(--mono); }
+.shipCard.fresh { border-color: var(--mine); box-shadow: 0 0 0 2px rgba(95,211,168,.35); }
+
+/* Header hierarchy: cash first, net worth second, clock explained */
+.stat.cash b { font-size: 22px; color: var(--ink); }
+.stat.cash span { color: var(--mine); }
+.stat.worth b { font-size: 14px; color: var(--quiet); font-weight: 400; }
+.stat.clock { cursor: help; }
+.stat.clock:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.info { display: inline-grid; place-items: center; width: 13px; height: 13px; border: 1px solid var(--faint); border-radius: 50%; font: italic 600 9px var(--mono); color: var(--quiet); text-transform: none; letter-spacing: 0; vertical-align: 1px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* Stronger active tab */
+nav button { font-weight: 500; }
+nav button.on { background: linear-gradient(180deg, rgba(95,211,168,.12), rgba(95,211,168,.02)); border-bottom-width: 3px; font-weight: 700; }
+nav button:focus-visible { outline-offset: -3px; }
+/* Market rows are buttons */
+.small { font-size: 11.5px; }
+tr.goodRow { cursor: pointer; }
+tr.goodRow:hover td { background: rgba(255,255,255,.035); }
+tr.goodRow:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+tr.goodRow.sel td { background: rgba(95,211,168,.09); }
+tr.goodRow.sel td:first-child { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
+.goodTrade { margin-top: 10px; background: var(--sea-deep); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 12px 14px; }
+.gtHead { display: flex; justify-content: space-between; align-items: center; }
+.gtFacts { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 8px 0; font-size: 13px; }
+.gtFacts dt { color: var(--quiet); } .gtFacts dd { margin: 0; font-family: var(--mono); text-align: right; }
+.gtTotal { margin-top: 8px; font-size: 13px; }
+.dests td { padding: 5px 6px 5px 0; }
+table.forecast td, table.forecast th { padding-top: 5px; padding-bottom: 5px; }
+.marketOutlook, .forecastInfo { margin-top: 6px; } summary { cursor: pointer; color: var(--quiet); }
+.shipSum { list-style: none; padding: 0; margin: 0; font-size: 13px; } .shipSum li { padding: 5px 0; border-top: 1px solid var(--line); } .shipSum li.on { box-shadow: inset 3px 0 var(--mine); padding-left: 8px; }
+
+/* narrow screens: keep the stat row inside the viewport */
+@media (max-width: 860px) {
+  .stat.cash b { font-size: 17px; }
+  .stat.worth b { font-size: 12px; }
+  .stats { min-width: 0; }
+  .stat { min-width: 0; }
+}
+
+@media (max-width: 380px) {
+  .market { table-layout: fixed; }
+  .market th, .market td { padding-inline: 2px; overflow-wrap: anywhere; }
+  .market th:first-child { width: 26%; }
+  .market .spark { max-width: 100%; }
+  .market .bar { min-width: 0; }
+}
+
+.voyageQueue { margin-top: 12px; }
+.voyageQueue fieldset { min-width: 0; display: grid; gap: 5px 10px; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); margin: 8px 0; border: 1px solid var(--line); }
+.voyageQueue label { min-width: 0; font-size: 12px; }
+.voyageQueue input, .voyageQueue select { width: 100%; min-width: 0; }
+.opportunityCategory, .opportunityCard { display: block; margin-block: 0.75rem; }
+.opportunityCard h3 { margin: 0; }
+.opportunityCard p { margin: 0.35rem 0 0.6rem; white-space: pre-line; }
+.opportunityAction { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: end; margin-top: 0.5rem; }
+.opportunityAction label { display: grid; gap: 0.2rem; min-width: 0; }
+.opportunityAction select, .opportunityAction input { max-width: 100%; }
+#tabs button[hidden] { display: none; }

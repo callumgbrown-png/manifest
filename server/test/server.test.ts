@@ -316,7 +316,7 @@ describe("playing over WebSockets", () => {
     const a = new Client(s); await a.auth("register", uniq("Alpha"));
     const b = new Client(s); await b.auth("register", uniq("Beta"));
     const bShip = (await b.state(m => m.me)).me.ships[0];
-    for (const type of ["register", "adminSet", "tick", "constructor", "__proto__"])
+    for (const type of ["register", "adminSet", "debugCredits", "tick", "constructor", "__proto__"])
       assert.equal((await a.cmd({ type, tax: 0 })).error, "Unknown command", type);
     // Spoofing another company id is ignored: the server uses the logged-in company.
     const r = await a.cmd({ type: "sail", company: (await b.state(m => m.me)).me.id, ship: bShip.id, dest: neighbour(bShip.port) });
@@ -459,7 +459,7 @@ describe("playing over WebSockets", () => {
     const st = await a.state(m => m.me);
     const w = st.world;
     assert.deepEqual(w.goods, ["grain", "fuel", "ore", "machinery"]);
-    assert.deepEqual(Object.keys(w.rules.shipTypes), ["coaster", "freighter", "bulker"]);
+    assert.deepEqual(Object.keys(w.rules.shipTypes), ["coaster", "freighter", "bulker", "pirate"]);
     assert.equal(w.rules.shipTypes.bulker.capacity, 200);
     assert.equal(w.rules.targets.length, 4);
     assert.equal(w.ports[0].prices.length, 4); assert.equal(w.ports[0].stock.length, 4); assert.equal(w.ports[0].inbound.length, 4);
@@ -471,8 +471,34 @@ describe("playing over WebSockets", () => {
     const after = await a.fresh(m => m.me?.ships.length === 2);
     assert.deepEqual(after.me.ships.map((x: any) => x.type), ["freighter", "coaster"]);
     assert.ok(after.world.ships.some((x: any) => x.type === "coaster"), "other players can see the class");
-    assert.equal(after.me.cash, 10000 - 7000);
+    const price = w.rules.shipTypes.coaster.price;
+    const expected = 10000 - price;
+    const daysElapsed = Math.floor(after.world.tick / 24) - Math.floor(w.tick / 24);
+    assert.ok([expected, ...Array.from({ length: daysElapsed }, (_, i) =>
+      Math.round(expected - after.me.upkeepDue * (i + 1)))].includes(after.me.cash));
     a.close();
+  });
+
+  test("live pirate commands refuse dockside raids", async () => {
+    const client = new Client(s);
+    try {
+      await client.auth("register", uniq("Pirate"));
+      const player = (await client.state(m => m.me)).me;
+      assert.equal((await client.cmd({ type: "buyShip", port: player.home, shipType: "pirate" })).ok, true);
+      const fleet = (await client.fresh(m => m.me?.ships.length === 2)).me.ships;
+      const pirate = fleet.find((ship: { type: string }) => ship.type === "pirate");
+      assert.deepEqual(pirate.raidTargets, []);
+      const target = 999999;
+      const refusal = await client.cmd({ type: "raid", ship: pirate.id, target });
+      assert.equal(refusal.error, "Your pirate ship must be underway to raid.");
+      assert.equal((await client.cmd({ type: "scrapShip", ship: player.ships[0].id })).ok, true);
+      const dest = player.home === 0 ? 1 : 0;
+      assert.equal((await client.cmd({ type: "sail", ship: pirate.id, dest })).ok, true);
+      const atSea = await client.cmd({ type: "raid", ship: pirate.id, target });
+      assert.equal(atSea.error, "no such ship");
+    } finally {
+      client.close();
+    }
   });
 
   test("leaderboard lists companies by net worth", async () => {
@@ -563,6 +589,7 @@ describe("restart and seasons", () => {
       assert.equal(seasons[0].id, 1);
       assert.ok(seasons[0].top.some((x: any) => x.name === "Season One"));
       assert.ok(seasons[0].top.length <= 10);
+      assert.ok(seasons[0].honours.some((x: any) => x.division === "One ship" && x.winners.length > 0));
       // Old sessions are gone; the same account plays on with a fresh company.
       const c = new Client(s); await c.ready;
       c.send({ type: "resume", token: (a.msgs.find(m => m.type === "auth")).token });
@@ -572,6 +599,8 @@ describe("restart and seasons", () => {
       assert.equal(st.me.cash, 10000);
       assert.equal(st.world.seasonOver, false);
       assert.equal(st.world.leaderboard.filter((x: any) => x.bot).length, 3);
+      assert.ok(st.me.placements["0"].rank >= 1);
+      assert.ok(st.me.placements["hold-0"].rank >= 1);
       a.close(); b.close(); c.close();
     } finally { await s.stop(); cleanup(s); }
   });

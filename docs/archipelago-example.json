@@ -1,0 +1,714 @@
+{
+ "_about": "Example output of the archipelago generator (seed \"archipelago-demo\"). economyDistance = mapLength / worldScale, which is what fuel, sailing time and fees use.",
+ "seed": "archipelago-demo",
+ "world": {
+  "width": 2000,
+  "height": 1400,
+  "areaVsOriginal": 4,
+  "worldScale": 2
+ },
+ "bodies": [
+  {
+   "name": "landmass-1",
+   "kind": "landmass",
+   "landCells": 6557,
+   "ports": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    39
+   ]
+  },
+  {
+   "name": "landmass-2",
+   "kind": "landmass",
+   "landCells": 5919,
+   "ports": [
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13
+   ]
+  },
+  {
+   "name": "landmass-3",
+   "kind": "landmass",
+   "landCells": 5696,
+   "ports": [
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20
+   ]
+  },
+  {
+   "name": "landmass-4",
+   "kind": "landmass",
+   "landCells": 5145,
+   "ports": [
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27
+   ]
+  },
+  {
+   "name": "landmass-5",
+   "kind": "landmass",
+   "landCells": 5138,
+   "ports": [
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ]
+  },
+  {
+   "name": "island-1",
+   "kind": "island",
+   "landCells": 1135,
+   "ports": [
+    34,
+    35
+   ]
+  },
+  {
+   "name": "island-2",
+   "kind": "island",
+   "landCells": 957,
+   "ports": [
+    36,
+    37
+   ]
+  },
+  {
+   "name": "island-3",
+   "kind": "island",
+   "landCells": 830,
+   "ports": [
+    38
+   ]
+  }
+ ],
+ "ports": [
+  {
+   "id": 0,
+   "name": "Harbour 01",
+   "body": "landmass-1",
+   "position": {
+    "x": 814,
+    "y": 906
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain",
+    "machinery"
+   ]
+  },
+  {
+   "id": 1,
+   "name": "Harbour 02",
+   "body": "landmass-1",
+   "position": {
+    "x": 1114,
+    "y": 678
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain"
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Harbour 03",
+   "body": "landmass-1",
+   "position": {
+    "x": 1070,
+    "y": 934
+   },
+   "producesResource": false,
+   "resourceType": "none",
+   "resources": []
+  },
+  {
+   "id": 3,
+   "name": "Harbour 04",
+   "body": "landmass-1",
+   "position": {
+    "x": 842,
+    "y": 682
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain"
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Harbour 05",
+   "body": "landmass-1",
+   "position": {
+    "x": 930,
+    "y": 1014
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain"
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Harbour 06",
+   "body": "landmass-1",
+   "position": {
+    "x": 722,
+    "y": 782
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 6,
+   "name": "Harbour 07",
+   "body": "landmass-1",
+   "position": {
+    "x": 978,
+    "y": 630
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 7,
+   "name": "Harbour 08",
+   "body": "landmass-2",
+   "position": {
+    "x": 318,
+    "y": 250
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain",
+    "machinery"
+   ]
+  },
+  {
+   "id": 8,
+   "name": "Harbour 09",
+   "body": "landmass-2",
+   "position": {
+    "x": 434,
+    "y": 582
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain"
+   ]
+  },
+  {
+   "id": 9,
+   "name": "Harbour 10",
+   "body": "landmass-2",
+   "position": {
+    "x": 586,
+    "y": 346
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 10,
+   "name": "Harbour 11",
+   "body": "landmass-2",
+   "position": {
+    "x": 258,
+    "y": 466
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain"
+   ]
+  },
+  {
+   "id": 11,
+   "name": "Harbour 12",
+   "body": "landmass-2",
+   "position": {
+    "x": 474,
+    "y": 230
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain"
+   ]
+  },
+  {
+   "id": 12,
+   "name": "Harbour 13",
+   "body": "landmass-2",
+   "position": {
+    "x": 542,
+    "y": 486
+   },
+   "producesResource": false,
+   "resourceType": "none",
+   "resources": []
+  },
+  {
+   "id": 13,
+   "name": "Harbour 14",
+   "body": "landmass-2",
+   "position": {
+    "x": 230,
+    "y": 342
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 14,
+   "name": "Harbour 15",
+   "body": "landmass-3",
+   "position": {
+    "x": 226,
+    "y": 902
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 15,
+   "name": "Harbour 16",
+   "body": "landmass-3",
+   "position": {
+    "x": 518,
+    "y": 1014
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain",
+    "ore"
+   ]
+  },
+  {
+   "id": 16,
+   "name": "Harbour 17",
+   "body": "landmass-3",
+   "position": {
+    "x": 430,
+    "y": 806
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain"
+   ]
+  },
+  {
+   "id": 17,
+   "name": "Harbour 18",
+   "body": "landmass-3",
+   "position": {
+    "x": 330,
+    "y": 1078
+   },
+   "producesResource": false,
+   "resourceType": "none",
+   "resources": []
+  },
+  {
+   "id": 18,
+   "name": "Harbour 19",
+   "body": "landmass-3",
+   "position": {
+    "x": 562,
+    "y": 874
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain"
+   ]
+  },
+  {
+   "id": 19,
+   "name": "Harbour 20",
+   "body": "landmass-3",
+   "position": {
+    "x": 294,
+    "y": 786
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 20,
+   "name": "Harbour 21",
+   "body": "landmass-3",
+   "position": {
+    "x": 218,
+    "y": 1026
+   },
+   "producesResource": true,
+   "resourceType": "ore",
+   "resources": [
+    "ore"
+   ]
+  },
+  {
+   "id": 21,
+   "name": "Harbour 22",
+   "body": "landmass-4",
+   "position": {
+    "x": 1698,
+    "y": 1122
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel",
+    "machinery"
+   ]
+  },
+  {
+   "id": 22,
+   "name": "Harbour 23",
+   "body": "landmass-4",
+   "position": {
+    "x": 1658,
+    "y": 794
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain"
+   ]
+  },
+  {
+   "id": 23,
+   "name": "Harbour 24",
+   "body": "landmass-4",
+   "position": {
+    "x": 1410,
+    "y": 994
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain"
+   ]
+  },
+  {
+   "id": 24,
+   "name": "Harbour 25",
+   "body": "landmass-4",
+   "position": {
+    "x": 1762,
+    "y": 954
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 25,
+   "name": "Harbour 26",
+   "body": "landmass-4",
+   "position": {
+    "x": 1534,
+    "y": 1102
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 26,
+   "name": "Harbour 27",
+   "body": "landmass-4",
+   "position": {
+    "x": 1526,
+    "y": 886
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain",
+    "ore"
+   ]
+  },
+  {
+   "id": 27,
+   "name": "Harbour 28",
+   "body": "landmass-4",
+   "position": {
+    "x": 1798,
+    "y": 1062
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 28,
+   "name": "Harbour 29",
+   "body": "landmass-5",
+   "position": {
+    "x": 1514,
+    "y": 258
+   },
+   "producesResource": false,
+   "resourceType": "none",
+   "resources": []
+  },
+  {
+   "id": 29,
+   "name": "Harbour 30",
+   "body": "landmass-5",
+   "position": {
+    "x": 1826,
+    "y": 310
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 30,
+   "name": "Harbour 31",
+   "body": "landmass-5",
+   "position": {
+    "x": 1626,
+    "y": 514
+   },
+   "producesResource": false,
+   "resourceType": "none",
+   "resources": []
+  },
+  {
+   "id": 31,
+   "name": "Harbour 32",
+   "body": "landmass-5",
+   "position": {
+    "x": 1686,
+    "y": 186
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 32,
+   "name": "Harbour 33",
+   "body": "landmass-5",
+   "position": {
+    "x": 1498,
+    "y": 418
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain"
+   ]
+  },
+  {
+   "id": 33,
+   "name": "Harbour 34",
+   "body": "landmass-5",
+   "position": {
+    "x": 1742,
+    "y": 426
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 34,
+   "name": "Harbour 35",
+   "body": "island-1",
+   "position": {
+    "x": 1014,
+    "y": 314
+   },
+   "producesResource": true,
+   "resourceType": "grain",
+   "resources": [
+    "grain",
+    "ore"
+   ]
+  },
+  {
+   "id": 35,
+   "name": "Harbour 36",
+   "body": "island-1",
+   "position": {
+    "x": 934,
+    "y": 174
+   },
+   "producesResource": false,
+   "resourceType": "none",
+   "resources": []
+  },
+  {
+   "id": 36,
+   "name": "Harbour 37",
+   "body": "island-2",
+   "position": {
+    "x": 1098,
+    "y": 1190
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 37,
+   "name": "Harbour 38",
+   "body": "island-2",
+   "position": {
+    "x": 1246,
+    "y": 1174
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 38,
+   "name": "Harbour 39",
+   "body": "island-3",
+   "position": {
+    "x": 1246,
+    "y": 518
+   },
+   "producesResource": true,
+   "resourceType": "machinery",
+   "resources": [
+    "machinery"
+   ]
+  },
+  {
+   "id": 39,
+   "name": "Harbour 40",
+   "body": "landmass-1",
+   "position": {
+    "x": 1154,
+    "y": 818
+   },
+   "producesResource": true,
+   "resourceType": "fuel",
+   "resources": [
+    "fuel"
+   ]
+  }
+ ],
+ "sampleRoutes": [
+  {
+   "a": 0,
+   "b": 2,
+   "mapLength": 352.9,
+   "economyDistance": 176.4
+  },
+  {
+   "a": 0,
+   "b": 3,
+   "mapLength": 332.1,
+   "economyDistance": 166.1
+  },
+  {
+   "a": 0,
+   "b": 4,
+   "mapLength": 193.4,
+   "economyDistance": 96.7
+  },
+  {
+   "a": 0,
+   "b": 5,
+   "mapLength": 158.3,
+   "economyDistance": 79.2
+  },
+  {
+   "a": 1,
+   "b": 6,
+   "mapLength": 157.1,
+   "economyDistance": 78.6
+  },
+  {
+   "a": 1,
+   "b": 38,
+   "mapLength": 207.4,
+   "economyDistance": 103.7
+  },
+  {
+   "a": 1,
+   "b": 39,
+   "mapLength": 145.9,
+   "economyDistance": 73
+  },
+  {
+   "a": 2,
+   "b": 4,
+   "mapLength": 162.7,
+   "economyDistance": 81.3
+  }
+ ]
+}

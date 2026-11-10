@@ -1,0 +1,225 @@
+{
+ "frames": {
+  "factory_0_N": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "sourceSize": {
+    "w": 106,
+    "h": 146
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9794520547945206
+   }
+  },
+  "factory_1_NE": {
+   "frame": {
+    "x": 106,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "sourceSize": {
+    "w": 106,
+    "h": 146
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9794520547945206
+   }
+  },
+  "factory_2_E": {
+   "frame": {
+    "x": 212,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "sourceSize": {
+    "w": 106,
+    "h": 146
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9794520547945206
+   }
+  },
+  "factory_3_SE": {
+   "frame": {
+    "x": 318,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "sourceSize": {
+    "w": 106,
+    "h": 146
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9794520547945206
+   }
+  },
+  "factory_4_S": {
+   "frame": {
+    "x": 424,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "sourceSize": {
+    "w": 106,
+    "h": 146
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9794520547945206
+   }
+  },
+  "factory_5_SW": {
+   "frame": {
+    "x": 530,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "sourceSize": {
+    "w": 106,
+    "h": 146
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9794520547945206
+   }
+  },
+  "factory_6_W": {
+   "frame": {
+    "x": 636,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "sourceSize": {
+    "w": 106,
+    "h": 146
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9794520547945206
+   }
+  },
+  "factory_7_NW": {
+   "frame": {
+    "x": 742,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 106,
+    "h": 146
+   },
+   "sourceSize": {
+    "w": 106,
+    "h": 146
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9794520547945206
+   }
+  }
+ },
+ "meta": {
+  "image": "factory_atlas.png",
+  "size": {
+   "w": 848,
+   "h": 146
+  },
+  "cell": {
+   "w": 106,
+   "h": 146
+  },
+  "pivot_px": {
+   "x": 53,
+   "y": 143
+  },
+  "variants": [
+   "default"
+  ],
+  "directions": [
+   "N",
+   "NE",
+   "E",
+   "SE",
+   "S",
+   "SW",
+   "W",
+   "NW"
+  ],
+  "direction_index_note": "column i = i*45 degrees of rotation"
+ }
+}

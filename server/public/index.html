@@ -54,9 +54,9 @@
   </div>
   <div class="stats">
     <div class="stat"><span>Company</span><b id="hName">–</b></div>
-    <div class="stat"><span>Cash</span><b id="hCash">–</b><em id="hDelta" class="delta"></em></div>
-    <div class="stat"><span>Net worth</span><b id="hWorth">–</b></div>
-    <div class="stat"><span>Season clock</span><b id="hClock">–</b></div>
+    <div class="stat cash"><span>Cash</span><b id="hCash">–</b><em id="hDelta" class="delta"></em></div>
+    <div class="stat worth"><span>Net worth</span><b id="hWorth">–</b></div>
+    <div class="stat clock" tabindex="0" aria-describedby="clockHelp"><span>Season clock <i aria-hidden="true" class="info">i</i></span><b id="hClock">–</b><span id="clockHelp" class="sr">Hover or focus for how game time works</span></div>
   </div>
   <div class="spacer"></div>
   <span id="diff" class="pill diff hidden" title="World difficulty, set by the game admin"></span>
@@ -82,6 +82,7 @@
       <span><i class="shape ore"></i>ore producer</span>
       <span><i class="shape machinery"></i>machinery producer</span>
       <span><i class="shape other"></i>other port</span>
+      <span><i class="homeFlag"></i>your home port</span>
       <span><img class="legendShip" src="img/ship-empty.png" alt="">ships (yours glow)</span>
     </div>
   </section>
@@ -90,12 +91,18 @@
       <button role="tab" aria-controls="panel" data-tab="port" class="on">Port</button>
       <button role="tab" aria-controls="panel" data-tab="fleet">Fleet</button>
       <button role="tab" aria-controls="panel" data-tab="orders">Orders</button>
+      <button role="tab" aria-controls="panel" data-tab="opportunities" hidden>Opportunities</button>
       <button role="tab" aria-controls="panel" data-tab="board">Leaderboard</button>
     </nav>
     <div id="panel" role="tabpanel"></div>
   </aside>
 </main>
 <div id="toast" class="toast hidden" role="status"></div>
+<script src="ship-views.js"></script>
+<script src="harbours.js"></script>
+<script src="port-sprites.js"></script>
+<script src="island-layer.js"></script>
+<script src="navigation-layer.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

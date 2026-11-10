@@ -1,0 +1,225 @@
+{
+ "frames": {
+  "mine_headframe_0_N": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "sourceSize": {
+    "w": 102,
+    "h": 142
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9788732394366197
+   }
+  },
+  "mine_headframe_1_NE": {
+   "frame": {
+    "x": 102,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "sourceSize": {
+    "w": 102,
+    "h": 142
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9788732394366197
+   }
+  },
+  "mine_headframe_2_E": {
+   "frame": {
+    "x": 204,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "sourceSize": {
+    "w": 102,
+    "h": 142
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9788732394366197
+   }
+  },
+  "mine_headframe_3_SE": {
+   "frame": {
+    "x": 306,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "sourceSize": {
+    "w": 102,
+    "h": 142
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9788732394366197
+   }
+  },
+  "mine_headframe_4_S": {
+   "frame": {
+    "x": 408,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "sourceSize": {
+    "w": 102,
+    "h": 142
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9788732394366197
+   }
+  },
+  "mine_headframe_5_SW": {
+   "frame": {
+    "x": 510,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "sourceSize": {
+    "w": 102,
+    "h": 142
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9788732394366197
+   }
+  },
+  "mine_headframe_6_W": {
+   "frame": {
+    "x": 612,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "sourceSize": {
+    "w": 102,
+    "h": 142
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9788732394366197
+   }
+  },
+  "mine_headframe_7_NW": {
+   "frame": {
+    "x": 714,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 102,
+    "h": 142
+   },
+   "sourceSize": {
+    "w": 102,
+    "h": 142
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9788732394366197
+   }
+  }
+ },
+ "meta": {
+  "image": "mine_headframe_atlas.png",
+  "size": {
+   "w": 816,
+   "h": 142
+  },
+  "cell": {
+   "w": 102,
+   "h": 142
+  },
+  "pivot_px": {
+   "x": 51,
+   "y": 139
+  },
+  "variants": [
+   "default"
+  ],
+  "directions": [
+   "N",
+   "NE",
+   "E",
+   "SE",
+   "S",
+   "SW",
+   "W",
+   "NW"
+  ],
+  "direction_index_note": "column i = i*45 degrees of rotation"
+ }
+}

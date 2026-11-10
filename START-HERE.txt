@@ -1,0 +1,14 @@
+MANIFEST - how to run it on Windows
+
+1. Unzip this folder anywhere.
+2. Open the "server" folder and double-click start.bat.
+   - First run: it downloads Node.js (about 30 MB) if you don't have it, then installs the game's packages. Needs internet once.
+   - Your browser opens http://localhost:8080 automatically. Keep the black window open while you play.
+3. Admin page: http://localhost:8080/admin  (token is set in start.bat)
+
+This combined build includes the existing map generator, piracy and police,
+cash recovery, and economy views. It adds eight-direction pirate and police
+art, coastline docks and inland production art, clearer purchase and upkeep
+messages, and a requirement to be underway before raiding.
+
+For a fresh world, extract into a new folder. The archive has no save database.

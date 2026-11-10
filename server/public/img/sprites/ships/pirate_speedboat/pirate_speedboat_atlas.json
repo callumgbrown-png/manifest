@@ -1,0 +1,225 @@
+{
+ "frames": {
+  "pirate_speedboat_0_N": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "sourceSize": {
+    "w": 68,
+    "h": 66
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "pirate_speedboat_1_NE": {
+   "frame": {
+    "x": 68,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "sourceSize": {
+    "w": 68,
+    "h": 66
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "pirate_speedboat_2_E": {
+   "frame": {
+    "x": 136,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "sourceSize": {
+    "w": 68,
+    "h": 66
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "pirate_speedboat_3_SE": {
+   "frame": {
+    "x": 204,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "sourceSize": {
+    "w": 68,
+    "h": 66
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "pirate_speedboat_4_S": {
+   "frame": {
+    "x": 272,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "sourceSize": {
+    "w": 68,
+    "h": 66
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "pirate_speedboat_5_SW": {
+   "frame": {
+    "x": 340,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "sourceSize": {
+    "w": 68,
+    "h": 66
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "pirate_speedboat_6_W": {
+   "frame": {
+    "x": 408,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "sourceSize": {
+    "w": 68,
+    "h": 66
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "pirate_speedboat_7_NW": {
+   "frame": {
+    "x": 476,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 68,
+    "h": 66
+   },
+   "sourceSize": {
+    "w": 68,
+    "h": 66
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  }
+ },
+ "meta": {
+  "image": "pirate_speedboat_atlas.png",
+  "size": {
+   "w": 544,
+   "h": 66
+  },
+  "cell": {
+   "w": 68,
+   "h": 66
+  },
+  "pivot_px": {
+   "x": 34,
+   "y": 33
+  },
+  "variants": [
+   "default"
+  ],
+  "directions": [
+   "N",
+   "NE",
+   "E",
+   "SE",
+   "S",
+   "SW",
+   "W",
+   "NW"
+  ],
+  "direction_index_note": "column i = i*45 degrees of rotation"
+ }
+}

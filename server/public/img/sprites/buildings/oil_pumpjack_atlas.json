@@ -1,0 +1,225 @@
+{
+ "frames": {
+  "oil_pumpjack_0_N": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "sourceSize": {
+    "w": 80,
+    "h": 102
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9705882352941176
+   }
+  },
+  "oil_pumpjack_1_NE": {
+   "frame": {
+    "x": 80,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "sourceSize": {
+    "w": 80,
+    "h": 102
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9705882352941176
+   }
+  },
+  "oil_pumpjack_2_E": {
+   "frame": {
+    "x": 160,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "sourceSize": {
+    "w": 80,
+    "h": 102
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9705882352941176
+   }
+  },
+  "oil_pumpjack_3_SE": {
+   "frame": {
+    "x": 240,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "sourceSize": {
+    "w": 80,
+    "h": 102
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9705882352941176
+   }
+  },
+  "oil_pumpjack_4_S": {
+   "frame": {
+    "x": 320,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "sourceSize": {
+    "w": 80,
+    "h": 102
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9705882352941176
+   }
+  },
+  "oil_pumpjack_5_SW": {
+   "frame": {
+    "x": 400,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "sourceSize": {
+    "w": 80,
+    "h": 102
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9705882352941176
+   }
+  },
+  "oil_pumpjack_6_W": {
+   "frame": {
+    "x": 480,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "sourceSize": {
+    "w": 80,
+    "h": 102
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9705882352941176
+   }
+  },
+  "oil_pumpjack_7_NW": {
+   "frame": {
+    "x": 560,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 80,
+    "h": 102
+   },
+   "sourceSize": {
+    "w": 80,
+    "h": 102
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9705882352941176
+   }
+  }
+ },
+ "meta": {
+  "image": "oil_pumpjack_atlas.png",
+  "size": {
+   "w": 640,
+   "h": 102
+  },
+  "cell": {
+   "w": 80,
+   "h": 102
+  },
+  "pivot_px": {
+   "x": 40,
+   "y": 99
+  },
+  "variants": [
+   "default"
+  ],
+  "directions": [
+   "N",
+   "NE",
+   "E",
+   "SE",
+   "S",
+   "SW",
+   "W",
+   "NW"
+  ],
+  "direction_index_note": "column i = i*45 degrees of rotation"
+ }
+}

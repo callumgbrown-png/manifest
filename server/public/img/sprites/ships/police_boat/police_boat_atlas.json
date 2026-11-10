@@ -1,0 +1,225 @@
+{
+ "frames": {
+  "police_boat_0_N": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 67
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "police_boat_1_NE": {
+   "frame": {
+    "x": 77,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 67
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "police_boat_2_E": {
+   "frame": {
+    "x": 154,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 67
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "police_boat_3_SE": {
+   "frame": {
+    "x": 231,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 67
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "police_boat_4_S": {
+   "frame": {
+    "x": 308,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 67
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "police_boat_5_SW": {
+   "frame": {
+    "x": 385,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 67
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "police_boat_6_W": {
+   "frame": {
+    "x": 462,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 67
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  },
+  "police_boat_7_NW": {
+   "frame": {
+    "x": 539,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 77,
+    "h": 67
+   },
+   "sourceSize": {
+    "w": 77,
+    "h": 67
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.5
+   }
+  }
+ },
+ "meta": {
+  "image": "police_boat_atlas.png",
+  "size": {
+   "w": 616,
+   "h": 67
+  },
+  "cell": {
+   "w": 77,
+   "h": 67
+  },
+  "pivot_px": {
+   "x": 38,
+   "y": 33
+  },
+  "variants": [
+   "default"
+  ],
+  "directions": [
+   "N",
+   "NE",
+   "E",
+   "SE",
+   "S",
+   "SW",
+   "W",
+   "NW"
+  ],
+  "direction_index_note": "true headings N,NE,E,SE,S,SW,W,NW (bow direction); source sheet was re-ordered"
+ }
+}

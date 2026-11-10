@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { Engine, GOODS } from "../server/src/engine.ts";
 import { runBots, botName, pickStartPort } from "../server/src/bots.ts";
+import { runPirateBots, runPirate } from "../server/src/piratebots.ts";
 
 const rules = JSON.parse(readFileSync(new URL("../config/rules.json", import.meta.url), "utf8"));
 const map = JSON.parse(readFileSync(new URL("../config/map.json", import.meta.url), "utf8"));
@@ -11,11 +12,17 @@ const CHECK = Number(process.env.CHECK || 4);        // hours between a player's
 const PER = Number(process.env.PER || 4);            // players per strategy
 const SEEDS = Number(process.env.SEEDS || 3);
 const DIFF = process.env.DIFF || "normal";
+const PIRATES = (process.env.PIRATES || "on") === "on";   // PIRATES=off runs the same world with pirate ships and police disabled
+if (!PIRATES) rules.pirates.enabled = false;
+// RULES='{"pirates":{"failed_raid_cost":150},"ship_types":{"pirate":{"upkeep":150}}}' tries other numbers without editing rules.json.
+const merge = (a: any, b: any) => { for (const [k, v] of Object.entries(b)) { if (v && typeof v === "object" && !Array.isArray(v)) merge(a[k] ??= {}, v); else a[k] = v; } };
+if (process.env.RULES) merge(rules, JSON.parse(process.env.RULES));
+const raidStats = { won: 0, lost: 0, captured: 0, loot: 0, arrests: 0, bought: 0 };
 for (const [k, v] of Object.entries({ CHECK, PER, SEEDS })) {
   if (!Number.isInteger(v) || v < 1) { console.error(`${k} must be a whole number of 1 or more (SEEDS is how many seeds, e.g. SEEDS=3)`); process.exit(1); }
 }
 
-type Strat = "advice" | "tripsOnly" | "oldDefault" | "newDefault" | "plan";
+type Strat = "advice" | "tripsOnly" | "oldDefault" | "newDefault" | "plan" | "pirate";
 interface P { id: number; strat: Strat; emptySpent: number; trips: number; moves: number; waits: number; }
 
 function makeTools(e: Engine) {
@@ -85,7 +92,7 @@ function makeTools(e: Engine) {
   return { bestTrips, bestMove, chainMove, alphaFirst, nearest, planned };
 }
 
-const STRATS: Strat[] = (process.env.STRATS || "advice,tripsOnly,oldDefault,newDefault,plan").split(",") as Strat[];
+const STRATS: Strat[] = (process.env.STRATS || "advice,tripsOnly,oldDefault,newDefault,plan,pirate").split(",").filter(k => PIRATES || k !== "pirate") as Strat[];
 const results = Object.fromEntries(STRATS.map(k => [k, [] as number[]])) as Record<Strat, number[]>;
 const stats = Object.fromEntries(STRATS.map(k => [k, { empty: 0, trips: 0, moves: 0, waits: 0 }])) as Record<Strat, { empty: number; trips: number; moves: number; waits: number }>;
 let botFinal: number[] = [];
@@ -107,20 +114,32 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   const offset = new Map(players.map((p, i) => [p.id, i % CHECK]));
   while (!e.seasonOver) {
     e.advance();
+    runPirateBots(e, bots, c => e.apply(c));
     runBots(e, bots, c => e.apply(c), { minProfit: e.botMinProfit, error: e.botError });
     for (const p of players) {
       if ((e.tick + offset.get(p.id)!) % CHECK) continue;
-      const c = e.companies.get(p.id)!, s = e.ships.get(c.ships[0])!;
+      // A pirate player checks in like the others: the pirate ship hunts (same play as a pirate bot), and the
+      // company's first ship trades by the "plan" strategy so the player still earns honestly.
+      if (p.strat === "pirate") runPirate(e, p.id, cmd => {
+        const res: any = e.applyLive(cmd);
+        if (res.ok && cmd.type === "raid") { raidStats[res.outcome as "won" | "lost" | "captured"]++; raidStats.loot += res.loot ?? 0; }
+        if (res.ok && cmd.type === "buyShip") raidStats.bought++;
+        return res;
+      });
+      const c = e.companies.get(p.id);
+      if (!c || !c.ships.length) continue;
+      const s = e.ships.get(c.ships.find(x => e.ships.get(x)!.type !== "pirate") ?? c.ships[0])!;
+      if (s.type === "pirate") continue;
       if (s.dest !== null) continue;
       if (s.qty > 0) e.apply({ type: "sell", company: p.id, ship: s.id });
       const { cargo } = e.inbound();
-      const trip = p.strat === "plan" ? T.planned(s.port, c.cash, cargo) : T.bestTrips(s.port, c.cash, cargo)[0];
+      const trip = p.strat === "plan" || p.strat === "pirate" ? T.planned(s.port, c.cash, cargo) : T.bestTrips(s.port, c.cash, cargo)[0];
       if (trip) {
         if (e.apply({ type: "sail", company: p.id, ship: s.id, dest: trip.dest, buy: { good: GOODS[trip.g], qty: trip.qty } }).ok) p.trips++;
         continue;
       }
       const before = c.cash;
-      if (p.strat === "plan") {
+      if (p.strat === "plan" || p.strat === "pirate") {
         // Like the client: a one-step move if one pays, otherwise a move whose next two trips pay.
         const mv = T.bestMove(s.port, c.cash, cargo) ?? T.chainMove(s.port, c.cash, cargo);
         if (mv && e.apply({ type: "sail", company: p.id, ship: s.id, dest: mv.dest }).ok) { p.moves++; p.emptySpent += before - c.cash; }
@@ -146,7 +165,10 @@ for (let seed = 1; seed <= SEEDS; seed++) {
 
 const med = (a: number[]) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
 const n = PER * SEEDS;
-console.log(`difficulty ${DIFF}, check-in every ${CHECK} h, ${n} players per strategy, start worth 16,000`);
+console.log(`pirates ${PIRATES ? "ON" : "OFF"}, difficulty ${DIFF}, check-in every ${CHECK} h, ${n} players per strategy, start worth 16,000`);
 for (const k of STRATS)
   console.log(`${k.padEnd(10)} median ${med(results[k])}  min ${Math.min(...results[k])}  max ${Math.max(...results[k])}  | per player: ${(stats[k].trips / n).toFixed(0)} trips, ${(stats[k].moves / n).toFixed(0)} empty moves costing ${(stats[k].empty / n).toFixed(0)}, ${(stats[k].waits * CHECK / n).toFixed(0)} h waiting with nothing to do`);
+if (STRATS.includes("pirate")) {
+  console.log(`pirate players, all ${SEEDS} seasons: ${raidStats.bought} pirate ships bought, raids won ${raidStats.won}, captured ${raidStats.captured}, lost ${raidStats.lost}, cargo taken ${raidStats.loot}`);
+}
 console.log(`bots       median ${med(botFinal)}  max ${Math.max(...botFinal)}`);

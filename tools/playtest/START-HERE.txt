@@ -1,0 +1,44 @@
+MANIFEST - PRIVATE PLAYTEST FOR WINDOWS 11 x64
+
+1. Right-click the downloaded ZIP and choose Extract All. Choose a folder
+   you can write to, such as a folder in Documents.
+2. Open the extracted Manifest folder and double-click Play Manifest.bat.
+   Keep the game window open while you play. If the browser does not open
+   automatically, wait for Ready and open http://127.0.0.1:8080.
+3. Register a company. Try buying cargo at your home port, sailing to a
+   different port, and selling the cargo when you arrive.
+4. To stop, press Ctrl+C in the game window. Confirm if Windows asks whether
+   to terminate the batch job. Closing the browser alone leaves the world running.
+
+This copy runs your own world with computer traders. Easy difficulty and
+five-second game hours give you time to learn the controls and finish a trip.
+
+MARITIME SERVICES
+
+Open Fleet and expand Maritime services for emergency credit, rescue charters,
+machinery futures, privateer bounties, escort contracts, and company pennants.
+For local testing, Fleet also has a Debug +100,000 credits button.
+Dispatch cards quote naval escort and cargo insurance costs before departure.
+After a voyage, check the return-load board for funded freight. Queued legs
+carry a 10-credit dispatch fee. Port fees can rise with fleet growth and
+repeated use of a lane. A harbor project costs 1,000 credits and 10 machinery
+and lowers the base docking fee for everyone using that port.
+
+Pirate boats can raid eligible ships while underway. A solo merchant can lose
+up to a quarter of its load and keeps its ship. Take stolen cargo to your
+home port and use Fence cargo. An escort reduces the odds of a successful
+raid. Insurance pays for part of the recorded cargo loss.
+
+YOUR WORLD
+
+Progress is saved automatically under data next to Play Manifest.bat.
+Keep using the same extracted folder to resume. To reset the world, stop
+the game, then rename data to an unused name such as data-backup. Start
+the game again and register a new company.
+
+If port 8080 is occupied, close the other Manifest window or application
+that is using that port before trying again.
+
+If something goes wrong, reply to your playtest invitation with the version
+from BUILD.txt, the steps you took, and the visible error or a screenshot.
+Keep your password and save files private.

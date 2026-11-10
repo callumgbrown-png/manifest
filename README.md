@@ -31,13 +31,22 @@ On Windows, double-click `server/start.bat`.
 
 ## Repository layout
 
+New seasons are a 2000 x 1400 archipelago (5 land masses + 3 islands, same economy): see `docs/ARCHIPELAGO.md`.
+New worlds now use larger procedural landmasses and water-based A* shipping
+lanes. Terrain and routes are saved per season. Existing seasons retain their
+old map until you start a new season. See `docs/NAVIGATION.md` for details.
+Every fresh world/new season now randomizes all 40 coastal port positions,
+checks ocean connectivity, producer counts and spacing, and validates its full
+A* route graph before activation. See `docs/RANDOM_SEASONS.md` for seed options
+and failure handling.
+
 | Path | What it is |
 | --- | --- |
 | `config/rules.json` | All economy rules, shared by server and simulator |
 | `config/map.json` | The region map. `tools/generate_map.py --seed N` makes the ports, grain and fuel; run `tools/add_goods.py` after it to give the ports ore and machinery roles |
 | `server/src/engine.ts` | Authoritative game rules, no I/O |
 | `server/src/main.ts` | HTTP, WebSockets, accounts, event log, clock |
-| `server/public/` | Browser client and admin page |
+| `server/public/` | Browser client and admin page (port icons and ship sprites: see `docs/SPRITES.md`) |
 | `server/test/` | Tests: `npm test` (engine rules, bots, and the real server over HTTP and WebSockets) |
 | `server/test/browser/` | Browser test of the client, admin and seasons pages: `npm run test:browser` |
 | `sim/` | Python bot simulator and charts for tuning the economy |

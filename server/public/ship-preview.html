@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Manifest directional ship check</title>
+<style>
+body{background:#0c2535;color:#edf5f9;font:16px system-ui;margin:20px}canvas{width:560px;height:1100px}p{max-width:560px;color:#b3cbd8}
+</style>
+<h1>Directional ship preview</h1>
+<p>Outlined ships with cream cabins. Every direction and cargo uses the same uniform scale without stretching. White background removed for the map. Each group shows E, SE, S, SW, W, NW, N, NE.</p>
+<canvas id="preview" width="560" height="1100"></canvas>
+<script src="ship-views.js"></script>
+<script>
+const ctx=document.getElementById('preview').getContext('2d');
+function render(){
+ctx.clearRect(0,0,560,1100);ctx.fillStyle='#edf5f9';ctx.font='14px system-ui';
+const labels=['E','SE','S','SW','W','NW','N','NE'];
+for(let group=0;group<2;group++){
+const size=[32,64][group],base=group*450;
+ctx.fillText(['Actual map size · shared scale','Enlarged check · twice map size'][group],0,base+18);
+for(let i=0;i<8;i++){
+const x=70+(i%4)*135, block=Math.floor(i/4)*(group ? 310 : 190);
+ctx.fillText(labels[i],x-8,base+40+block);
+for(let row=0;row<3;row++){
+const y=base+75+block+row*(group ? 90 : 52),cargo=[null,'fuel','grain'][row];
+if(i%4===0)ctx.fillText(cargo??'empty',0,y+4);
+ManifestShipSprites.draw(ctx,x,y,size,i*Math.PI/4,cargo);
+}
+}}
+requestAnimationFrame(render);
+}render();
+</script>

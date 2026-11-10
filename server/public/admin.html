@@ -36,7 +36,8 @@
 <h3>Season</h3>
 <div class="quiet" id="seasonInfo">–</div>
 <div class="quiet">Starting a new season saves the final standings to the past-seasons page, then gives every account a fresh company. Players who are online are asked to log in again. The new season starts on <b id="nextDiff">–</b> <span id="nextDiffWhy"></span>, with that level's tax, port fee and upkeep; any hand-set values or difficulty change made here are not kept.</div>
-<div class="row"><button id="newSeason" class="secondary">Archive and start a new season</button></div>
+<div class="row"><label>Game mode <select id="scenario"><option value="classic">Classic</option><option value="orders-from-shore">Orders From Shore</option><option value="takeover-day">Takeover Day</option><option value="opening-auction">Opening Auction</option></select></label>
+  <button id="newSeason" class="secondary">Archive and start a new season</button></div>
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
@@ -86,7 +87,7 @@ $("applyDifficulty").onclick = async () => {
 $("newSeason").onclick = async () => {
   if (!token) { $("err").textContent = "Enter the admin token first."; return; }
   if (!confirm("End this season now and start a new one? Every company is reset. This can't be undone.")) return;
-  const r = await fetch("/api/admin/new-season", { method: "POST", headers: { "x-admin-token": token } });
+  const r = await fetch("/api/admin/new-season", { method: "POST", headers: { "x-admin-token": token, "content-type": "application/json" }, body: JSON.stringify({ scenario: $("scenario").value }) });
   const res = await r.json();
   first = true;   // show the new season's rules in the controls
   await load();

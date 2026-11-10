@@ -28,7 +28,8 @@ fetch("/api/seasons").then(r => r.json()).then(seasons => {
   list.innerHTML = seasons.map(s => `<div class="season"><h3 style="margin-top:0">Season ${s.id} · ended ${new Date(s.ended).toLocaleDateString("en-IE", { day: "numeric", month: "long", year: "numeric" })}</h3>
     <table><tr><th>#</th><th>Company</th><th class="num">Net worth</th></tr>
     ${s.top.map(c => [c, placeOf(s.top, c)]).map(([c, r]) => `<tr class="${r === 1 ? "first" : ""}"><td>${r}</td><td>${esc(c.name)}${c.bot ? ' <span class="tag">bot</span>' : ""}</td><td class="num">${Math.round(c.worth).toLocaleString("en-IE")}</td></tr>`).join("")}
-    </table></div>`).join("");
+    </table>${s.honours?.length ? `<details><summary>Division honours</summary><ul>${s.honours.map(h =>
+      `<li>${esc(h.division)} · ${h.winners.map(w => esc(w.name) + (w.bot ? " (bot)" : "")).join(", ")}</li>`).join("")}</ul></details>` : ""}</div>`).join("");
 }).catch(() => { document.getElementById("list").innerHTML = '<p class="error">Could not load seasons.</p>'; });
 </script>
 </body>

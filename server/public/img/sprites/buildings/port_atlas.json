@@ -1,0 +1,225 @@
+{
+ "frames": {
+  "port_0_N": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "sourceSize": {
+    "w": 150,
+    "h": 126
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9761904761904762
+   }
+  },
+  "port_1_NE": {
+   "frame": {
+    "x": 150,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "sourceSize": {
+    "w": 150,
+    "h": 126
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9761904761904762
+   }
+  },
+  "port_2_E": {
+   "frame": {
+    "x": 300,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "sourceSize": {
+    "w": 150,
+    "h": 126
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9761904761904762
+   }
+  },
+  "port_3_SE": {
+   "frame": {
+    "x": 450,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "sourceSize": {
+    "w": 150,
+    "h": 126
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9761904761904762
+   }
+  },
+  "port_4_S": {
+   "frame": {
+    "x": 600,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "sourceSize": {
+    "w": 150,
+    "h": 126
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9761904761904762
+   }
+  },
+  "port_5_SW": {
+   "frame": {
+    "x": 750,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "sourceSize": {
+    "w": 150,
+    "h": 126
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9761904761904762
+   }
+  },
+  "port_6_W": {
+   "frame": {
+    "x": 900,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "sourceSize": {
+    "w": 150,
+    "h": 126
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9761904761904762
+   }
+  },
+  "port_7_NW": {
+   "frame": {
+    "x": 1050,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 150,
+    "h": 126
+   },
+   "sourceSize": {
+    "w": 150,
+    "h": 126
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 0.9761904761904762
+   }
+  }
+ },
+ "meta": {
+  "image": "port_atlas.png",
+  "size": {
+   "w": 1200,
+   "h": 126
+  },
+  "cell": {
+   "w": 150,
+   "h": 126
+  },
+  "pivot_px": {
+   "x": 75,
+   "y": 123
+  },
+  "variants": [
+   "default"
+  ],
+  "directions": [
+   "N",
+   "NE",
+   "E",
+   "SE",
+   "S",
+   "SW",
+   "W",
+   "NW"
+  ],
+  "direction_index_note": "column i = i*45 degrees of rotation"
+ }
+}

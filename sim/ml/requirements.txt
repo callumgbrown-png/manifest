@@ -1,0 +1,10 @@
+# Python dependencies for the ML player simulator (Phase 0-1). Install into sim/ml/.venv.
+# PyTorch is only needed from Phase 2; see requirements-train.txt.
+gymnasium>=1.0
+numpy>=2.0
+PyYAML>=6.0
+matplotlib>=3.9
+jsonschema>=4.20
+pytest>=8.0
+websockets>=15.0   # Phase 4 fidelity check client
+cma>=4.0           # Phase 4 persona fitting (CMA-ES)

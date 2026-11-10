@@ -64,9 +64,17 @@ export function runBots(engine: Engine, botIds: number[], commit: (c: Command) =
   for (const id of botIds) {
     const c = engine.companies.get(id);
     if (!c) continue;
+    if (engine.maritime.enabled && engine.tick % 24 === id % 24 && c.cash > 6000
+      && ![...engine.orders.values()].some(o => o.owner === id && o.side === "buy")) {
+      const good = engine.map.ports[c.home].consumes[0];
+      if (good) {
+        const price = Math.min(engine.rules.commodities[good].ceiling, engine.price(c.home, GOODS.indexOf(good)) * 1.04);
+        commit({ type: "placeOrder", company: id, port: c.home, good, qty: Math.min(40, Math.floor(1400 / price)), price });
+      }
+    }
     for (const shipId of c.ships) {
       const s = engine.ships.get(shipId);
-      if (!s || s.dest !== null) continue;
+      if (!s || s.dest !== null || s.type === "pirate") continue;   // pirate ships are run by piratebots.ts
       if (s.qty > 0) { commit({ type: "sell", company: id, ship: s.id }); continue; }
       let best = { score: 0, dest: -1, good: -1, qty: 0 };
       const shipCap = engine.spec(s.type).capacity;
@@ -80,7 +88,7 @@ export function runBots(engine: Engine, botIds: number[], commit: (c: Command) =
           const expected = engine.stock[d][g] + cargo[d][g] + qty / 2;
           const sell = qty * engine.price(d, g, expected) * (1 - tax) * misjudge(error, id, d, g, engine.tick);
           const fuel = engine.fuelNeeded(s.port, d, s.type) * engine.price(s.port, 1);
-          const profit = sell - buy - fuel - fee;
+          const profit = sell - buy - fuel - engine.maritime.fee(c, s.port, d);
           if (profit < style.minProfit) continue;
           const score = profit / (hours + 1);
           if (score > best.score) best = { score, dest: d, good: g, qty };
@@ -104,7 +112,11 @@ export function runBots(engine: Engine, botIds: number[], commit: (c: Command) =
       if (best.dest >= 0) {
         const r = commit({ type: "sail", company: id, ship: s.id, dest: best.dest,
           buy: { good: GOODS[best.good], qty: best.qty } });
-        if (r.ok) cargo[best.dest][best.good] += best.qty;
+        if (r.ok) {
+          cargo[best.dest][best.good] += best.qty;
+          if (engine.maritime.enabled && (engine.tick + id + s.id) % 17 === 0 && c.ships.length > 1 && best.qty >= 50)
+            commit({ type: "commissionConvoy", company: id, ship: s.id });
+        }
       }
     }
     // Grow carefully: a second ship once comfortably rich, never more than three.
@@ -133,9 +145,9 @@ export function bestStartTrip(engine: Engine, p: number, cash = engine.rules.com
   return best;
 }
 
-/** Where a new player starts: a random port from the better half of those where a trip pays now,
- *  so nobody's first screen is "no trip pays". If none pay, one of the ports nearest to paying. */
-export function pickStartPort(engine: Engine, random: (n: number) => number) {
+/** The ports a new company may start from: the better half of those where a trip pays now, so nobody's first
+ *  screen is "no trip pays". If none pay (the first day of a Hard season), the ports nearest to paying. */
+export function startPool(engine: Engine): number[] {
   const all = Array.from({ length: engine.n }, (_, p) => ({ p, v: bestStartTrip(engine, p) }))
     .sort((a, b) => b.v - a.v);
   const paying = all.filter(x => x.v > 0);
@@ -143,5 +155,11 @@ export function pickStartPort(engine: Engine, random: (n: number) => number) {
   // to paying, so the first trip is the first to open up, not wherever chance put you.
   const pool = paying.length ? paying.slice(0, Math.max(1, Math.ceil(paying.length / 2)))
     : all.slice(0, Math.max(1, Math.ceil(all.length / 8)));
-  return pool[random(pool.length)].p;
+  return pool.map(x => x.p);
+}
+
+/** Where a new player starts: a random port from the start pool. */
+export function pickStartPort(engine: Engine, random: (n: number) => number) {
+  const pool = startPool(engine);
+  return pool[random(pool.length)];
 }
