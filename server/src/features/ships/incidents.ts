@@ -5,6 +5,7 @@ import type { Engine, Ship } from "../../engine.js";
 import type { FeatureFactory } from "../types.js";
 import { CREW_RANGE } from "./crew.js";
 import { action, fail, note, OK, ownShip, peer, prune, shared, shipName, VoyageWatch } from "./shared.js";
+import { roleOf } from "./variants.js";
 
 export type Stability = "ballast" | "light" | "balanced" | "overloaded";
 /** How the cargo sits: an almost empty hold rolls ("light"), more than the rated hold is "overloaded". */
@@ -21,6 +22,7 @@ export const incidents: FeatureFactory = (e) => {
   const stowaways = new Map<number, { found: number; count: number }>();
   const fires = new Map<number, number>();   // company -> fires this season
   const fireChance = (s: Ship) => {
+    if (s.good === 0 && s.qty > 0 && roleOf(e, s.id) === "reefer") return 0;   // refrigerated grain cannot catch fire
     let p = FIRE_CHANCE;
     const st = stability(e, s);
     if (st === "light" || st === "overloaded") p *= 2;

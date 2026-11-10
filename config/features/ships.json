@@ -1,1 +1,26 @@
-{ "_comment": "true = switched on. Economy modules ship false until Dave approves them." }
+{
+  "_comment": "true = switched on. Economy modules ship false until Dave approves them.",
+  "ships.identity": true,
+  "ships.wear": false,
+  "ships.crew": true,
+  "ships.crew-effects": false,
+  "ships.incidents": true,
+  "ships.logbook": true,
+  "ships.radar": true,
+  "ships.wrecks": true,
+  "ships.fittings": true,
+  "ships.fittings-effects": false,
+  "ships.variants": true,
+  "ships.variants-effects": false,
+  "ships.tugs": true,
+  "ships.captains": true,
+  "ships.resale": true,
+  "ships.insurance": false,
+  "ships.towing": false,
+  "ships.throttle": false,
+  "ships.slipstream": false,
+  "ships.overloading": false,
+  "ships.draft": true,
+  "ships.draft-effects": false,
+  "ships.age": false
+}
