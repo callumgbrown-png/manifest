@@ -1,5 +1,5 @@
 {
-  "_comment": "Achievements, account milestones and long-term goals. Conditions: stat (see docs/features/progression.md) and atLeast. secret: hidden until earned. skin: unlocks a ship pennant. xp: captain experience awarded.",
+  "_comment": "Achievements, account milestones and long-term goals. Conditions: stat (see docs/features/progression-modding.md) and atLeast. secret: hidden until earned. skin: unlocks a ship pennant. xp: captain experience awarded.",
   "achievements": [
     { "id": "first-delivery", "name": "First Delivery", "description": "Sell your first cargo.", "kind": "achievement", "stat": "deliveries", "atLeast": 1, "xp": 25 },
     { "id": "ten-deliveries", "name": "Regular Service", "description": "Complete 10 deliveries.", "kind": "achievement", "stat": "deliveries", "atLeast": 10, "xp": 50 },
