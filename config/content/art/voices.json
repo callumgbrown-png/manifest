@@ -1,0 +1,32 @@
+{
+  "_comment": "Original writing for art.chatter (captain barks, radio chatter) and art.diary. Placeholders: {ship} {port} {dest} {good} {qty} {day} {hour}.",
+  "barks": {
+    "dockedLoaded": ["Holds are full. Point me somewhere hungry.", "Cargo's lashed. Waiting on your word.", "She sits low and happy, skipper."],
+    "dockedEmpty": ["Empty holds echo, skipper.", "Find us a cargo and I'll find us a tide.", "Crew's playing cards on the hatch covers."],
+    "sailingLoaded": ["Steady as she goes.", "{good} aboard and the sea is kind.", "Making good way for {dest}.", "Cargo's dry. Mostly."],
+    "sailingEmpty": ["Running light for {dest}.", "Nothing to lose but the paint.", "Empty and quick, skipper."],
+    "night": ["Lamps lit. Watch set.", "Quiet night. Too quiet, says the cook.", "Stars out. Compass agrees with them."],
+    "pirate": ["Flag up, lads.", "Who's sailing fat today?", "Keep the guns oiled and the ledger hidden."],
+    "storm": ["Hold on to something!", "Green water over the bow!", "She's taken worse. I think."]
+  },
+  "chatter": [
+    "Ship {ship} to {port} harbour, requesting a berth and a kettle.",
+    "{port} harbour: all ships, mind the fishing floats off the north mole.",
+    "Ship {ship}: anyone seen a gull with a red ribbon? He stole the cook's spoon.",
+    "Ship {ship} to anyone: {good} prices at {port} are making grown sailors weep.",
+    "{port} harbour: pilot boat out, pilot boat out. Somebody wake the pilot.",
+    "Ship {ship}: passing {port}, engines happy, captain less so.",
+    "Patrol to all ships: lanes near {port} are clear. Keep them that way.",
+    "Ship {ship}: we have a stowaway. It is a goat. Advise.",
+    "{port} harbour: crane three is fixed. Crane two is now broken. Normal service.",
+    "Ship {ship}: fog thick as porridge off {port}. Sounding horn every minute.",
+    "Ship {ship} to {port}: reading you loud and slightly annoyed.",
+    "Unknown station: has anybody seen the Lantern Queen tonight?"
+  ],
+  "diary": {
+    "depart": ["Day {day}, {hour}:00. Ship {ship} cast off from {port} for {dest}{cargo}.", "Day {day}, {hour}:00. Ship {ship} left {port}, bound for {dest}{cargo}. Gulls followed us out."],
+    "arrive": ["Day {day}, {hour}:00. Ship {ship} tied up at {port}{cargo}.", "Day {day}, {hour}:00. {port} at last. Ship {ship} is alongside{cargo}."],
+    "quiet": ["Day {day}. A quiet day. The crews mended nets and opinions.", "Day {day}. Nothing moved but the tide and the prices."],
+    "found": ["Day {day}. Found: {item}."]
+  }
+}
