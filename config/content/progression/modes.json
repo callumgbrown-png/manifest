@@ -1,0 +1,40 @@
+{
+  "_comment": "Run modes a company picks in its first day, challenge runs, co-op campaign chapters and world presets. World preset is chosen by adding { \"progression\": { \"worldPreset\": \"<id>\" } } to config/rules.json before a world starts.",
+  "challenges": [
+    { "id": "one-ship", "name": "Lone Hull", "text": "Never own more than one ship.", "rule": "maxShips", "value": 1, "xp": 300 },
+    { "id": "no-upgrades", "name": "No Upgrades", "text": "Never own a bulker (no hull upgrades).", "rule": "forbidShip", "value": "bulker", "xp": 250 },
+    { "id": "grain-only", "name": "Grain Only", "text": "Deliver nothing but grain.", "rule": "onlyGood", "value": "grain", "xp": 250 },
+    { "id": "no-automation", "name": "Hands On", "text": "Never use voyage queues.", "rule": "noQueues", "xp": 200 },
+    { "id": "honest-trader", "name": "Honest Trader", "text": "Never own a pirate ship.", "rule": "forbidShip", "value": "pirate", "xp": 150 }
+  ],
+  "challengeDays": 14,
+  "campaign": [
+    { "id": "c1", "name": "Chapter 1: Open the Lanes", "text": "As a crew, complete 15 deliveries.", "stat": "deliveries", "target": 15, "xp": 150 },
+    { "id": "c2", "name": "Chapter 2: Fill the Granaries", "text": "As a crew, deliver 2,000 grain.", "stat": "goodUnits.grain", "target": 2000, "xp": 200 },
+    { "id": "c3", "name": "Chapter 3: Fuel the Coast", "text": "As a crew, deliver 2,000 fuel.", "stat": "goodUnits.fuel", "target": 2000, "xp": 250 },
+    { "id": "c4", "name": "Chapter 4: Chart the Archipelago", "text": "As a crew, sail 20,000 distance.", "stat": "distance", "target": 20000, "xp": 300 },
+    { "id": "c5", "name": "Chapter 5: The Great Venture", "text": "As a crew, earn 100,000 credits of trip profit.", "stat": "profit", "target": 100000, "xp": 500 }
+  ],
+  "presets": [
+    { "id": "classic", "name": "Classic", "text": "The standard Manifest world." },
+    { "id": "solo", "name": "Offline single-player", "text": "Run the server on your own computer with bots as rivals: HOST=127.0.0.1 BOTS=12 TICK_MS=60000 npm run dev, then open http://127.0.0.1:8080. Nothing leaves your machine.", "rules": {} },
+    { "id": "cosy", "name": "Cosy seas", "text": "No pirates. Set pirates.enabled to false in config/rules.json for this world.", "rules": { "pirates": { "enabled": false } }, "theme": "cosy" },
+    { "id": "pirate-only", "name": "Pirate waters", "text": "Raiding-focused world: pirates on, higher pirate bot share, home-port-only pirate ships off.", "rules": { "pirates": { "enabled": true, "bot_share": 0.5, "buy_at_home_only": false } }, "theme": "pirate" },
+    { "id": "tycoon", "name": "Tycoon sandbox", "text": "Every company plays with very large funds (needs the progression.sandbox economy switch).", "rules": {}, "theme": "tycoon" },
+    { "id": "steamship", "name": "Steamship era", "text": "Sepia palette and period names for ships and goods.", "theme": "steamship" },
+    { "id": "futuristic", "name": "Orbital freight", "text": "Night palette and spacefaring names.", "theme": "futuristic" },
+    { "id": "fantasy", "name": "Sea of Legends", "text": "Storybook palette and fantasy names.", "theme": "fantasy" },
+    { "id": "arctic", "name": "Arctic map", "text": "Icy palette. Fixed map config/maps/arctic.json: load it into a fresh world with server/scripts/use-map.ts.", "theme": "arctic", "map": "config/maps/arctic.json" },
+    { "id": "mediterranean", "name": "Mediterranean map", "text": "Warm palette. Fixed map config/maps/mediterranean.json: load it into a fresh world with server/scripts/use-map.ts.", "theme": "mediterranean", "map": "config/maps/mediterranean.json" }
+  ],
+  "themes": {
+    "cosy": { "filter": "saturate(1.15) brightness(1.05)", "labels": {} },
+    "pirate": { "filter": "contrast(1.1) saturate(0.85)", "labels": { "Freighter": "Merchantman" } },
+    "tycoon": { "filter": "saturate(1.2)", "labels": {} },
+    "steamship": { "filter": "sepia(0.55) contrast(1.05)", "labels": { "Coaster": "Paddle Steamer", "Freighter": "Steam Freighter", "Bulker": "Collier", "fuel": "coal" } },
+    "futuristic": { "filter": "hue-rotate(190deg) saturate(1.3) brightness(0.9)", "labels": { "Coaster": "Shuttle", "Freighter": "Hauler", "Bulker": "Ore Barge", "grain": "rations", "fuel": "deuterium", "ore": "regolith", "machinery": "drones" } },
+    "fantasy": { "filter": "hue-rotate(-20deg) saturate(1.25)", "labels": { "Coaster": "Cog", "Freighter": "Carrack", "Bulker": "Galleon", "fuel": "lamp oil", "ore": "mithril ore", "machinery": "clockwork" } },
+    "arctic": { "filter": "saturate(0.6) brightness(1.12) hue-rotate(10deg)", "labels": {} },
+    "mediterranean": { "filter": "saturate(1.2) sepia(0.15)", "labels": {} }
+  }
+}

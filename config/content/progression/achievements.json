@@ -1,0 +1,37 @@
+{
+  "_comment": "Achievements, account milestones and long-term goals. Conditions: stat (see docs/features/progression-modding.md) and atLeast. secret: hidden until earned. skin: unlocks a ship pennant. xp: captain experience awarded.",
+  "achievements": [
+    { "id": "first-delivery", "name": "First Delivery", "description": "Sell your first cargo.", "kind": "achievement", "stat": "deliveries", "atLeast": 1, "xp": 25 },
+    { "id": "ten-deliveries", "name": "Regular Service", "description": "Complete 10 deliveries.", "kind": "achievement", "stat": "deliveries", "atLeast": 10, "xp": 50 },
+    { "id": "first-profit", "name": "In the Black", "description": "Earn 1,000 credits of trip profit.", "kind": "achievement", "stat": "profit", "atLeast": 1000, "xp": 25 },
+    { "id": "big-haul", "name": "Big Haul", "description": "Make 2,500 credits profit on a single trip.", "kind": "achievement", "stat": "bestTrip", "atLeast": 2500, "xp": 75, "skin": "gold" },
+    { "id": "all-goods", "name": "General Trader", "description": "Deliver every kind of good.", "kind": "achievement", "stat": "goodsDelivered", "atLeast": 4, "xp": 75, "skin": "teal" },
+    { "id": "explorer", "name": "Explorer", "description": "Dock at 10 different ports.", "kind": "achievement", "stat": "portsVisited", "atLeast": 10, "xp": 50 },
+    { "id": "second-hull", "name": "Growing Fleet", "description": "Own two ships at once.", "kind": "achievement", "stat": "peakShips", "atLeast": 2, "xp": 40 },
+    { "id": "sea-legs", "name": "Sea Legs", "description": "Spend 100 ship-hours at sea.", "kind": "achievement", "stat": "hoursAtSea", "atLeast": 100, "xp": 40 },
+    { "id": "ghost-ship", "name": "Ghost Ship", "description": "Sail ten voyages with an empty hold.", "kind": "achievement", "stat": "emptyRuns", "atLeast": 10, "xp": 30, "secret": true, "skin": "grey" },
+    { "id": "red-ink", "name": "Red Ink", "description": "Lose money on five trips.", "kind": "achievement", "stat": "losses", "atLeast": 5, "xp": 30, "secret": true },
+    { "id": "machinery-mogul", "name": "Machinery Mogul", "description": "Deliver 500 units of machinery.", "kind": "achievement", "stat": "goodUnits.machinery", "atLeast": 500, "xp": 60, "secret": true, "skin": "violet" },
+    { "id": "milestone-deliveries-1", "name": "25 Deliveries", "description": "Account milestone: 25 deliveries.", "kind": "milestone", "stat": "deliveries", "atLeast": 25, "xp": 60 },
+    { "id": "milestone-deliveries-2", "name": "100 Deliveries", "description": "Account milestone: 100 deliveries.", "kind": "milestone", "stat": "deliveries", "atLeast": 100, "xp": 150, "skin": "navy" },
+    { "id": "milestone-distance-1", "name": "5,000 Miles", "description": "Account milestone: sail 5,000 distance units.", "kind": "milestone", "stat": "distance", "atLeast": 5000, "xp": 60 },
+    { "id": "milestone-distance-2", "name": "25,000 Miles", "description": "Account milestone: sail 25,000 distance units.", "kind": "milestone", "stat": "distance", "atLeast": 25000, "xp": 150 },
+    { "id": "milestone-cargo-1", "name": "10,000 Tonnes", "description": "Account milestone: land 10,000 units of cargo.", "kind": "milestone", "stat": "cargo", "atLeast": 10000, "xp": 80 },
+    { "id": "goal-fleet-10", "name": "Ten-Ship Line", "description": "Long-term goal: own 10 ships at once.", "kind": "goal", "stat": "peakShips", "atLeast": 10, "xp": 200, "skin": "crimson" },
+    { "id": "goal-fleet-50", "name": "Fifty-Ship Empire", "description": "Long-term goal: own a 50-ship fleet (only possible where the world allows that many ships).", "kind": "goal", "stat": "peakShips", "atLeast": 50, "xp": 1000, "skin": "rainbow" },
+    { "id": "goal-worth", "name": "Shipping Magnate", "description": "Long-term goal: reach 250,000 credits net worth.", "kind": "goal", "stat": "peakWorth", "atLeast": 250000, "xp": 500 },
+    { "id": "goal-all-ports", "name": "Every Harbour", "description": "Long-term goal: dock at 30 different ports.", "kind": "goal", "stat": "portsVisited", "atLeast": 30, "xp": 300 }
+  ],
+  "skins": [
+    { "id": "standard", "name": "Company colours", "colour": "#e8e2d0" },
+    { "id": "gold", "name": "Gold pennant", "colour": "#e0b13c" },
+    { "id": "teal", "name": "Teal pennant", "colour": "#2fa39a" },
+    { "id": "grey", "name": "Ghost pennant", "colour": "#9aa3ad" },
+    { "id": "violet", "name": "Violet pennant", "colour": "#8b5fc7" },
+    { "id": "navy", "name": "Navy pennant", "colour": "#2d4f8f" },
+    { "id": "crimson", "name": "Crimson pennant", "colour": "#b8323a" },
+    { "id": "rainbow", "name": "Signal flags", "colour": "#e05a2c" },
+    { "id": "emerald", "name": "Emerald pennant", "colour": "#2f9e55" },
+    { "id": "silver", "name": "Silver pennant", "colour": "#c9ced6" }
+  ]
+}

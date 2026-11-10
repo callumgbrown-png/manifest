@@ -1,0 +1,20 @@
+{
+  "_comment": "Daily quests and weekly goals are picked deterministically from these templates. target scales with New Game+ stars.",
+  "daily": [
+    { "id": "d-deliveries", "text": "Complete {n} deliveries", "stat": "deliveries", "target": 3, "xp": 40 },
+    { "id": "d-cargo", "text": "Land {n} units of cargo", "stat": "cargo", "target": 300, "xp": 40 },
+    { "id": "d-distance", "text": "Sail {n} distance", "stat": "distance", "target": 500, "xp": 30 },
+    { "id": "d-profit", "text": "Earn {n} credits of trip profit", "stat": "profit", "target": 1500, "xp": 50 },
+    { "id": "d-grain", "text": "Deliver {n} grain", "stat": "goodUnits.grain", "target": 150, "xp": 35 },
+    { "id": "d-fuel", "text": "Deliver {n} fuel", "stat": "goodUnits.fuel", "target": 150, "xp": 35 },
+    { "id": "d-ore", "text": "Deliver {n} ore", "stat": "goodUnits.ore", "target": 150, "xp": 35 },
+    { "id": "d-ports", "text": "Dock at {n} new ports", "stat": "portsVisited", "target": 1, "xp": 30 }
+  ],
+  "weekly": [
+    { "id": "w-deliveries", "text": "Complete {n} deliveries this week", "stat": "deliveries", "target": 20, "xp": 200 },
+    { "id": "w-profit", "text": "Earn {n} credits of trip profit this week", "stat": "profit", "target": 12000, "xp": 250 },
+    { "id": "w-distance", "text": "Sail {n} distance this week", "stat": "distance", "target": 4000, "xp": 200 },
+    { "id": "w-cargo", "text": "Land {n} units of cargo this week", "stat": "cargo", "target": 2500, "xp": 200 }
+  ],
+  "dailyRouteXp": 80
+}

@@ -1,0 +1,18 @@
+{
+  "_comment": "Earnable titles. Plain: stat >= atLeast. Playstyle: stat / per >= atLeast once per >= min.",
+  "titles": [
+    { "id": "deckhand", "name": "Deckhand", "description": "Every captain starts somewhere.", "stat": "deliveries", "atLeast": 0 },
+    { "id": "merchant", "name": "Merchant", "description": "Complete 10 deliveries.", "stat": "deliveries", "atLeast": 10 },
+    { "id": "harbourmaster", "name": "Harbourmaster", "description": "Dock at 15 different ports.", "stat": "portsVisited", "atLeast": 15 },
+    { "id": "magnate", "name": "Magnate", "description": "Reach 100,000 credits net worth.", "stat": "peakWorth", "atLeast": 100000 },
+    { "id": "admiral", "name": "Admiral", "description": "Own five ships at once.", "stat": "peakShips", "atLeast": 5 },
+    { "id": "grain-baron", "name": "Grain Baron", "description": "Playstyle: at least half your deliveries are grain (10+ deliveries).", "stat": "goodDeliveries.grain", "per": "deliveries", "atLeast": 0.5, "min": 10, "playstyle": true },
+    { "id": "oil-runner", "name": "Oil Runner", "description": "Playstyle: at least half your deliveries are fuel (10+ deliveries).", "stat": "goodDeliveries.fuel", "per": "deliveries", "atLeast": 0.5, "min": 10, "playstyle": true },
+    { "id": "ore-hauler", "name": "Ore Hauler", "description": "Playstyle: at least half your deliveries are ore (10+ deliveries).", "stat": "goodDeliveries.ore", "per": "deliveries", "atLeast": 0.5, "min": 10, "playstyle": true },
+    { "id": "machinist", "name": "Machinist", "description": "Playstyle: at least half your deliveries are machinery (10+ deliveries).", "stat": "goodDeliveries.machinery", "per": "deliveries", "atLeast": 0.5, "min": 10, "playstyle": true },
+    { "id": "long-hauler", "name": "Long Hauler", "description": "Playstyle: average delivery distance of 250+ (10+ deliveries).", "stat": "distance", "per": "voyages", "atLeast": 250, "min": 10, "playstyle": true },
+    { "id": "coaster-king", "name": "Short-Sea King", "description": "Playstyle: average voyage under 120 distance (20+ voyages).", "stat": "shortVoyages", "per": "voyages", "atLeast": 0.75, "min": 20, "playstyle": true },
+    { "id": "sharp-trader", "name": "Sharp Trader", "description": "Playstyle: average profit of 800+ per delivery (10+ deliveries).", "stat": "profit", "per": "deliveries", "atLeast": 800, "min": 10, "playstyle": true },
+    { "id": "drifter", "name": "Drifter", "description": "Playstyle: a third of your voyages sailed empty (12+ voyages).", "stat": "emptyRuns", "per": "voyages", "atLeast": 0.33, "min": 12, "playstyle": true }
+  ]
+}

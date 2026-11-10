@@ -1,0 +1,471 @@
+{
+ "seed": 17,
+ "ports": [
+  {
+   "id": 0,
+   "name": "Portocalda",
+   "x": 520.2,
+   "y": 403.9,
+   "produces": [
+    "grain"
+   ],
+   "consumes": [
+    "fuel",
+    "ore"
+   ]
+  },
+  {
+   "id": 1,
+   "name": "Isola Bianca",
+   "x": 923.7,
+   "y": 281.6,
+   "produces": [
+    "fuel"
+   ],
+   "consumes": [
+    "machinery"
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Santa Vela",
+   "x": 744.8,
+   "y": 332.3,
+   "produces": [
+    "ore"
+   ],
+   "consumes": [
+    "grain"
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Marellos",
+   "x": 648.5,
+   "y": 277.0,
+   "produces": [
+    "machinery"
+   ],
+   "consumes": [
+    "grain",
+    "fuel"
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Capo Sole",
+   "x": 64.8,
+   "y": 274.3,
+   "produces": [],
+   "consumes": [
+    "ore"
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Kalimara",
+   "x": 501.5,
+   "y": 264.9,
+   "produces": [
+    "fuel"
+   ],
+   "consumes": [
+    "machinery"
+   ]
+  },
+  {
+   "id": 6,
+   "name": "Thalassa",
+   "x": 818.6,
+   "y": 355.3,
+   "produces": [
+    "ore"
+   ],
+   "consumes": [
+    "machinery",
+    "grain"
+   ]
+  },
+  {
+   "id": 7,
+   "name": "Villafranca",
+   "x": 409.5,
+   "y": 535.3,
+   "produces": [
+    "machinery"
+   ],
+   "consumes": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 8,
+   "name": "Aquamar",
+   "x": 97.2,
+   "y": 456.6,
+   "produces": [
+    "grain"
+   ],
+   "consumes": [
+    "ore"
+   ]
+  },
+  {
+   "id": 9,
+   "name": "Porto Rosso",
+   "x": 476.2,
+   "y": 488.5,
+   "produces": [],
+   "consumes": [
+    "ore",
+    "machinery"
+   ]
+  },
+  {
+   "id": 10,
+   "name": "Corallo",
+   "x": 170.3,
+   "y": 479.2,
+   "produces": [
+    "ore"
+   ],
+   "consumes": [
+    "grain"
+   ]
+  },
+  {
+   "id": 11,
+   "name": "Kyma",
+   "x": 384.8,
+   "y": 446.5,
+   "produces": [
+    "machinery"
+   ],
+   "consumes": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 12,
+   "name": "Olivera",
+   "x": 285.8,
+   "y": 473.1,
+   "produces": [
+    "grain"
+   ],
+   "consumes": [
+    "fuel",
+    "ore"
+   ]
+  },
+  {
+   "id": 13,
+   "name": "San Remo Vecchio",
+   "x": 217.3,
+   "y": 375.5,
+   "produces": [
+    "fuel"
+   ],
+   "consumes": [
+    "machinery"
+   ]
+  },
+  {
+   "id": 14,
+   "name": "Lentiska",
+   "x": 551.1,
+   "y": 332.2,
+   "produces": [],
+   "consumes": [
+    "grain"
+   ]
+  },
+  {
+   "id": 15,
+   "name": "Sirocco",
+   "x": 360.2,
+   "y": 304.0,
+   "produces": [
+    "machinery"
+   ],
+   "consumes": [
+    "grain",
+    "fuel"
+   ]
+  },
+  {
+   "id": 16,
+   "name": "Baia Azzurra",
+   "x": 290.7,
+   "y": 390.9,
+   "produces": [
+    "grain"
+   ],
+   "consumes": [
+    "ore"
+   ]
+  },
+  {
+   "id": 17,
+   "name": "Ventimare",
+   "x": 109.0,
+   "y": 539.6,
+   "produces": [
+    "fuel"
+   ],
+   "consumes": [
+    "machinery"
+   ]
+  },
+  {
+   "id": 18,
+   "name": "Askalon",
+   "x": 400.2,
+   "y": 185.1,
+   "produces": [
+    "ore"
+   ],
+   "consumes": [
+    "machinery",
+    "grain"
+   ]
+  },
+  {
+   "id": 19,
+   "name": "Mirto",
+   "x": 271.3,
+   "y": 132.1,
+   "produces": [],
+   "consumes": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 20,
+   "name": "Punta Luce",
+   "x": 141.6,
+   "y": 180.3,
+   "produces": [
+    "grain"
+   ],
+   "consumes": [
+    "ore"
+   ]
+  },
+  {
+   "id": 21,
+   "name": "Nereida",
+   "x": 375.0,
+   "y": 97.5,
+   "produces": [
+    "fuel"
+   ],
+   "consumes": [
+    "ore",
+    "machinery"
+   ]
+  }
+ ],
+ "routes": [
+  {
+   "a": 0,
+   "b": 5,
+   "distance": 140.3
+  },
+  {
+   "a": 0,
+   "b": 9,
+   "distance": 95.4
+  },
+  {
+   "a": 0,
+   "b": 14,
+   "distance": 78.1
+  },
+  {
+   "a": 1,
+   "b": 2,
+   "distance": 185.9
+  },
+  {
+   "a": 1,
+   "b": 6,
+   "distance": 128.4
+  },
+  {
+   "a": 2,
+   "b": 3,
+   "distance": 111.0
+  },
+  {
+   "a": 2,
+   "b": 6,
+   "distance": 77.3
+  },
+  {
+   "a": 3,
+   "b": 5,
+   "distance": 147.5
+  },
+  {
+   "a": 3,
+   "b": 6,
+   "distance": 187.3
+  },
+  {
+   "a": 3,
+   "b": 14,
+   "distance": 112.0
+  },
+  {
+   "a": 4,
+   "b": 8,
+   "distance": 185.2
+  },
+  {
+   "a": 4,
+   "b": 13,
+   "distance": 183.0
+  },
+  {
+   "a": 4,
+   "b": 20,
+   "distance": 121.4
+  },
+  {
+   "a": 5,
+   "b": 14,
+   "distance": 83.6
+  },
+  {
+   "a": 5,
+   "b": 18,
+   "distance": 129.0
+  },
+  {
+   "a": 7,
+   "b": 9,
+   "distance": 81.5
+  },
+  {
+   "a": 7,
+   "b": 11,
+   "distance": 92.2
+  },
+  {
+   "a": 7,
+   "b": 12,
+   "distance": 138.5
+  },
+  {
+   "a": 8,
+   "b": 10,
+   "distance": 76.5
+  },
+  {
+   "a": 8,
+   "b": 13,
+   "distance": 144.9
+  },
+  {
+   "a": 8,
+   "b": 17,
+   "distance": 83.8
+  },
+  {
+   "a": 9,
+   "b": 11,
+   "distance": 100.6
+  },
+  {
+   "a": 10,
+   "b": 12,
+   "distance": 115.7
+  },
+  {
+   "a": 10,
+   "b": 13,
+   "distance": 113.9
+  },
+  {
+   "a": 10,
+   "b": 17,
+   "distance": 86.1
+  },
+  {
+   "a": 11,
+   "b": 12,
+   "distance": 102.5
+  },
+  {
+   "a": 11,
+   "b": 15,
+   "distance": 144.6
+  },
+  {
+   "a": 11,
+   "b": 16,
+   "distance": 109.3
+  },
+  {
+   "a": 12,
+   "b": 13,
+   "distance": 119.2
+  },
+  {
+   "a": 12,
+   "b": 16,
+   "distance": 82.3
+  },
+  {
+   "a": 12,
+   "b": 17,
+   "distance": 188.9
+  },
+  {
+   "a": 13,
+   "b": 16,
+   "distance": 75.0
+  },
+  {
+   "a": 13,
+   "b": 20,
+   "distance": 209.4
+  },
+  {
+   "a": 15,
+   "b": 16,
+   "distance": 111.3
+  },
+  {
+   "a": 15,
+   "b": 18,
+   "distance": 125.4
+  },
+  {
+   "a": 15,
+   "b": 21,
+   "distance": 207.0
+  },
+  {
+   "a": 18,
+   "b": 19,
+   "distance": 139.4
+  },
+  {
+   "a": 18,
+   "b": 21,
+   "distance": 91.2
+  },
+  {
+   "a": 19,
+   "b": 20,
+   "distance": 138.4
+  },
+  {
+   "a": 19,
+   "b": 21,
+   "distance": 109.3
+  }
+ ]
+}
