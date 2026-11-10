@@ -16,7 +16,7 @@ passes, and `docs/features/reports/<category>.md` exists.
 | 7 | ui | 55 | DONE 2026-11-10 (39 modules, 23 tests) |
 | 8 | art | 52 | DONE 2026-11-10 (16 modules, 18 tests) |
 | 9 | platform | 55 | DONE 2026-11-10 (31 modules, 28 tests) |
-| 10 | community | 73 | WIP snapshot only |
+| 10 | community | 73 | DONE 2026-11-10 (13 modules, 16 tests) |
 | 11 | social | 60 | not started |
 
 After all eleven: merge every category branch into `feature/600-features`, run the whole suite, write `FINAL_REPORT.md`.
