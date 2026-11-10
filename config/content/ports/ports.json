@@ -1,0 +1,22 @@
+{
+  "_comment": "Content for the ports feature modules (server/src/features/ports). All names are invented for Manifest.",
+  "hubs": { "grain": "Grain hub", "fuel": "Oil hub", "ore": "Mining port", "machinery": "Engineering works", "none": "Trading town" },
+  "reputationTiers": [
+    { "min": 0, "name": "Stranger" }, { "min": 10, "name": "Known" }, { "min": 30, "name": "Trusted" }, { "min": 80, "name": "Honoured" }
+  ],
+  "festivals": ["Lantern Night", "Harvest Fair", "Blessing of the Fleet", "Regatta Week", "Founders' Day", "Tide Feast"],
+  "crew": [
+    { "name": "Bosun Marrow", "role": "Bosun", "perk": "rep", "text": "+1 port standing on every arrival" },
+    { "name": "Old Teller", "role": "Lookout", "perk": "lookout", "text": "Sees further from lit lighthouses" },
+    { "name": "Quill", "role": "Purser", "perk": "ledger", "text": "Keeps a second rumour in the tavern log" },
+    { "name": "Fen Halloway", "role": "Deckhand", "perk": "games", "text": "+5 to crane and stacking scores shown in the museum" },
+    { "name": "Sister Brine", "role": "Cook", "perk": "festival", "text": "Double standing at festivals" }
+  ],
+  "banners": ["Red awning", "Blue awning", "Green awning", "Striped awning", "Lantern stall"],
+  "research": [
+    { "id": "tides", "name": "Tide tables", "points": 40, "text": "Weather station forecasts reach 48 hours ahead" },
+    { "id": "signals", "name": "Signal lamps", "points": 60, "text": "Lighthouse sightings reach half again as far for your company" },
+    { "id": "survey", "name": "Market survey", "points": 80, "text": "The tavern shows you a shortage tip as well as the daily rumour" }
+  ],
+  "weather": ["Clear", "Fair", "Breezy", "Overcast", "Squalls", "Fog", "Gale"]
+}
