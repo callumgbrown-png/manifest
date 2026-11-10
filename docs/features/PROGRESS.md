@@ -11,7 +11,7 @@ passes, and `docs/features/reports/<category>.md` exists.
 | 2 | ports | 40 | DONE 2026-11-10 (34 modules, 33 tests) |
 | 3 | world | 55 | DONE 2026-11-10 (33 modules, 31 tests) |
 | 4 | economy | 60 | DONE 2026-11-10 (59 modules, 63 tests) |
-| 5 | contracts | 55 | WIP snapshot only |
+| 5 | contracts | 55 | DONE 2026-11-10 (55 modules, 55 tests) |
 | 6 | progression | 55 | WIP snapshot only |
 | 7 | ui | 55 | WIP snapshot only |
 | 8 | art | 52 | WIP snapshot only |
