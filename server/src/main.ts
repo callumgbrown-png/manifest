@@ -17,6 +17,7 @@ import { type NavigationMap } from "./navigation.js";
 import { generateRandomSeason, type RandomSeasonMap } from "./random-season.js";
 import { recoveryView } from "./recovery.js";
 import { SeasonLeaderboards } from "./leaderboards.js";
+import { desiredFeatures } from "./features/config.js";
 import { EXPANSION_SCENARIOS, type ExpansionScenario } from "./scenario-expansion.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -116,6 +117,17 @@ if ('generation' in activeMap) {
 if (replayed === 0 && DIFFICULTY) startDifficulty();
 if (!engine.maritime.enabled && !engine.seasonOver) commit({ type: "activateMaritimeRules" });
 if (EXPANSION && !engine.expansionEnabled && !engine.seasonOver) commit({ type: "activateExpansion" });
+// Feature switches (config/features/*.json, see docs/FEATURES.md). The switched-on set is recorded in the event log,
+// so a world replays the same way even if the files change later; edit the files and restart to change it.
+{
+  const wanted = desiredFeatures(join(ROOT, "config", "features"), [...engine.features.modules.keys()], process.env.FEATURES);
+  const current = engine.features.list();
+  if (!engine.seasonOver && (wanted.length !== current.length || wanted.some((id, i) => id !== current[i]))) {
+    const r = commit({ type: "setFeatures", enabled: wanted });
+    if (!r.ok) console.error(`feature switches ignored: ${r.error}`);
+  }
+  console.log(`Features on: ${engine.features.list().length} of ${engine.features.modules.size}`);
+}
 function startDifficulty() {
   if (!DIFFICULTY) return;
   const r = commit({ type: "setDifficulty", level: DIFFICULTY });
@@ -224,6 +236,7 @@ function publicView() {
     tickMs: TICK_MS,
     mapSeed: activeMap.seed ?? 7,
     navigationId: activeMap.navigationId,
+    featureData: engine.features.world(),
     goods: GOODS,
     rules: {
       shipPrice: engine.rules.ship.price, capacity: engine.rules.ship.capacity, speed: engine.rules.ship.speed_per_hour,
@@ -283,6 +296,8 @@ function privateView(company: number) {
       fleet: engine.fleetExpansion.cards(c.id),
       season: engine.scenarioExpansion.cards(c.id),
     } : undefined,
+    features: engine.features.cards(c.id),
+    featureData: engine.features.view(c.id),
     upkeepDue: engine.upkeepDue(c),
     maritimeAssets: engine.maritime.assets(c),
     dockingFees: Object.fromEntries([...new Set(c.ships.map(id => engine.ships.get(id)!)
@@ -501,7 +516,7 @@ function onMessage(client: Client, msg: any) {
     if (!client.company) return send(client, { type: "result", reqId: msg.reqId, ok: false, error: "Log in first" });
     const allowed = ["sail", "sell", "buyShip", "scrapShip", "placeOrder", "placeSell", "buyFromOrder", "cancelOrder", "raid", "setVoyageQueue",
       "emergencyCredit", "emergencyConsignment", "insureCargo", "bookConvoy", "machineryFuture", "fenceCargo", "fundBounty", "buyPennant",
-      "offerEscort", "acceptEscort", "reserveBackhaul", "dispatchGuildBackhaul", "upgradeHarbor", "expansion"];
+      "offerEscort", "acceptEscort", "reserveBackhaul", "dispatchGuildBackhaul", "upgradeHarbor", "expansion", "feature"];
     if (!msg.cmd || !(allowed.includes(msg.cmd.type) || (DEBUG_CREDITS && msg.cmd.type === "debugCredits")))
       return send(client, { type: "result", reqId: msg.reqId, ok: false, error: "Unknown command" });
     // A request id seen before on this connection (a retry or a double click) is answered with the first result, never run twice:

@@ -73,6 +73,7 @@ function connect() {
       if ((selectedPort === null || firstLogin) && me?.ships?.length) selectedPort = me.ships[0].dest ?? me.ships[0].port;
       if (selectedPort === null) selectedPort = 0;
       render();
+      ManifestHooks.run("state", world, me);
       if (guidePending && me) { guidePending = false; openGuide(); }
     } else if (msg.type === "voyageQuote") {
       const pending = quoteRequests.get(msg.reqId); quoteRequests.delete(msg.reqId);
@@ -894,7 +895,11 @@ canvas.addEventListener("wheel", e => { e.preventDefault(); zoomAt(e.offsetX, e.
 $("zoomIn").addEventListener("click", () => zoomAt(W / 2, H / 2, cam.z * 1.5));
 $("zoomOut").addEventListener("click", () => zoomAt(W / 2, H / 2, cam.z / 1.5));
 $("zoomReset").addEventListener("click", () => { cam.z = 1; layout(); });
-(function loop() { drawMap(); requestAnimationFrame(loop); })();
+(function loop() {
+  drawMap();
+  ManifestHooks.run("draw");
+  requestAnimationFrame(loop);
+})();
 
 // ------------------------------------------------------------ panels
 
@@ -912,8 +917,8 @@ $("tabs").addEventListener("keydown", e => {
 
 function render() {
   if (!world) return;
-  document.querySelector('[data-tab="opportunities"]').hidden = !me?.expansion;
-  if (tab === "opportunities" && !me?.expansion) tab = "port";
+  document.querySelector('[data-tab="opportunities"]').hidden = !hasOpportunities();
+  if (tab === "opportunities" && !hasOpportunities()) tab = "port";
   document.querySelectorAll("#tabs button").forEach(b => { b.classList.toggle("on", b.dataset.tab === tab); b.setAttribute("aria-selected", String(b.dataset.tab === tab)); b.tabIndex = b.dataset.tab === tab ? 0 : -1; });
   $("hName").textContent = me?.name ?? "–";
   $("hCash").textContent = me ? fmt(me.cash) : "–";
@@ -977,10 +982,20 @@ function render() {
   }
 }
 
-const opportunitySections = {
+const baseOpportunitySections = {
   ports: "Ports and markets", trade: "Shipping business", fleet: "Fleet and company",
   piracy: "Piracy and patrols", exploration: "Offshore jobs", season: "Season rules",
 };
+/** Expansion sections when opportunities are open, plus one section per switched-on feature module with cards. */
+function opportunitySectionsNow() {
+  const out = me?.expansion ? { ...baseOpportunitySections } : {};
+  for (const [id, f] of Object.entries(me?.features ?? {})) out[`feature:${id}`] = f.title;
+  return out;
+}
+function sectionCards(key) {
+  return key.startsWith("feature:") ? me?.features?.[key.slice(8)]?.cards ?? [] : me?.expansion?.[key] ?? [];
+}
+function hasOpportunities() { return !!me?.expansion || Object.keys(me?.features ?? {}).length > 0; }
 let opportunitySection = "ports";
 
 function opportunityInput(field) {
@@ -992,7 +1007,9 @@ function opportunityInput(field) {
 }
 
 function opportunitiesPanel() {
-  const cards = me.expansion[opportunitySection] ?? [];
+  const opportunitySections = opportunitySectionsNow();
+  if (!(opportunitySection in opportunitySections)) opportunitySection = Object.keys(opportunitySections)[0] ?? "ports";
+  const cards = sectionCards(opportunitySection);
   return `<h2>Opportunities</h2><label class="opportunityCategory">Browse<select id="opportunitySection">${Object.entries(opportunitySections).map(([key, title]) =>
     `<option value="${key}"${key === opportunitySection ? " selected" : ""}>${esc(title)}</option>`).join("")}</select></label>
     ${cards.length ? cards.map((card, cardIndex) => `<section class="est opportunityCard">
@@ -1003,7 +1020,7 @@ function opportunitiesPanel() {
 }
 
 function bindOpportunities() {
-  const cards = me.expansion[opportunitySection] ?? [];
+  const cards = sectionCards(opportunitySection);
   $("opportunitySection").onchange = (event) => {
     opportunitySection = event.target.value;
     event.target.blur();
@@ -2301,3 +2318,9 @@ function bindPanel() {
 }
 
 connect();
+
+// Feature modules can decorate the side panel after it renders (features/api.js).
+{
+  const baseRender = render;
+  render = function () { baseRender(); ManifestHooks.run("render", world, me); };
+}

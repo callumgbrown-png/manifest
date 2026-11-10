@@ -11,6 +11,8 @@ import { PortExpansion, type PortExpansionCommand } from "./port-expansion.js";
 import { PiracyExpansion, type PiracyExpansionCommand } from "./piracy-expansion.js";
 import { ExplorationExpansion, type ExplorationExpansionCommand } from "./exploration-expansion.js";
 import { FleetExpansion, type FleetExpansionCommand } from "./fleet-expansion.js";
+import { FeatureRegistry } from "./features/registry.js";
+import type { FeatureCommand } from "./features/types.js";
 import { EXPANSION_SCENARIOS, ScenarioExpansion, type ExpansionScenario, type ScenarioExpansionCommand } from "./scenario-expansion.js";
 
 export const GOODS = ["grain", "fuel", "ore", "machinery"] as const;
@@ -119,6 +121,8 @@ interface VoyageQueue {
 
 export type Command = MaritimeCommand | GuildBackhaulCommand | TradeExpansionCommand | PortExpansionCommand | PiracyExpansionCommand | ExplorationExpansionCommand | FleetExpansionCommand
   | ScenarioExpansionCommand
+  | FeatureCommand
+  | { type: "setFeatures"; enabled: string[] }
   | { type: "activateExpansion"; scenario?: ExpansionScenario }
   | { type: "debugCredits"; company: number }
   | { type: "register"; name: string; startPort: number }
@@ -197,6 +201,8 @@ export class Engine {
   readonly explorationExpansion = new ExplorationExpansion(this);
   readonly fleetExpansion = new FleetExpansion(this);
   readonly scenarioExpansion = new ScenarioExpansion(this);
+  /** Feature modules from IDEAS_600.md (features/); only switched-on modules run. */
+  readonly features = new FeatureRegistry(this);
 
   /** expectedCompanies sets the market size for the whole season (see rules.markets). */
   constructor(rules: Rules, map: MapData, expectedCompanies?: number) {
@@ -277,7 +283,7 @@ export class Engine {
     let sum = 0;
     for (const id of c.ships) sum += this.spec(this.ships.get(id)!.type).upkeep;
     const base = Math.max(0, sum - this.spec("freighter").upkeep);
-    return base + this.maritime.upkeep(c, base);
+    return Math.max(0, this.features.adjust("upkeep", base + this.maritime.upkeep(c, base), { company: c.id }));
   }
 
   // ------------------------------------------------------------ commands
@@ -288,7 +294,8 @@ export class Engine {
   /** Shared with recovery quotes; fuel is purchased after any fuel cargo. */
   private sailFuel(s: Ship, dest: number, good = -1, qty = 0) {
     const base = this.fuelNeeded(s.port, dest, s.type);
-    const needed = this.expansionEnabled ? this.fleetExpansion.fuelNeeded(s, dest, base) : base;
+    const needed = this.features.adjust("fuel", this.expansionEnabled ? this.fleetExpansion.fuelNeeded(s, dest, base) : base,
+      { ship: s.id, from: s.port, dest });
     const stock = this.stock[s.port][FUEL] - (good === FUEL ? qty : 0);
     const have = Math.min(needed, Math.max(0, stock));
     return { have, cost: have * this.price(s.port, FUEL, stock - have / 2)
@@ -340,6 +347,12 @@ export class Engine {
         this.portExpansion.activate();
         this.explorationExpansion.activate();
         return { ok: true };
+      case "setFeatures":
+        if (!Array.isArray(cmd.enabled) || cmd.enabled.some(id => typeof id !== "string")) return fail("bad feature list");
+        return this.features.setEnabled(cmd.enabled);
+      case "feature":
+        if (!this.companies.has(cmd.company)) return fail("no such company");
+        return this.features.apply(cmd);
       case "expansion":
         if (!this.expansionEnabled) return fail("opportunities are closed");
         if (cmd.feature === "trade") return this.tradeExpansion.apply(cmd);
@@ -512,8 +525,14 @@ export class Engine {
 
   expansionCapacity(ship: Ship): number {
     const base = this.spec(ship.type).capacity;
-    if (!this.expansionEnabled) return base;
-    return Math.max(0, this.fleetExpansion.capacity(ship, base) - this.explorationExpansion.spaceTaken(ship));
+    const value = !this.expansionEnabled ? base
+      : Math.max(0, this.fleetExpansion.capacity(ship, base) - this.explorationExpansion.spaceTaken(ship));
+    return Math.max(0, Math.floor(this.features.adjust("capacity", value, { ship: ship.id })));
+  }
+
+  /** Trade tax for a buy or sell: port expansion rules first, then any enabled feature module. */
+  tradeRate(port: number, good: number, side: "buy" | "sell", tax: number): number {
+    return Math.max(0, this.features.adjust("tradeTax", this.portExpansion.tradeTax(port, good, side, tax), { port, good, side }));
   }
 
   recordCargoLoaded(ship: Ship, cost: number) {
@@ -563,7 +582,7 @@ export class Engine {
       if (s.qty > 0) return fail("ship already loaded; sell first");
       if (qty > this.expansionCapacity(s)) return fail("over capacity");
       if (qty > this.stock[s.port][g]) return fail("not enough stock at this port");
-      purchaseRate = this.portExpansion.tradeTax(s.port, g, "buy", tax);
+      purchaseRate = this.tradeRate(s.port, g, "buy", tax);
       cargoCost = this.buyCost(s.port, g, qty).cost * (1 + purchaseRate);
     }
     // Fuel is bought after the cargo, so a fuel cargo raises the fuel price slightly.
@@ -572,7 +591,9 @@ export class Engine {
     // credit (cash goes negative). The cargo itself must still be paid for. Without this, a company
     // with one empty ship and too little cash for fuel was stuck for the rest of the season.
     const baseHours = this.voyageHours(s.port, cmd.dest, s.type);
-    const hours = baseHours + (this.expansionEnabled ? this.explorationExpansion.weatherDelay(cmd.dest, this.tick + baseHours) : 0);
+    const hours = this.features.adjust("travelHours",
+      baseHours + (this.expansionEnabled ? this.explorationExpansion.weatherDelay(cmd.dest, this.tick + baseHours) : 0),
+      { ship: s.id, from: s.port, dest: cmd.dest });
     const cargoGood = cmd.buy ? g : s.good, cargoQty = cmd.buy ? qty : s.qty;
     const cargoBasis = cmd.buy ? cargoCost : s.cost;
     const protection = this.maritime.quoteProtection(s, cargoBasis, cargoQty > 0, cmd.protection);
@@ -590,8 +611,9 @@ export class Engine {
     const priorRevenue = ongoing?.earned ?? 0;
     const maritimeFee = this.maritime.fee(c, s.port, cmd.dest);
     const basePortFee = this.expansionEnabled ? this.fleetExpansion.fee(s, s.port, cmd.dest, maritimeFee) : maritimeFee;
-    const portFee = this.portExpansion.quoteFee(s, cmd.dest, this.tick + hours, basePortFee);
-    const saleRate = cargoGood === null || cargoGood < 0 ? tax : this.portExpansion.tradeTax(cmd.dest, cargoGood, "sell", tax);
+    const portFee = this.features.adjust("portFee", this.portExpansion.quoteFee(s, cmd.dest, this.tick + hours, basePortFee),
+      { ship: s.id, company: c.id, from: s.port, dest: cmd.dest });
+    const saleRate = cargoGood === null || cargoGood < 0 ? tax : this.tradeRate(cmd.dest, cargoGood, "sell", tax);
     const days = Math.floor((this.tick + hours) / 24) - Math.floor(this.tick / 24);
     return { ok: true as const, quote: {
       cargoCost, cargoBase, purchaseTax: cargoCost - cargoBase, cargoBasis, priorCosts, priorRevenue,
@@ -677,7 +699,7 @@ export class Engine {
       s.qty -= fill;
       this.maritime.cargoMoved(s, fill);
     } else {
-      const net = fixedNet ?? this.sellValue(s.port, s.good, s.qty) * (1 - this.portExpansion.tradeTax(s.port, s.good, "sell", tax));
+      const net = fixedNet ?? this.sellValue(s.port, s.good, s.qty) * (1 - this.tradeRate(s.port, s.good, "sell", tax));
       this.stock[s.port][s.good] += s.qty;
       const paid = net - (this.expansionEnabled ? this.fleetExpansion.leaseCut(s, net) : 0);
       c.cash += paid;
@@ -985,7 +1007,8 @@ export class Engine {
         const from = s.port;
         s.port = s.dest;
         s.dest = null;
-        const fee = this.portExpansion.arriveFee(s, this.maritime.arrive(s));
+        const fee = this.features.adjust("portFee", this.portExpansion.arriveFee(s, this.maritime.arrive(s)),
+          { ship: s.id, company: s.owner, from, dest: s.port });
         this.companies.get(s.owner)!.cash -= fee;
         const trip = this.openTrip(s.owner, s.id);
         if (trip) { trip.spent += fee; if (trip.costs) trip.costs.portFees += fee; if (s.qty === 0) trip.open = false; }
@@ -1032,6 +1055,7 @@ export class Engine {
       this.explorationExpansion.advance();
       this.fleetExpansion.advance();
     }
+    this.features.advance();
 
     if (this.tick % 24 === 0) {
       for (const c of this.companies.values()) {
