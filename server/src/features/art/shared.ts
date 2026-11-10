@@ -50,7 +50,8 @@ export function shipWatcher(e: Engine) {
     for (const s of e.ships.values()) {
       const was = last.get(s.id);
       if (was && was.dest !== null && s.dest === null) arrivals.push({ ship: s.id, owner: s.owner, port: s.port, other: was.port, good: s.good, qty: Math.round(s.qty) });
-      if (was && was.dest === null && s.dest !== null) departures.push({ ship: s.id, owner: s.owner, port: s.port, other: s.dest, good: s.good, qty: Math.round(s.qty) });
+      // A ship bought since the last look that is already under way left port this hour or the last.
+      if ((was ? was.dest === null : s.departTick >= e.tick - 1) && s.dest !== null) departures.push({ ship: s.id, owner: s.owner, port: s.port, other: s.dest, good: s.good, qty: Math.round(s.qty) });
       if (was && was.owner !== s.owner) captured.push({ ship: s.id, owner: s.owner, port: s.port, other: was.owner, good: s.good, qty: Math.round(s.qty) });
     }
     for (const [id, was] of last) if (!e.ships.has(id)) gone.push({ ship: id, owner: was.owner, port: was.port, other: was.port, good: null, qty: 0 });

@@ -1,1 +1,19 @@
-{ "_comment": "true = switched on. Economy modules ship false until Dave approves them." }
+{
+  "_comment": "true = switched on. Economy modules ship false until Dave approves them. The art category has no economy modules.",
+  "art.scene": true,
+  "art.portlife": true,
+  "art.flags": true,
+  "art.combat": true,
+  "art.music": true,
+  "art.sound": true,
+  "art.news": true,
+  "art.lore": true,
+  "art.relics": true,
+  "art.diary": true,
+  "art.chatter": true,
+  "art.mystery": true,
+  "art.rivals": true,
+  "art.legend": true,
+  "art.eggs": true,
+  "art.cameo": true
+}
