@@ -1,0 +1,17 @@
+{
+  "_comment": "Public links shown in the game's Community panel (community.links). Empty strings are hidden. No payment happens in the game: these pages are on itch.io / Bandcamp / Ko-fi etc., and buyers receive an unlock code (tools/community/make-codes.mjs) for the matching cosmetic pack.",
+  "game": "",
+  "discord": "",
+  "youtube": "",
+  "tiktok": "",
+  "reddit": "",
+  "itch": "",
+  "itchPayWhatYouWant": "",
+  "tipJar": "",
+  "supporterPack": "",
+  "soundtrack": "",
+  "spritePacks": "",
+  "pressKit": "",
+  "roadmap": "",
+  "wiki": ""
+}

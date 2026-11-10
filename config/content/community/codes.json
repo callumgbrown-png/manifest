@@ -1,0 +1,4 @@
+{
+  "_comment": "Unlock codes (community.locker 'redeem'). Only salted hashes are stored: hash = sha256(salt + ':' + proof), proof = sha256('manifest-code-v1:' + CODE) computed in the player's browser, so the plain code never reaches the server or its event log. Add codes with: node tools/community/make-codes.mjs --grant pack:pack.supporter --count 10 --label supporter-pack. Never edit or remove an entry during a running season (the event log replays redemptions against this file); prune between seasons.",
+  "codes": []
+}
