@@ -24,8 +24,8 @@
     { "id": "steamship", "name": "Steamship era", "text": "Sepia palette and period names for ships and goods.", "theme": "steamship" },
     { "id": "futuristic", "name": "Orbital freight", "text": "Night palette and spacefaring names.", "theme": "futuristic" },
     { "id": "fantasy", "name": "Sea of Legends", "text": "Storybook palette and fantasy names.", "theme": "fantasy" },
-    { "id": "arctic", "name": "Arctic map", "text": "Icy palette. Map file: server/public/progression/maps/arctic.json (loading a fixed map needs the MAP_FILE hook, see docs).", "theme": "arctic", "map": "progression/maps/arctic.json" },
-    { "id": "mediterranean", "name": "Mediterranean map", "text": "Warm palette. Map file: server/public/progression/maps/mediterranean.json (loading a fixed map needs the MAP_FILE hook, see docs).", "theme": "mediterranean", "map": "progression/maps/mediterranean.json" }
+    { "id": "arctic", "name": "Arctic map", "text": "Icy palette. Fixed map config/maps/arctic.json: load it into a fresh world with server/scripts/use-map.ts.", "theme": "arctic", "map": "config/maps/arctic.json" },
+    { "id": "mediterranean", "name": "Mediterranean map", "text": "Warm palette. Fixed map config/maps/mediterranean.json: load it into a fresh world with server/scripts/use-map.ts.", "theme": "mediterranean", "map": "config/maps/mediterranean.json" }
   ],
   "themes": {
     "cosy": { "filter": "saturate(1.15) brightness(1.05)", "labels": {} },

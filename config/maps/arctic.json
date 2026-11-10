@@ -1,0 +1,416 @@
+{
+ "seed": 11,
+ "ports": [
+  {
+   "id": 0,
+   "name": "Frostholm",
+   "x": 182.8,
+   "y": 433.4,
+   "produces": [
+    "grain"
+   ],
+   "consumes": [
+    "fuel",
+    "ore"
+   ]
+  },
+  {
+   "id": 1,
+   "name": "Kald Haven",
+   "x": 778.3,
+   "y": 252.3,
+   "produces": [
+    "fuel"
+   ],
+   "consumes": [
+    "machinery"
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Isvik",
+   "x": 162.9,
+   "y": 347.5,
+   "produces": [
+    "ore"
+   ],
+   "consumes": [
+    "grain"
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Polar Gate",
+   "x": 628.7,
+   "y": 581.7,
+   "produces": [
+    "machinery"
+   ],
+   "consumes": [
+    "grain",
+    "fuel"
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Snowmere",
+   "x": 240.6,
+   "y": 153.2,
+   "produces": [],
+   "consumes": [
+    "ore"
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Bjornhamn",
+   "x": 733.0,
+   "y": 477.4,
+   "produces": [
+    "fuel"
+   ],
+   "consumes": [
+    "machinery"
+   ]
+  },
+  {
+   "id": 6,
+   "name": "Glacier Bay",
+   "x": 821.6,
+   "y": 514.5,
+   "produces": [
+    "ore"
+   ],
+   "consumes": [
+    "machinery",
+    "grain"
+   ]
+  },
+  {
+   "id": 7,
+   "name": "Nordkapp Rest",
+   "x": 420.5,
+   "y": 199.4,
+   "produces": [
+    "machinery"
+   ],
+   "consumes": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 8,
+   "name": "Whitecliff",
+   "x": 910.4,
+   "y": 325.4,
+   "produces": [
+    "grain"
+   ],
+   "consumes": [
+    "ore"
+   ]
+  },
+  {
+   "id": 9,
+   "name": "Sealhaven",
+   "x": 622.4,
+   "y": 499.8,
+   "produces": [],
+   "consumes": [
+    "ore",
+    "machinery"
+   ]
+  },
+  {
+   "id": 10,
+   "name": "Aurora Point",
+   "x": 271.8,
+   "y": 329.1,
+   "produces": [
+    "ore"
+   ],
+   "consumes": [
+    "grain"
+   ]
+  },
+  {
+   "id": 11,
+   "name": "Rimefjord",
+   "x": 807.2,
+   "y": 404.1,
+   "produces": [
+    "machinery"
+   ],
+   "consumes": [
+    "fuel"
+   ]
+  },
+  {
+   "id": 12,
+   "name": "Tundra Quay",
+   "x": 694.1,
+   "y": 131.2,
+   "produces": [
+    "grain"
+   ],
+   "consumes": [
+    "fuel",
+    "ore"
+   ]
+  },
+  {
+   "id": 13,
+   "name": "Icewater",
+   "x": 394.0,
+   "y": 542.9,
+   "produces": [
+    "fuel"
+   ],
+   "consumes": [
+    "machinery"
+   ]
+  },
+  {
+   "id": 14,
+   "name": "Hvit Sound",
+   "x": 530.7,
+   "y": 136.1,
+   "produces": [],
+   "consumes": [
+    "grain"
+   ]
+  },
+  {
+   "id": 15,
+   "name": "Driftwood",
+   "x": 211.7,
+   "y": 275.5,
+   "produces": [
+    "machinery"
+   ],
+   "consumes": [
+    "grain",
+    "fuel"
+   ]
+  },
+  {
+   "id": 16,
+   "name": "Narwhal Cove",
+   "x": 367.5,
+   "y": 640.7,
+   "produces": [
+    "grain"
+   ],
+   "consumes": [
+    "ore"
+   ]
+  },
+  {
+   "id": 17,
+   "name": "Bleakstone",
+   "x": 514.9,
+   "y": 614.9,
+   "produces": [
+    "fuel"
+   ],
+   "consumes": [
+    "machinery"
+   ]
+  },
+  {
+   "id": 18,
+   "name": "Coldharbour",
+   "x": 284.9,
+   "y": 528.1,
+   "produces": [
+    "ore"
+   ],
+   "consumes": [
+    "machinery",
+    "grain"
+   ]
+  },
+  {
+   "id": 19,
+   "name": "Starfall",
+   "x": 149.1,
+   "y": 226.8,
+   "produces": [],
+   "consumes": [
+    "fuel"
+   ]
+  }
+ ],
+ "routes": [
+  {
+   "a": 0,
+   "b": 2,
+   "distance": 88.2
+  },
+  {
+   "a": 0,
+   "b": 10,
+   "distance": 137.1
+  },
+  {
+   "a": 0,
+   "b": 18,
+   "distance": 139.3
+  },
+  {
+   "a": 1,
+   "b": 8,
+   "distance": 151.0
+  },
+  {
+   "a": 1,
+   "b": 11,
+   "distance": 154.5
+  },
+  {
+   "a": 1,
+   "b": 12,
+   "distance": 147.5
+  },
+  {
+   "a": 2,
+   "b": 10,
+   "distance": 110.4
+  },
+  {
+   "a": 2,
+   "b": 15,
+   "distance": 87.0
+  },
+  {
+   "a": 2,
+   "b": 19,
+   "distance": 121.5
+  },
+  {
+   "a": 3,
+   "b": 5,
+   "distance": 147.5
+  },
+  {
+   "a": 3,
+   "b": 9,
+   "distance": 82.1
+  },
+  {
+   "a": 3,
+   "b": 17,
+   "distance": 118.5
+  },
+  {
+   "a": 4,
+   "b": 7,
+   "distance": 185.7
+  },
+  {
+   "a": 4,
+   "b": 10,
+   "distance": 178.6
+  },
+  {
+   "a": 4,
+   "b": 15,
+   "distance": 125.7
+  },
+  {
+   "a": 4,
+   "b": 19,
+   "distance": 117.4
+  },
+  {
+   "a": 5,
+   "b": 6,
+   "distance": 96.1
+  },
+  {
+   "a": 5,
+   "b": 9,
+   "distance": 112.8
+  },
+  {
+   "a": 5,
+   "b": 11,
+   "distance": 104.3
+  },
+  {
+   "a": 6,
+   "b": 8,
+   "distance": 208.9
+  },
+  {
+   "a": 6,
+   "b": 9,
+   "distance": 199.7
+  },
+  {
+   "a": 6,
+   "b": 11,
+   "distance": 111.3
+  },
+  {
+   "a": 7,
+   "b": 10,
+   "distance": 197.3
+  },
+  {
+   "a": 7,
+   "b": 14,
+   "distance": 127.1
+  },
+  {
+   "a": 8,
+   "b": 11,
+   "distance": 129.8
+  },
+  {
+   "a": 9,
+   "b": 17,
+   "distance": 157.5
+  },
+  {
+   "a": 10,
+   "b": 15,
+   "distance": 80.5
+  },
+  {
+   "a": 12,
+   "b": 14,
+   "distance": 163.5
+  },
+  {
+   "a": 13,
+   "b": 16,
+   "distance": 101.3
+  },
+  {
+   "a": 13,
+   "b": 17,
+   "distance": 140.7
+  },
+  {
+   "a": 13,
+   "b": 18,
+   "distance": 110.1
+  },
+  {
+   "a": 15,
+   "b": 19,
+   "distance": 79.3
+  },
+  {
+   "a": 16,
+   "b": 17,
+   "distance": 149.6
+  },
+  {
+   "a": 16,
+   "b": 18,
+   "distance": 139.6
+  }
+ ]
+}

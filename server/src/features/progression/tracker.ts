@@ -40,17 +40,25 @@ export class Tracker {
 
   constructor(private readonly e: Engine) {}
 
+  /** Stats for a company, created and stored if new. Only call from apply/advance (state). */
   of(company: number): Stats {
     let s = this.stats.get(company);
-    if (!s) {
-      s = { founded: this.e.tick, voyages: 0, deliveries: 0, emptyRuns: 0, losses: 0, shortVoyages: 0, profit: 0, bestTrip: 0,
+    if (!s) { s = this.blank(company); this.stats.set(company, s); }
+    return s;
+  }
+
+  /** Stats for reading (views, cards): never stores anything, so reading can't change replayed state. */
+  get(company: number): Stats { return this.stats.get(company) ?? this.blank(company); }
+
+  private blank(company: number): Stats {
+    {
+      const s: Stats = { founded: this.e.tick, voyages: 0, deliveries: 0, emptyRuns: 0, losses: 0, shortVoyages: 0, profit: 0, bestTrip: 0,
         distance: 0, cargo: 0, hoursAtSea: 0, peakShips: 0, peakWorth: 0, goodUnits: GOODS.map(() => 0),
         goodDeliveries: GOODS.map(() => 0), ports: new Set(), shipTypes: new Set(), routes: new Map(), usedQueue: false };
       const c = this.e.companies.get(company);
       if (c) { s.ports.add(c.home); s.peakWorth = Math.round(this.e.netWorth(c)); s.peakShips = c.ships.length; }
-      this.stats.set(company, s);
+      return s;
     }
-    return s;
   }
 
   /** Call at the start of every progression module's advance(); runs once per tick. */
@@ -117,7 +125,7 @@ export class Tracker {
 
   /** A plain copy of the counters, for baselines. */
   snapshot(company: number): Record<string, number> {
-    const s = this.of(company), out: Record<string, number> = {};
+    const s = this.get(company), out: Record<string, number> = {};
     for (const k of HOUR_KEYS) out[k] = s[k];
     out.portsVisited = s.ports.size;
     out.goodsDelivered = s.goodUnits.filter(n => n > 0).length;
@@ -145,7 +153,7 @@ export class Tracker {
 
   /** Plain JSON for views and replay checks. */
   view(company: number) {
-    const s = this.of(company);
+    const s = this.get(company);
     return { ...this.snapshot(company), ports: [...s.ports].sort((a, b) => a - b), shipTypes: [...s.shipTypes].sort(),
       goodUnits: s.goodUnits, goodDeliveries: s.goodDeliveries, founded: s.founded, usedQueue: s.usedQueue };
   }
