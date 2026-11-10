@@ -6,7 +6,7 @@ import type { Engine, Company } from "../../engine.js";
 import type { FeatureModule } from "../types.js";
 import { isBot } from "../../bots.js";
 
-/** A platform module may also expose data for the admin console (see admin.ts). Never sent to players. */
+/** A platform module may also expose data for the admin console (see adminData in ops.ts). Never sent to players. */
 export type PlatformModule = FeatureModule & { admin?(): unknown };
 export type PlatformFactory = (e: Engine) => PlatformModule;
 
@@ -30,7 +30,7 @@ try {
  */
 export function cleanText(raw: unknown, max = 200): string | null {
   if (typeof raw !== "string") return null;
-  let t = raw.slice(0, max * 4).replace(/[\u0000-\u001f\u007f-\u009f​-‏ -‮]/g, " ");
+  let t = raw.slice(0, max * 4).replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e]/g, " ");
   t = t.replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "[removed]")
     .replace(/\b(?:https?:\/\/|www\.)\S+/gi, "[removed]")
     .replace(/\b[a-z0-9-]+\.(?:com|net|org|io|gg|xyz|ru|de|ie|uk|co)\b\S*/gi, "[removed]")

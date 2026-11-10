@@ -1,0 +1,7 @@
+{
+  "_comment": "A/B tests (platform.experiments). id: lower-case letters, digits and dashes. share: percent of companies included. A company's variant is fixed by a hash of the experiment id and company id, so it never changes. The client reads me.featureData['platform.experiments'].variants.",
+  "experiments": [
+    { "id": "advice-panel-order", "variants": ["profit-first", "time-first"], "share": 100, "note": "Which order of the best-trips list keeps new players trading?" },
+    { "id": "welcome-tip", "variants": ["none", "short", "long"], "share": 50, "note": "Does a first-day tip help?" }
+  ]
+}

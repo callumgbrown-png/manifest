@@ -1,0 +1,4 @@
+{
+  "_comment": "Words masked in player free text (bug reports, player reports, appeals, contract notes). Lower case; a word also masks words that start with it. Contact details (e-mails, links, phone numbers) are always removed.",
+  "blocked": ["idiot", "stupid", "moron", "scam", "cheat", "loser", "dumb", "retard", "nazi", "kys"]
+}

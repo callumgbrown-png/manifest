@@ -18,6 +18,7 @@ import { generateRandomSeason, type RandomSeasonMap } from "./random-season.js";
 import { recoveryView } from "./recovery.js";
 import { SeasonLeaderboards } from "./leaderboards.js";
 import { desiredFeatures } from "./features/config.js";
+import { adminData } from "./features/platform/ops.js";
 import { EXPANSION_SCENARIOS, type ExpansionScenario } from "./scenario-expansion.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -369,6 +370,11 @@ function handle(req: IncomingMessage, res: ServerResponse) {
   if (url.pathname === "/api/admin/metrics") {
     if (!isAdmin(req)) return json(res, 403, { error: "admin token required" });
     return json(res, 200, { ...engine.metrics(), nextSeasonDifficulty: nextSeasonDifficulty() });
+  }
+  // Admin console (platform.admin-console): admin-only data from switched-on feature modules.
+  if (url.pathname === "/api/admin/features") {
+    if (!isAdmin(req)) return json(res, 403, { error: "admin token required" });
+    return json(res, 200, adminData(engine));
   }
   if (url.pathname === "/api/admin/set" && req.method === "POST") {
     if (!isAdmin(req)) return json(res, 403, { error: "admin token required" });

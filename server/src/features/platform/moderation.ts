@@ -30,7 +30,7 @@ export const bugReport: PlatformFactory = (e) => {
       if (reports.length > 200) reports.shift();
       return { ok: true, id: seq };
     },
-    cards: () => [{ title: "Report a bug", detail: "Tell us what went wrong. We save your fleet's positions with the report so we can find it. Use the bug box under the Fleet tab to add a description (up to 280 characters).",
+    cards: () => [{ title: "Report a bug", detail: "Tell us what went wrong. We save your fleet's positions with the report so we can find it. To add a description (up to 280 characters), use the bug box in the strip under the map.",
       actions: [{ label: "Send bug report", command: { type: "feature", module: "platform.bug-report", action: "report" },
         fields: [{ key: "kind", label: "What is it about?", options: BUG_KINDS.map(k => ({ value: k, label: k })), value: "other" }] }] }],
     view: (company) => ({ sent: reports.filter(r => r.company === company).length }),
