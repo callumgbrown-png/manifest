@@ -1,0 +1,25 @@
+{
+  "_comment": "Specialty cargo carried in feature state (the engine's GOODS list is fixed). One module per entry: economy.cargo-<key>. floor/ceiling: price band per unit; target: stock at mid-band; space: hold tonnes per unit; producers/consumers: how many ports buy/sell it (picked from the map); origin 'isolated' = only the remotest ports produce it. Hourly effects: perish (share lost), breakage (share lost at sea), hazard (chance of an incident at sea, fined hazardFine x cost), theft (chance the whole lot is stolen at sea), feed (cash per unit per hour at sea), setsAfter (hours before it starts to spoil). aging: sale bonus per hour held, up to agingCap. license: one-off permit fee. mystery: fixed price per crate, value hidden until sold. mail: delivery contract to a named port.",
+  "goods": [
+    { "idea": 281, "key": "hazmat", "name": "Hazardous chemicals", "floor": 40, "ceiling": 120, "hazard": 0.004, "hazardFine": 0.25 },
+    { "idea": 282, "key": "livestock", "name": "Livestock", "floor": 30, "ceiling": 95, "space": 2, "perish": 0.002, "feed": 0.05 },
+    { "idea": 283, "key": "produce", "name": "Fresh produce", "floor": 15, "ceiling": 55, "perish": 0.008 },
+    { "idea": 284, "key": "medicine", "name": "Medicine", "floor": 80, "ceiling": 260, "target": 120, "demandSpike": true, "maxBuy": 60 },
+    { "idea": 285, "key": "electronics", "name": "Electronics", "floor": 90, "ceiling": 240, "target": 150, "breakage": 0.002, "maxBuy": 80 },
+    { "idea": 286, "key": "cars", "name": "Cars", "floor": 150, "ceiling": 420, "space": 3, "target": 80, "maxBuy": 60 },
+    { "idea": 287, "key": "coal", "name": "Coal", "floor": 5, "ceiling": 22, "target": 800, "hazard": 0.0005, "hazardFine": 0.1 },
+    { "idea": 289, "key": "spices", "name": "Spices", "floor": 60, "ceiling": 200, "target": 100, "origin": "isolated", "maxBuy": 50 },
+    { "idea": 290, "key": "timber", "name": "Timber", "floor": 8, "ceiling": 30, "target": 700 },
+    { "idea": 291, "key": "cement", "name": "Cement", "floor": 7, "ceiling": 26, "target": 700, "setsAfter": 72, "perish": 0.02 },
+    { "idea": 292, "key": "textiles", "name": "Textiles", "floor": 25, "ceiling": 80 },
+    { "idea": 293, "key": "fish", "name": "Fresh fish", "floor": 18, "ceiling": 65, "perish": 0.012 },
+    { "idea": 294, "key": "wine", "name": "Wine", "floor": 40, "ceiling": 130, "target": 200, "aging": 0.002, "agingCap": 0.5 },
+    { "idea": 295, "key": "artifacts", "name": "Artifacts", "floor": 300, "ceiling": 1200, "target": 20, "origin": "isolated", "maxBuy": 5 },
+    { "idea": 296, "key": "mail", "name": "Mail", "mail": true, "maxBuy": 10, "floor": 0, "ceiling": 0 },
+    { "idea": 297, "key": "gold", "name": "Gold bullion", "floor": 900, "ceiling": 1600, "target": 30, "theft": 0.003, "maxBuy": 10 },
+    { "idea": 298, "key": "weapons", "name": "Licensed weapons", "floor": 120, "ceiling": 380, "target": 80, "license": 1500, "hazard": 0.001, "hazardFine": 0.2, "maxBuy": 40 },
+    { "idea": 299, "key": "mystery", "name": "Mystery crates", "mystery": 60, "maxBuy": 20, "floor": 0, "ceiling": 0 },
+    { "idea": 300, "key": "glassware", "name": "Fragile glassware", "floor": 45, "ceiling": 150, "breakage": 0.01 },
+    { "idea": 16, "key": "pearls", "name": "Island pearls", "floor": 200, "ceiling": 700, "target": 40, "origin": "isolated", "maxBuy": 20 }
+  ]
+}

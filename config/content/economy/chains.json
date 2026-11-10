@@ -1,0 +1,20 @@
+{
+  "_comment": "Production chains (economy.chain-<key>). Each stage turns an input into an output at its own works ports for a fee per output tonne. Inputs are engine goods (grain, fuel, ore) from the ship's cargo, or module goods in the ship's special hold (timber and fish come from the economy.cargo-timber / economy.cargo-fish modules). ratio = output tonnes per input tonne. Outputs sell at the chain's consumer ports.",
+  "chains": [
+    { "idea": 11, "key": "bread", "title": "Wheat to flour to bread",
+      "goods": [ { "key": "flour", "name": "Flour", "floor": 18, "ceiling": 55 }, { "key": "bread", "name": "Bread", "floor": 30, "ceiling": 90, "perish": 0.004 } ],
+      "stages": [ { "input": "grain", "output": "flour", "ratio": 0.9, "fee": 2, "works": "Flour mill" }, { "input": "flour", "output": "bread", "ratio": 1.0, "fee": 4, "works": "Bakery" } ] },
+    { "idea": 12, "key": "plastics", "title": "Oil to fuel to plastics",
+      "goods": [ { "key": "plastics", "name": "Plastics", "floor": 70, "ceiling": 190 } ],
+      "stages": [ { "input": "fuel", "output": "plastics", "ratio": 0.7, "fee": 5, "works": "Cracker plant" } ] },
+    { "idea": 13, "key": "steel", "title": "Ore to steel to containers",
+      "goods": [ { "key": "steel", "name": "Steel", "floor": 25, "ceiling": 75 }, { "key": "containers", "name": "Containers", "floor": 60, "ceiling": 170, "space": 2 } ],
+      "stages": [ { "input": "ore", "output": "steel", "ratio": 0.5, "fee": 3, "works": "Steelworks" }, { "input": "steel", "output": "containers", "ratio": 0.8, "fee": 6, "works": "Container yard" } ] },
+    { "idea": 14, "key": "furniture", "title": "Timber to planks to furniture",
+      "goods": [ { "key": "planks", "name": "Planks", "floor": 14, "ceiling": 40 }, { "key": "furniture", "name": "Furniture", "floor": 60, "ceiling": 180, "space": 2 } ],
+      "stages": [ { "input": "timber", "output": "planks", "ratio": 0.8, "fee": 2, "works": "Sawmill" }, { "input": "planks", "output": "furniture", "ratio": 0.7, "fee": 6, "works": "Joinery" } ] },
+    { "idea": 15, "key": "canned-fish", "title": "Fish to canned fish",
+      "goods": [ { "key": "canned", "name": "Canned fish", "floor": 40, "ceiling": 110 } ],
+      "stages": [ { "input": "fish", "output": "canned", "ratio": 0.8, "fee": 3, "works": "Cannery" } ] }
+  ]
+}
