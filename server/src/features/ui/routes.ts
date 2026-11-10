@@ -1,7 +1,7 @@
 import type { Engine, Result, VoyageLeg } from "../../engine.js";
 import { GOODS } from "../../engine.js";
 import type { FeatureFactory } from "../types.js";
-import { OK, fail, goodIndex, int, isPort, journal, num, ownShip, remember } from "./common.js";
+import { OK, fail, goodIndex, int, isPort, journal, num, ownShip, remember, sub } from "./common.js";
 
 export interface SavedRoute { id: number; from: number; dest: number; good: string | null; qty: number }
 const MAX_SAVED = 8;
@@ -11,10 +11,10 @@ function sailFrom(e: Engine, company: number, ship: number, dest: number, good: 
   const s = e.ships.get(ship)!;
   if (s.qty > 0) {
     if (good !== null && GOODS[s.good!] !== good) return fail("this ship carries other cargo; sell it first");
-    return e.applyLive({ type: "sail", company, ship, dest });
+    return sub(e, { type: "sail", company, ship, dest });
   }
   const cap = e.expansionCapacity(s);
-  return e.applyLive({ type: "sail", company, ship, dest,
+  return sub(e, { type: "sail", company, ship, dest,
     ...(good ? { buy: { good: good as (typeof GOODS)[number], qty: Math.min(qty, cap, Math.floor(e.stock[s.port][GOODS.indexOf(good as never)])) } } : {}) });
 }
 
@@ -129,7 +129,7 @@ export const autoTrade: FeatureFactory = (e) => {
         legs.push({ dest: leg.dest, maxSpend, minProceeds, ...(buy ? { buy } : {}) });
       }
       if (legs.at(-1)!.dest !== s.port) return fail("an auto-trade route must end where it starts, so it can repeat");
-      const set = e.applyLive({ type: "setVoyageQueue", company: cmd.company, ship: s.id, legs: structuredClone(legs) });
+      const set = sub(e, { type: "setVoyageQueue", company: cmd.company, ship: s.id, legs: structuredClone(legs) });
       if (!set.ok) return set;
       loops.set(s.id, { company: cmd.company, legs, left: times - 1 });
       return OK;
@@ -166,7 +166,7 @@ export const quickSell: FeatureFactory = (e) => ({
     for (const id of [...c.ships]) {
       const s = e.ships.get(id)!;
       if (s.dest !== null || s.qty <= 0 || e.voyageQueues.has(id)) continue;
-      if (e.applyLive({ type: "sell", company: c.id, ship: id }).ok) sold++;
+      if (sub(e, { type: "sell", company: c.id, ship: id }).ok) sold++;
     }
     if (!sold) return fail("no docked ship has cargo to sell");
     return { ok: true, sold, earned: Math.round(c.cash - before) };

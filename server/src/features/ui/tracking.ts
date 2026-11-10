@@ -1,7 +1,7 @@
 import type { Engine } from "../../engine.js";
 import { GOODS } from "../../engine.js";
 import type { FeatureFactory } from "../types.js";
-import { OK, fail, goodIndex, int, isPort, journal, num, remember, UNDO_KEPT } from "./common.js";
+import { OK, fail, goodIndex, isPort, journal, num, remember, UNDO_KEPT } from "./common.js";
 
 // ---------------------------------------------------------------- price alerts (426)
 
@@ -233,29 +233,42 @@ export const undo: FeatureFactory = (e) => ({
 
 export const STARTER_BONUS = 500;
 
-/** A one-time cash bonus for finishing the guided first delivery (a profitable sale). Changes money: economy. */
+/**
+ * Idea 483, content part (on): finishing the guided first delivery (a profitable sale) earns a Founder's pennant
+ * flown beside your ships on the map. The cash part is ui.starter-bonus-effects (economy, off): while it is on,
+ * claiming the pennant also pays a one-time STARTER_BONUS.
+ */
 export const starterBonus: FeatureFactory = (e) => {
-  const claimed = new Set<number>();
+  const claimed = new Map<number, { tick: number; paid: number }>();
   const eligible = (company: number) => (e.trips.get(company) ?? []).some(t => !t.open && t.good !== null && t.earned > t.spent);
+  const paysCash = () => e.features.enabled("ui.starter-bonus-effects");
   return {
-    id: "ui.starter-bonus", ideas: [483], title: "Starter bonus", economy: true,
+    id: "ui.starter-bonus", ideas: [483], title: "Starter bonus", economy: false,
     apply(cmd) {
       if (cmd.action !== "claim") return fail("unknown action");
       if (claimed.has(cmd.company)) return fail("already claimed");
       if (!eligible(cmd.company)) return fail("finish your first profitable delivery first");
       const c = e.companies.get(cmd.company);
       if (!c) return fail("no company");
-      claimed.add(cmd.company);
-      c.cash += STARTER_BONUS;
-      return OK;
+      const paid = paysCash() ? STARTER_BONUS : 0;
+      c.cash += paid;
+      claimed.set(cmd.company, { tick: e.tick, paid });
+      return { ok: true, paid };
     },
-    view(company) { return { claimed: claimed.has(company), eligible: eligible(company), amount: STARTER_BONUS }; },
+    view(company) {
+      return { claimed: claimed.has(company), eligible: eligible(company), cash: paysCash() ? STARTER_BONUS : 0, paid: claimed.get(company)?.paid ?? 0 };
+    },
+    world() { return { pennants: [...claimed.keys()].sort((a, b) => a - b) }; },
     cards(company) {
       if (claimed.has(company) || !eligible(company)) return [];
-      return [{ title: "Starter bonus", detail: `Your first profitable delivery is done. Claim a one-time bonus of ${STARTER_BONUS}.`,
-        actions: [{ label: `Claim ${STARTER_BONUS}`, command: { type: "feature", module: "ui.starter-bonus", action: "claim" } }] }];
+      const cash = paysCash() ? ` and a one-time bonus of ${STARTER_BONUS}` : "";
+      return [{ title: "Starter bonus", detail: `Your first profitable delivery is done. Claim your Founder's pennant${cash}.`,
+        actions: [{ label: "Claim", command: { type: "feature", module: "ui.starter-bonus", action: "claim" } }] }];
     },
   };
 };
 
-void int;
+/** Idea 483, money part: the starter bonus pays cash. Economy, off until approved. */
+export const starterBonusEffects: FeatureFactory = () => ({
+  id: "ui.starter-bonus-effects", ideas: [483], title: "Starter bonus cash", economy: true,
+});

@@ -1,4 +1,4 @@
-import type { Engine, Result, Ship } from "../../engine.js";
+import type { Command, Engine, Result, Ship } from "../../engine.js";
 import { GOODS } from "../../engine.js";
 import type { FeatureCommand, FeatureFactory } from "../types.js";
 
@@ -26,6 +26,19 @@ export function ownShip(e: Engine, company: number, ship: unknown): Ship | strin
   const s = id === null ? undefined : e.ships.get(id);
   if (!s || s.owner !== company) return "not your ship";
   return s;
+}
+
+/**
+ * Run a core command from inside a feature command. Uses engine.apply (not applyLive) so the nested command is
+ * not logged twice: the outer feature command is what the event log keeps, and replaying it repeats this call.
+ * The one live-only check applyLive makes (manual sailing while a voyage queue runs) is repeated here.
+ */
+export function sub(e: Engine, cmd: Command): Result {
+  if ((cmd.type === "sail" || cmd.type === "sell") && "ship" in cmd) {
+    const q = e.voyageQueues.get(cmd.ship);
+    if (q?.company === cmd.company && !q.paused) return fail("cancel the voyage queue before taking manual control");
+  }
+  return e.apply(cmd);
 }
 
 /** A module that only carries a switch for client-side features: the client checks ManifestHooks.enabled(id). */

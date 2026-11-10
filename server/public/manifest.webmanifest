@@ -1,0 +1,11 @@
+{
+  "name": "Manifest",
+  "short_name": "Manifest",
+  "description": "Run a shipping company. Every price is set by other players.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a1620",
+  "theme_color": "#0a1620",
+  "icons": [{ "src": "img/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
