@@ -1,0 +1,59 @@
+{
+  "_comment": "Original writing for art.lore. {port} is replaced with a port name. Keep entries short: they are sent to the client one page at a time.",
+  "founding": [
+    { "title": "The Charter", "text": "Before the lanes had names, the islands traded by rowing boat and rumour. Then the tide-clerks of the old customs house wrote a single sheet listing every cargo, every hull and every port that would honour it. They called it the Manifest, and anyone who signed it could sail." },
+    { "title": "The First Lane", "text": "The first lane was a rope of buoys between two harbours that disliked each other. A grain skipper and a fuel skipper agreed to carry for both, for a fee, and found that the fee was larger than the grudge. Every lane since has been built on the same arithmetic." },
+    { "title": "The Lamp Treaty", "text": "Pirates burned three lighthouses in a single winter. The harbours answered with the Lamp Treaty: any port that keeps its lamp lit may fly the Manifest pennant and charge a docking fee. The patrol boats you see today are the treaty's teeth." },
+    { "title": "The Season Clock", "text": "To stop the richest houses owning the sea forever, the Charter resets every season. Ledgers are closed, fleets are counted, and a new map is chalked on the customs house wall. Old captains say the sea itself moves between seasons. New captains say the old ones drink." },
+    { "title": "Your Signature", "text": "Your name is the newest line on the Manifest. The clerks have already started a page for you. What goes on it is up to the weather, the market, and you." }
+  ],
+  "biomes": [
+    { "id": "tropic", "name": "palm reef", "lines": [
+      "{port} grew up around a reef that rings like glass when the tide turns. Divers swear the coral keeps time better than the harbour clock.",
+      "The palms of {port} lean seaward, and locals say they point toward the next good price.",
+      "Every dock post in {port} is painted a different colour, so drunk sailors can find their own boat by taste in colour alone."
+    ] },
+    { "id": "temperate", "name": "green hills", "lines": [
+      "{port} is a town of hedges, chapels and very opinionated sheep. Its harbourmaster keeps a ledger of every ship that has ever been rude to him.",
+      "On a still morning the bells of {port} carry three islands over. Ferrymen use them as a fog signal and a reason to be late.",
+      "The quay at {port} was built from the stones of a castle nobody remembers owning."
+    ] },
+    { "id": "boreal", "name": "pine coast", "lines": [
+      "{port} winters under snow for half the year. The pine smoke from its chimneys is said to cure seasickness, and certainly cures appetite.",
+      "In {port} the fishermen carve a small wooden gull for every friend lost at sea. The harbour wall is crowded with them.",
+      "Ice in the bay of {port} sings at night as it shifts. Children learn the songs before they learn to read."
+    ] },
+    { "id": "arid", "name": "red cliffs", "lines": [
+      "{port} sits under red cliffs that hold the day's heat long after dark. Traders eat late and argue later.",
+      "Water is dearer than fuel in {port}, and the townsfolk will tell you so before they tell you their names.",
+      "The wind at {port} carries sand far out to sea; sailors know they are close when their teeth start to crunch."
+    ] },
+    { "id": "volcanic", "name": "black sand", "lines": [
+      "{port} was built on black sand from a mountain that still grumbles. The market closes whenever the mountain clears its throat.",
+      "Hot springs bubble up between the warehouses of {port}. Dockers keep their tea warm by setting the pot on the ground.",
+      "Glass beads from the beaches of {port} once served as coin across the archipelago. Some captains still keep a pocketful for luck."
+    ] }
+  ],
+  "relics": [
+    { "id": "compass", "name": "A compass that points south", "text": "Its needle swings stubbornly to the south. Whoever made it scratched 'home' on the lid." },
+    { "id": "bell", "name": "A ship's bell, cracked", "text": "The bell of the Wandering Tern, which left with a cargo of clocks and was never logged again." },
+    { "id": "ledger", "name": "A water-stained ledger", "text": "Every page lists one cargo: forty crates of 'patience'. The buyer is never named." },
+    { "id": "lamp", "name": "A treaty lamp", "text": "One of the first lamps lit under the Lamp Treaty. It still smells faintly of whale oil and politics." },
+    { "id": "figurehead", "name": "A small figurehead", "text": "A carved woman holding a ledger instead of a sword. Merchants rub her nose for luck." },
+    { "id": "chart", "name": "A chart with an extra island", "text": "It shows an island that is on no other map. The coastline has been drawn, rubbed out, and drawn again." },
+    { "id": "coin", "name": "A glass-bead coin", "text": "Black glass from a volcanic beach, threaded on cord. Once enough to buy a week of fuel." },
+    { "id": "whistle", "name": "A bosun's whistle", "text": "Blow it and every gull in earshot turns its head. They are not impressed." },
+    { "id": "flag", "name": "A faded pirate flag", "text": "The skull has been patched with a grain sack. Even pirates economise." },
+    { "id": "teapot", "name": "A dented teapot", "text": "Engraved: 'Presented to the slowest freighter in the fleet, who always arrived'." },
+    { "id": "key", "name": "A customs-house key", "text": "Heavy brass. The customs house was rebuilt twice, and the key fits neither door." },
+    { "id": "logbook", "name": "The last page of a logbook", "text": "'Day 56. Sold everything. Kept the ship. Would do it all again.'" }
+  ],
+  "bottles": [
+    "A message in a bottle: 'If found, please tell my brother the ore price was not my fault.'",
+    "A message in a bottle: 'Day nine adrift. Have eaten all the grain. Have started on the cargo manifest.'",
+    "A message in a bottle: a child's drawing of a freighter, with far too many funnels.",
+    "A message in a bottle: 'The Lantern Queen passed us at midnight. No crew. Every lamp lit.'",
+    "A message in a bottle: 'Buy low, sell high, and never trust a gull.'",
+    "A message in a bottle: a recipe for fish stew that begins 'first, catch the fish'."
+  ]
+}

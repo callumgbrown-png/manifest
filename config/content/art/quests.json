@@ -1,0 +1,32 @@
+{
+  "_comment": "Original writing for art.mystery, art.rivals and art.legend. {port} = the next port to visit, {rival} = rival company name.",
+  "mystery": {
+    "title": "The Marigold's Missing Cargo",
+    "intro": "The coaster Marigold vanished with forty sealed crates. Her owner is dead, her crew scattered, and the insurers would like a word.",
+    "chapters": [
+      "A dock clerk remembers the Marigold's mate drinking in {port}. Sail there and ask around.",
+      "The mate is long gone, but he paid his tab with a pawn ticket from {port}.",
+      "The pawnbroker sold the item to a lighthouse keeper. The keeper's lamp burns at {port}.",
+      "The keeper used the crate lid as a shelf. Its stencil reads a warehouse number at {port}.",
+      "The warehouse ledger shows the crates were shipped on to {port}, under a false name."
+    ],
+    "end": "In the last warehouse, behind sacks of grain, the forty crates sit untouched. Inside: the Marigold's logbooks, every one. She was never lost; she was hidden, to keep a secret trade route safe. The route is long gone. The story is yours.",
+    "title_award": "Finder of the Marigold"
+  },
+  "rivals": {
+    "spotted": "{rival} has been watching your ledger. They are just ahead of you, and they know it.",
+    "chasing": "{rival} is still ahead. Their captains toast your name, but not kindly.",
+    "overtook": "You have passed {rival}. Word is their owner threw a teapot across the counting house.",
+    "holding": "{rival} is behind you and closing. Keep the holds full.",
+    "lost": "{rival} slipped past you in the night. The harbour gossips are thrilled.",
+    "top": "There is no one above you. {rival} is the closest challenger. Every captain on the sea wants your berth."
+  },
+  "legend": {
+    "ship": "The Lantern Queen",
+    "intro": "Old crews talk of the Lantern Queen, a freighter with every lamp lit and nobody at the wheel. To find her you need three pieces of the chart she was last seen on.",
+    "chart": "A piece of the chart is said to lie at {port}.",
+    "ready": "Your chart is whole. Wait for a sighting, then be docked at the port she haunts while she is there.",
+    "found": "You saw her. Close enough to read the brass on her stern: 'Carried what was asked. Asked nothing back.' The crews will be telling this one for years.",
+    "title_award": "Witness of the Lantern Queen"
+  }
+}

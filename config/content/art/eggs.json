@@ -1,0 +1,13 @@
+{
+  "_comment": "Easter eggs for art.eggs. Players type a word into the Logbook's 'shout into the fog' box. Words are lowercase letters and spaces only.",
+  "eggs": [
+    { "word": "drunken sailor", "text": "Somewhere in the fog, a crew starts singing. Badly. (Turn on sound and listen.)" },
+    { "word": "hello sailor", "text": "A gull lands on your rail, looks at you, and leaves. Rude." },
+    { "word": "manifest", "text": "The customs clerk stamps your hand. It says 'APPROVED'. You did not ask for this." },
+    { "word": "lantern queen", "text": "For a moment every lamp on the horizon flickers at once." },
+    { "word": "goat", "text": "Ship 7 reports the goat is now in charge of the galley." },
+    { "word": "buy low sell high", "text": "The oldest captain in the harbour nods slowly. 'Took me forty years,' she says." },
+    { "word": "kraken", "text": "Nothing happens. Nothing happens again, a bit closer." }
+  ],
+  "cameo": { "name": "MV Placeholder", "lines": ["Testing, testing. Is this sea on?", "Don't mind us, we're just checking the water renders.", "Built the lanes, now I sail them.", "Every pixel on this ship was argued over."] }
+}

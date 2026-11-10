@@ -1,0 +1,11 @@
+{
+  "_comment": "Original headline templates for art.news. Placeholders: {port} {good} {pct} {company} {count} {ship}.",
+  "spike": ["{good} SOARS AT {port}: UP {pct}%", "{port} DESPERATE FOR {good}, PRICES CLIMB {pct}%"],
+  "crash": ["{good} GLUT AT {port}: PRICES DOWN {pct}%", "{port} DROWNING IN {good}"],
+  "leader": ["NEW LEADER: {company} TAKES THE TOP OF THE LEDGER", "{company} OVERTAKES THE FIELD"],
+  "raids": ["PIRATES STRIKE {count} TIMES IN SIX HOURS", "LANES UNSAFE: {count} RAIDS REPORTED"],
+  "storm": ["SQUALL WARNING NEAR {port}", "STORM BATTERS LANES OFF {port}"],
+  "busy": ["{port} BUSIEST HARBOUR OF THE WATCH WITH {count} ARRIVALS", "QUAYS FULL AT {port}"],
+  "legend": ["LANTERN QUEEN SIGHTED NEAR {port}", "GHOST SHIP SEEN OFF {port}, SAY FISHERMEN"],
+  "quiet": ["CALM SEAS, STEADY TRADE", "CUSTOMS HOUSE REPORTS A DULL DAY, AND LIKES IT"]
+}
