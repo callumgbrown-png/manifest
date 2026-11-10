@@ -14,7 +14,7 @@ passes, and `docs/features/reports/<category>.md` exists.
 | 5 | contracts | 55 | DONE 2026-11-10 (55 modules, 55 tests) |
 | 6 | progression | 55 | DONE 2026-11-10 (44 modules, 36 tests) |
 | 7 | ui | 55 | DONE 2026-11-10 (39 modules, 23 tests) |
-| 8 | art | 52 | WIP snapshot only |
+| 8 | art | 52 | DONE 2026-11-10 (16 modules, 18 tests) |
 | 9 | platform | 55 | WIP snapshot only |
 | 10 | community | 73 | WIP snapshot only |
 | 11 | social | 60 | not started |
