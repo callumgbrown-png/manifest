@@ -33,14 +33,18 @@ interface PortsShared {
   rep: Map<number, Map<number, number>>;
   projects: Map<string, Project>;
   museum: Exhibit[];
-  crew: Map<number, number>;                // ship -> crew index
+  crew: Map<number, number>;                // ship -> crew index (ports.tavern)
   research: Map<number, Set<string>>;       // company -> unlocked topics
   records: Map<string, { company: number; score: number }>;
+  /** Crane level per port (ports.cranes owns it; ports.docks and ports.harbour-effects read it). */
+  cranes: Map<number, number>;
+  /** Pilots booked for a ship's next arrival (ports.cranes owns it). */
+  pilots: Set<number>;
 }
 const store = new WeakMap<Engine, PortsShared>();
 export function shared(e: Engine): PortsShared {
   let s = store.get(e);
-  if (!s) store.set(e, s = { rep: new Map(), projects: new Map(), museum: [], crew: new Map(), research: new Map(), records: new Map() });
+  if (!s) store.set(e, s = { rep: new Map(), projects: new Map(), museum: [], crew: new Map(), research: new Map(), records: new Map(), cranes: new Map(), pilots: new Set() });
   return s;
 }
 
@@ -117,4 +121,29 @@ export function takeCargo(e: Engine, s: Ship, qty: number) {
 export function nudgeStock(e: Engine, port: number, good: number, by: number) {
   const max = e.targets[good] * e.rules.markets.max_stock_multiple;
   e.stock[port][good] = Math.max(0, Math.min(max, e.stock[port][good] + by));
+}
+
+/** Ports where the company has a ship docked and free to work. */
+export const dockedPorts = (e: Engine, company: number) =>
+  [...new Set((e.companies.get(company)?.ships ?? []).map(id => e.ships.get(id)).filter((s): s is Ship => !!s && s.dest === null).map(s => s.port))].sort((a, b) => a - b);
+export const goodIndex = (v: unknown) => typeof v === "string" ? (GOODS as readonly string[]).indexOf(v) : integer(v) && v >= 0 && v < GOODS.length ? v : -1;
+export const action = (module: string, label: string, act: string, extra: Record<string, unknown> = {}) =>
+  ({ label, command: { type: "feature", module, action: act, ...extra } });
+/** Another module, only while it is switched on (duck-typed so categories stay independent). */
+export function peer<T>(e: Engine, id: string): T | undefined {
+  return e.features.enabled(id) ? e.features.modules.get(id) as unknown as T : undefined;
+}
+/** Records a minigame score; keeps the best per game. Returns true for a new record. */
+export function record(e: Engine, game: string, company: number, score: number): boolean {
+  const r = shared(e).records.get(game);
+  if (r && r.score >= score) return false;
+  shared(e).records.set(game, { company, score });
+  return true;
+}
+/** Puts cargo on a docked ship (empty, or already carrying the same good) without buying it. */
+export function loadCargo(e: Engine, s: Ship, good: number, qty: number, cost: number) {
+  s.good = good;
+  s.qty += qty;
+  s.cost += cost;
+  e.recordCargoLoaded(s, cost);
 }
