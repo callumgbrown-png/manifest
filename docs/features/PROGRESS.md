@@ -12,7 +12,7 @@ passes, and `docs/features/reports/<category>.md` exists.
 | 3 | world | 55 | DONE 2026-11-10 (33 modules, 31 tests) |
 | 4 | economy | 60 | DONE 2026-11-10 (59 modules, 63 tests) |
 | 5 | contracts | 55 | DONE 2026-11-10 (55 modules, 55 tests) |
-| 6 | progression | 55 | WIP snapshot only |
+| 6 | progression | 55 | DONE 2026-11-10 (44 modules, 36 tests) |
 | 7 | ui | 55 | WIP snapshot only |
 | 8 | art | 52 | WIP snapshot only |
 | 9 | platform | 55 | WIP snapshot only |
