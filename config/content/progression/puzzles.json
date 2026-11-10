@@ -1,0 +1,22 @@
+{
+  "_comment": "Scenario puzzles (timed, single-trip conditions or stat gains) and training missions (no time limit). trip conditions: good, minQty, maxFuel (fuel credits), minProfit, toRole (consumer|producer), minDistance, maxHours. stat: a stat that must rise by gain.",
+  "puzzles": [
+    { "id": "lean-burn", "kind": "puzzle", "name": "Lean Burn", "text": "Deliver at least 100 units on a trip that spends no more than 100 credits of fuel.", "hours": 48, "trip": { "minQty": 100, "maxFuel": 100 }, "xp": 120 },
+    { "id": "grain-relief", "kind": "puzzle", "name": "Grain Relief", "text": "Deliver 200+ grain to a port that consumes grain within 36 hours.", "hours": 36, "trip": { "good": "grain", "minQty": 200, "toRole": "consumer" }, "xp": 120 },
+    { "id": "express", "kind": "puzzle", "name": "Express Run", "text": "Complete a profitable delivery whose voyage took 6 hours or less.", "hours": 24, "trip": { "maxHours": 6, "minProfit": 1 }, "xp": 100 },
+    { "id": "long-haul", "kind": "puzzle", "name": "Long Haul", "text": "Deliver cargo over a distance of 300+ and still turn a 500-credit profit.", "hours": 72, "trip": { "minDistance": 300, "minProfit": 500 }, "xp": 150 },
+    { "id": "machinery-margin", "kind": "puzzle", "name": "Precision Freight", "text": "Make 1,000+ profit on a single machinery delivery within 48 hours.", "hours": 48, "trip": { "good": "machinery", "minProfit": 1000 }, "xp": 160 },
+    { "id": "train-buy-sell", "kind": "training", "name": "Training: Buy Low, Sell High", "text": "Complete any delivery that makes a profit.", "trip": { "minProfit": 1 }, "xp": 40 },
+    { "id": "train-consumer", "kind": "training", "name": "Training: Feed the Market", "text": "Deliver any cargo to a port that consumes it.", "trip": { "toRole": "consumer", "minQty": 1 }, "xp": 40 },
+    { "id": "train-explore", "kind": "training", "name": "Training: Chart the Coast", "text": "Dock at two ports you have not visited before.", "stat": "portsVisited", "gain": 2, "xp": 40 },
+    { "id": "train-volume", "kind": "training", "name": "Training: Full Holds", "text": "Land 400 units of cargo in total.", "stat": "cargo", "gain": 400, "xp": 50 }
+  ],
+  "tutorial": [
+    { "id": "t-sail", "name": "Cast off", "text": "Load a cargo at a port that produces it and sail to another port.", "stat": "voyages", "atLeast": 1, "xp": 20 },
+    { "id": "t-sell", "name": "First sale", "text": "Sell the cargo at your destination.", "stat": "deliveries", "atLeast": 1, "xp": 30 },
+    { "id": "t-profit", "name": "Mind the margin", "text": "Earn 500 credits of trip profit in total.", "stat": "profit", "atLeast": 500, "xp": 40 },
+    { "id": "t-ports", "name": "Know your waters", "text": "Dock at three different ports.", "stat": "portsVisited", "atLeast": 3, "xp": 40 },
+    { "id": "t-goods", "name": "Diversify", "text": "Deliver two different goods.", "stat": "goodsDelivered", "atLeast": 2, "xp": 50 },
+    { "id": "t-fleet", "name": "Second hull", "text": "Own two ships at once.", "stat": "peakShips", "atLeast": 2, "xp": 80 }
+  ]
+}

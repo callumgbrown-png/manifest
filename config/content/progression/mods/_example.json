@@ -1,0 +1,10 @@
+{
+  "_comment": "Example data mod. Files in this folder whose names do not start with _ are loaded at server start and add entries to the progression content (achievements, skins, titles, daily, weekly, puzzles, tutorial, nodes, challenges, campaign, presets). Duplicate ids are skipped. Copy this file to my-mod.json to try it.",
+  "id": "example",
+  "achievements": [
+    { "id": "mod-fuel-50", "name": "Bunker Boss", "description": "Deliver 50 units of fuel.", "kind": "achievement", "stat": "goodUnits.fuel", "atLeast": 50, "xp": 10 }
+  ],
+  "titles": [
+    { "id": "mod-tramp", "name": "Tramp Captain", "description": "Make 5 voyages.", "stat": "voyages", "atLeast": 5 }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "_comment": "Captain rank ladder by level, and the seasonal ladder tiers by share of companies beaten (season XP).",
+  "ranks": [
+    { "level": 1, "name": "Deckhand" }, { "level": 3, "name": "Able Seaman" }, { "level": 5, "name": "Bosun" },
+    { "level": 8, "name": "Third Mate" }, { "level": 11, "name": "Second Mate" }, { "level": 15, "name": "First Mate" },
+    { "level": 20, "name": "Captain" }, { "level": 26, "name": "Master Mariner" }, { "level": 33, "name": "Commodore" },
+    { "level": 40, "name": "Admiral of the Line" }
+  ],
+  "ladder": [
+    { "name": "Bronze", "beats": 0 }, { "name": "Silver", "beats": 0.4 }, { "name": "Gold", "beats": 0.7 },
+    { "name": "Platinum", "beats": 0.9 }, { "name": "Diamond", "beats": 0.97 }
+  ],
+  "track": [
+    { "points": 50, "reward": "skin:silver", "label": "Silver pennant" },
+    { "points": 150, "reward": "title:voyager", "label": "Title: Voyager" },
+    { "points": 300, "reward": "badge:chapter-anchor", "label": "Anchor badge" },
+    { "points": 500, "reward": "skin:emerald", "label": "Emerald pennant" },
+    { "points": 800, "reward": "title:trailblazer", "label": "Title: Trailblazer" },
+    { "points": 1200, "reward": "badge:chapter-star", "label": "Star badge" }
+  ],
+  "trackTitles": [
+    { "id": "voyager", "name": "Voyager" }, { "id": "trailblazer", "name": "Trailblazer" }
+  ]
+}

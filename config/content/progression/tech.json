@@ -1,0 +1,17 @@
+{
+  "_comment": "Tech tree. Research points: 1 per delivery, 1 per 500 distance. Licence nodes are certificates; enforcing them needs an engine hook (see docs). effect is applied only by progression.tech-bonuses (economy, off).",
+  "nodes": [
+    { "id": "charts-1", "name": "Coastal Charts", "cost": 2, "requires": [], "text": "Basic charts of the home coast." },
+    { "id": "licence-grain", "name": "Grain Licence", "cost": 1, "requires": [], "licence": "cargo:grain", "text": "Certified to carry grain." },
+    { "id": "licence-fuel", "name": "Fuel Licence", "cost": 3, "requires": ["licence-grain"], "licence": "cargo:fuel", "text": "Certified to carry fuel." },
+    { "id": "licence-ore", "name": "Ore Licence", "cost": 3, "requires": ["licence-grain"], "licence": "cargo:ore", "text": "Certified to carry ore." },
+    { "id": "licence-machinery", "name": "Machinery Licence", "cost": 6, "requires": ["licence-ore"], "licence": "cargo:machinery", "text": "Certified to carry machinery." },
+    { "id": "licence-coaster", "name": "Coaster Ticket", "cost": 1, "requires": [], "licence": "ship:coaster", "text": "Command of coasters." },
+    { "id": "licence-freighter", "name": "Freighter Ticket", "cost": 2, "requires": ["licence-coaster"], "licence": "ship:freighter", "text": "Command of freighters." },
+    { "id": "licence-bulker", "name": "Bulker Ticket", "cost": 6, "requires": ["licence-freighter", "charts-1"], "licence": "ship:bulker", "text": "Command of bulk carriers." },
+    { "id": "engines-1", "name": "Efficient Boilers", "cost": 4, "requires": ["charts-1"], "effect": { "fuel": -0.03 }, "text": "3% less fuel (economy switch)." },
+    { "id": "cranes-1", "name": "Quick Cranes", "cost": 5, "requires": ["charts-1"], "effect": { "portFee": -0.05 }, "text": "5% lower port fees (economy switch)." },
+    { "id": "hulls-1", "name": "Reinforced Holds", "cost": 8, "requires": ["licence-bulker"], "effect": { "capacity": 0.04 }, "text": "4% more hold space (economy switch)." },
+    { "id": "charts-2", "name": "Ocean Charts", "cost": 8, "requires": ["charts-1", "engines-1"], "effect": { "travelHours": -0.03 }, "text": "3% faster voyages (economy switch)." }
+  ]
+}
